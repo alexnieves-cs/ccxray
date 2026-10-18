@@ -1,8 +1,21 @@
 // Reporter-side views derived from a Report. Shared by terminal and HTML so both show the same
 // numbers. Finding.data is analyzer-specific and untyped, so it is read defensively: a field
 // that is missing or has the wrong shape is ignored, never guessed (CLAUDE.md hard rule 3).
+//
+// Finding.data conventions (PROVISIONAL inter-stream contract between analyzers and reporters,
+// also in docs/SPEC.md §4.1; may change until M4):
+//   causes?:  { cause: string; count: number; tokens?: number; fix?: string }[]
+//             per-cause breakdown, e.g. for cache-rebuild (A2/A3). `tokens` has the finding's kind.
+//   tool?:    string   tool name, e.g. `Bash`; groups WHERE IT WENT by tool.
+//   command?: string   raw Bash command; reporters only ever show shortCommand() of it.
+// Any other key: numbers and booleans are kept; strings are kept in JSON only when short
+// (see json.ts); nothing else is rendered.
 import type { Finding, Report, Severity } from '../model/index.js';
 import { shortCommand } from './format.js';
+
+function finiteOr(n: number, fallback: number): number {
+  return Number.isFinite(n) ? n : fallback;
+}
 
 const SEVERITY_RANK: Record<Severity, number> = { high: 0, warn: 1, info: 2 };
 
@@ -11,10 +24,14 @@ export function sortFindings(findings: readonly Finding[]): Finding[] {
   return [...findings].sort(
     (a, b) =>
       (SEVERITY_RANK[a.severity] ?? 3) - (SEVERITY_RANK[b.severity] ?? 3) ||
-      b.tokens.value - a.tokens.value ||
+      finiteOr(b.tokens.value, -1) - finiteOr(a.tokens.value, -1) ||
       a.analyzer.localeCompare(b.analyzer, 'en') ||
       a.title.localeCompare(b.title, 'en'),
   );
+}
+
+export function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
 }
 
 export interface CauseRow {
@@ -24,10 +41,7 @@ export interface CauseRow {
   fix?: string;
 }
 
-/**
- * Cause breakdown of a finding, from `data.causes: { cause, count, tokens?, fix? }[]`.
- * UNVERIFIED: this shape is the reporter's proposal to the M2 cache-rebuild analyzer.
- */
+/** Cause breakdown of a finding, from `data.causes` (provisional contract, see the top). */
 export function causeRows(f: Finding): CauseRow[] {
   const raw = f.data?.causes;
   if (!Array.isArray(raw)) return [];
@@ -35,11 +49,11 @@ export function causeRows(f: Finding): CauseRow[] {
   for (const c of raw as unknown[]) {
     if (typeof c !== 'object' || c === null) continue;
     const o = c as Record<string, unknown>;
-    if (typeof o.cause !== 'string' || typeof o.count !== 'number') continue;
+    if (typeof o.cause !== 'string' || !isFiniteNumber(o.count)) continue;
     rows.push({
       cause: o.cause,
       count: o.count,
-      ...(typeof o.tokens === 'number' ? { tokens: o.tokens } : {}),
+      ...(isFiniteNumber(o.tokens) ? { tokens: o.tokens } : {}),
       ...(typeof o.fix === 'string' ? { fix: o.fix } : {}),
     });
   }
@@ -70,7 +84,9 @@ export function attribution(findings: readonly Finding[]): AttributionRow[] {
     { tokens: number; findings: number; tools: Map<string, number> }
   >();
   for (const f of findings) {
-    if (f.tokens.kind !== 'estimated' || f.tokens.value <= 0) continue;
+    if (f.tokens.kind !== 'estimated' || !(Number.isFinite(f.tokens.value) && f.tokens.value > 0)) {
+      continue;
+    }
     const g = groups.get(f.analyzer) ?? { tokens: 0, findings: 0, tools: new Map() };
     g.tokens += f.tokens.value;
     g.findings += 1;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  displayProject,
   displayRoot,
   formatCompact,
   formatDateRange,
@@ -8,6 +9,7 @@ import {
   formatVersionRange,
   relSource,
   shortCommand,
+  sanitizeText,
   shouldUseColor,
   truncate,
   visibleWidth,
@@ -67,10 +69,56 @@ describe('format helpers', () => {
     expect(displayRoot('/opt/logs', '/home/dev')).toBe('/opt/logs');
   });
 
-  it('keeps only the first two command tokens and drops env assignments', () => {
+  it('keeps only the first two command words and never leaks assignments', () => {
     expect(shortCommand('pnpm test --reporter verbose')).toBe('pnpm test');
     expect(shortCommand('  API_KEY=sk-secret  curl -H x https://example.test ')).toBe('curl -H');
     expect(shortCommand('ls')).toBe('ls');
+    expect(shortCommand('export TOKEN=sk-abc; ls')).toBe('');
+    expect(shortCommand('env API_KEY=x curl https://e.test')).toBe('curl https://e.test');
+    expect(shortCommand('env -i A=1 node app.js')).toBe('node app.js');
+    expect(shortCommand('sudo -E apt install')).toBe('apt install');
+    expect(shortCommand('FOO="a b" cmd --x')).toBe('cmd --x');
+    expect(shortCommand("FOO='a; b' BAR=c cmd")).toBe('cmd');
+    expect(shortCommand('curl --token=sk-abc https://e.test')).toBe('curl …');
+    expect(shortCommand('git status && git push')).toBe('git status');
+    expect(shortCommand('cat x | grep y')).toBe('cat x');
+    expect(shortCommand('echo "a && b" more')).toBe('echo a && b');
+    for (const c of ['export TOKEN=sk-abc; ls', 'env K=sk-abc x', 'a --k=sk-abc', 'K=sk-abc']) {
+      expect(shortCommand(c)).not.toContain('sk-abc');
+    }
+  });
+
+  it('collapses the encoded home prefix of project names', () => {
+    expect(displayProject('-home-dev-src-acme-api', '/home/dev')).toBe('~-src-acme-api');
+    expect(displayProject('-home-dev', '/home/dev')).toBe('~');
+    expect(displayProject('-home-developer-x', '/home/dev')).toBe('-home-developer-x');
+    expect(displayProject('C--Users-Dev-repo', 'c:\\users\\dev')).toBe('~-repo');
+    expect(displayProject('-home-john-doe-repo', '/home/john.doe')).toBe('~-repo');
+    expect(relSource({ file: '/r/-home-dev-app/s.jsonl', line: 2 }, ['/r'], '/home/dev')).toBe(
+      '~-app/s.jsonl:2',
+    );
+    expect(displayRoot('C:\\Users\\Dev\\.claude', 'c:\\users\\dev')).toBe('~/.claude');
+  });
+
+  it('guards non-finite numbers', () => {
+    expect(formatInt(NaN)).toBe('n/a');
+    expect(formatCompact(Infinity)).toBe('n/a');
+    expect(formatPct(NaN, 10)).toBe('n/a');
+    expect(formatPct(1, Infinity)).toBe('n/a');
+  });
+
+  it('strips escapes and control characters from data strings', () => {
+    expect(sanitizeText('a\x1b]0;pwned\x07b')).toBe('ab');
+    expect(sanitizeText('a\x1b[2Jb\x1b[31mc')).toBe('abc');
+    expect(sanitizeText('a\nb\tc\u009bd\x1be')).toBe('a b c de');
+  });
+
+  it('counts wide characters as two columns', () => {
+    expect(visibleWidth('日本語')).toBe(6);
+    expect(visibleWidth('a😀b')).toBe(4);
+    const t = truncate('日本語のテキスト', 7);
+    expect(visibleWidth(t)).toBeLessThanOrEqual(7);
+    expect(t).toBe('日本語…');
   });
 
   it('truncates by visible width, ANSI-aware', () => {

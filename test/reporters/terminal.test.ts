@@ -42,12 +42,13 @@ describe('terminal reporter', () => {
   });
 
   it('never prints absolute paths, env assignments or more than two command tokens', () => {
-    const out = renderTerminal(sampleReport(), { color: false });
+    const out = renderTerminal(sampleReport(), { color: false, homeDir: SAMPLE_HOME });
     expect(out).not.toContain('/home/dev');
     expect(out).not.toContain('CI=1');
     expect(out).not.toContain('--reporter verbose');
     expect(out).toContain('cmd `pnpm test`');
-    expect(out).toContain('-home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl:120');
+    expect(out).not.toContain('-home-dev');
+    expect(out).toContain('~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl:120');
   });
 
   it('keeps every line within the width, even with very long names', () => {
@@ -74,10 +75,24 @@ describe('terminal reporter', () => {
       fix: { summary: `${long} ${long}` },
     });
     r.window.project = long;
+    const cjk = '日本語のツール名がとても長い場合の表示テスト'.repeat(3);
+    r.findings.push({
+      analyzer: 'repeated-read',
+      severity: 'warn',
+      title: `\x1b]0;pwned\x07${cjk}\x1b[2J😀😀😀\nsecond line\u009b`,
+      tokens: { value: NaN, kind: 'estimated' },
+      data: { tool: cjk, causes: [{ cause: `\x1b]8;;x\x07${cjk}`, count: 2, fix: cjk }] },
+      evidence: [{ sessionId: cjk, turnUuid: 't', detail: cjk }],
+      fix: { summary: `${cjk}\r\x1b[1Aoverwrite` },
+    });
     for (const width of [100, 80, 60, 200, 10]) {
       for (const color of [false, true]) {
         const out = renderTerminal(r, { color, width });
         expect(maxWidth(out)).toBeLessThanOrEqual(Math.max(60, Math.min(width, 100)));
+        // Only our own SGR sequences may remain: no OSC, no cursor moves, no raw controls.
+        // eslint-disable-next-line no-control-regex
+        expect(stripAnsi(out)).not.toMatch(/[\x00-\x09\x0b-\x1f\x7f-\x9f]/);
+        expect(out).not.toContain('second line\n');
       }
     }
   });

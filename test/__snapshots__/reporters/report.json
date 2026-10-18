@@ -113,7 +113,7 @@
       }
     },
     "byProject": {
-      "-home-dev-src-acme-api": {
+      "~-src-acme-api": {
         "cacheHitRatio": 0.8240732531299203,
         "cacheRead": 13477100,
         "cacheWrite": 2818900,
@@ -169,7 +169,7 @@
       "models": [
         "claude-opus-4-5"
       ],
-      "project": "-home-dev-src-acme-api",
+      "project": "~-src-acme-api",
       "totals": {
         "cacheHitRatio": 0.8313329567918667,
         "cacheRead": 9420000,
@@ -194,7 +194,7 @@
       "models": [
         "claude-opus-4-5"
       ],
-      "project": "-home-dev-src-acme-api",
+      "project": "~-src-acme-api",
       "totals": {
         "cacheHitRatio": 0.8218842001962708,
         "cacheRead": 3015000,
@@ -218,7 +218,7 @@
       "models": [
         "claude-haiku-4-5"
       ],
-      "project": "-home-dev-src-acme-api",
+      "project": "~-src-acme-api",
       "totals": {
         "cacheHitRatio": 0.6535522679239149,
         "cacheRead": 402000,
@@ -242,7 +242,7 @@
       "models": [
         "claude-haiku-4-5"
       ],
-      "project": "-home-dev-src-acme-api",
+      "project": "~-src-acme-api",
       "totals": {
         "cacheHitRatio": 0.8655263335812319,
         "cacheRead": 640100,
@@ -269,7 +269,7 @@
           "detail": "read #2 of src/api/client.ts, no edit since read #1",
           "sessionId": "3fa2c1d0-1111-4aaa-8bbb-000000000001",
           "source": {
-            "file": "-home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl",
+            "file": "~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl",
             "line": 412
           },
           "turnUuid": "a1000000-0000-4000-8000-000000000031"
@@ -311,7 +311,7 @@
     {
       "analyzer": "big-tool-output",
       "data": {
-        "command": "CI=1 pnpm test --reporter verbose --run",
+        "command": "pnpm test",
         "count": 11,
         "maxChars": 48100,
         "tool": "Bash"
@@ -321,7 +321,7 @@
           "detail": "Bash result 48,100 chars",
           "sessionId": "9b07e5aa-2222-4aaa-8bbb-000000000002",
           "source": {
-            "file": "-home-dev-src-acme-api/9b07e5aa-2222-4aaa-8bbb-000000000002.jsonl",
+            "file": "~-src-acme-api/9b07e5aa-2222-4aaa-8bbb-000000000002.jsonl",
             "line": 1207
           },
           "turnUuid": "b2000000-0000-4000-8000-000000000044"
@@ -330,7 +330,7 @@
           "detail": "Bash result 31,020 chars",
           "sessionId": "3fa2c1d0-1111-4aaa-8bbb-000000000001",
           "source": {
-            "file": "-home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001/subagents/agent-7f3e.jsonl",
+            "file": "~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001/subagents/agent-7f3e.jsonl",
             "line": 88
           },
           "turnUuid": "c3000000-0000-4000-8000-000000000007"
@@ -357,7 +357,7 @@
           "detail": "Grep result 22,000 chars",
           "sessionId": "3fa2c1d0-1111-4aaa-8bbb-000000000001",
           "source": {
-            "file": "-home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl",
+            "file": "~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl",
             "line": 2001
           },
           "turnUuid": "a1000000-0000-4000-8000-000000000090"
@@ -402,7 +402,7 @@
           "detail": "gap 12m, cache_read 81k → 0",
           "sessionId": "3fa2c1d0-1111-4aaa-8bbb-000000000001",
           "source": {
-            "file": "-home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl",
+            "file": "~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl",
             "line": 120
           },
           "turnUuid": "a1000000-0000-4000-8000-000000000012"
@@ -411,7 +411,7 @@
           "detail": "version 2.1.290 → 2.1.296",
           "sessionId": "9b07e5aa-2222-4aaa-8bbb-000000000002",
           "source": {
-            "file": "-home-dev-src-acme-api/9b07e5aa-2222-4aaa-8bbb-000000000002.jsonl",
+            "file": "~-src-acme-api/9b07e5aa-2222-4aaa-8bbb-000000000002.jsonl",
             "line": 655
           },
           "turnUuid": "b2000000-0000-4000-8000-000000000020"

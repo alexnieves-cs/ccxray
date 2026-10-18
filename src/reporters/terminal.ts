@@ -25,6 +25,8 @@ import {
   padEnd,
   padStart,
   relSource,
+  resolveHome,
+  sanitizeText,
   shortId,
   truncate,
   wrapParts,
@@ -34,7 +36,7 @@ export interface TerminalOptions {
   color: boolean;
   /** Target width in columns; clamped to 60..100. Defaults to 100. */
   width?: number;
-  /** Home directory, replaced by `~` when showing log roots. */
+  /** Home directory, shown as `~` in roots and project names. Defaults to os.homedir(). */
   homeDir?: string;
   /** How many findings to list before "+N more". Defaults to 8. */
   maxFindings?: number;
@@ -68,18 +70,32 @@ function palette(color: boolean): Palette {
   };
 }
 
-export function renderTerminal(report: Report, opts: TerminalOptions): string {
-  const width = Math.max(MIN_WIDTH, Math.min(opts.width ?? MAX_WIDTH, MAX_WIDTH));
+/** Deep copy with every string passed through sanitizeText (no escapes or controls from data). */
+function sanitizeDeep<T>(v: T): T {
+  if (typeof v === 'string') return sanitizeText(v) as T;
+  if (Array.isArray(v)) return v.map(sanitizeDeep) as T;
+  if (v !== null && typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v)) out[sanitizeText(k)] = sanitizeDeep(x);
+    return out as T;
+  }
+  return v;
+}
+
+export function renderTerminal(input: Report, opts: TerminalOptions): string {
+  const width = Math.max(MIN_WIDTH, Math.min(finiteOr(opts.width, MAX_WIDTH), MAX_WIDTH));
   const p = palette(opts.color);
+  const home = resolveHome(opts.homeDir);
+  const report = sanitizeDeep(input);
   const lines =
     report.sessions.length === 0
-      ? emptyState(report, p, width, opts.homeDir)
+      ? emptyState(report, p, width, home)
       : [
           ...header(report, p, width),
           '',
           ...tokens(report, p),
           ...whereItWent(report, p, width),
-          ...topFindings(report, p, width, opts.maxFindings ?? 8),
+          ...topFindings(report, p, width, opts.maxFindings ?? 8, home),
           ...warnings(report, p, width),
           ...footer(report, p, width),
         ];
@@ -143,13 +159,24 @@ function severityTag(s: Severity, p: Palette): string {
   return p.cyan('[info]');
 }
 
-function findingLines(f: Finding, n: number, roots: string[], p: Palette, width: number): string[] {
+function finiteOr(n: number | undefined, fallback: number): number {
+  return n !== undefined && Number.isFinite(n) ? n : fallback;
+}
+
+function findingLines(
+  f: Finding,
+  n: number,
+  roots: string[],
+  home: string,
+  p: Palette,
+  width: number,
+): string[] {
   const num = padStart(`${n}.`, 3);
   const out = [
     `${num} ${p.bold(analyzerHeading(f.analyzer))} ${severityTag(f.severity, p)}  ${f.title}`,
   ];
   const facts: string[] = [];
-  if (f.tokens.value > 0)
+  if (!(f.tokens.value <= 0))
     facts.push(`${formatTokens(f.tokens.value, f.tokens.kind)} ${kindTag(f.tokens.kind)}`);
   const cmd = findingCommand(f);
   if (cmd) facts.push(`cmd \`${cmd}\``);
@@ -157,7 +184,7 @@ function findingLines(f: Finding, n: number, roots: string[], p: Palette, width:
   const first = f.evidence[0];
   if (first) {
     facts.push(
-      `e.g. ${first.source ? relSource(first.source, roots) : `session ${shortId(first.sessionId)}`}`,
+      `e.g. ${first.source ? relSource(first.source, roots, home) : `session ${shortId(first.sessionId)}`}`,
     );
   }
   out.push(...wrapParts(facts, ' · ', width - 6).map((l) => '      ' + p.dim(l)));
@@ -170,13 +197,19 @@ function findingLines(f: Finding, n: number, roots: string[], p: Palette, width:
   return out.map((l) => truncate(l, width));
 }
 
-function topFindings(report: Report, p: Palette, width: number, max: number): string[] {
+function topFindings(
+  report: Report,
+  p: Palette,
+  width: number,
+  max: number,
+  home: string,
+): string[] {
   const sorted = sortFindings(report.findings);
   const out = ['', p.bold('TOP FINDINGS')];
   if (sorted.length === 0) return [...out, '  none: nothing crossed a threshold in this window'];
   sorted
     .slice(0, max)
-    .forEach((f, i) => out.push(...findingLines(f, i + 1, report.stats.roots, p, width)));
+    .forEach((f, i) => out.push(...findingLines(f, i + 1, report.stats.roots, home, p, width)));
   if (sorted.length > max) {
     out.push(p.dim(`  +${sorted.length - max} more findings in --json / --html`));
   }

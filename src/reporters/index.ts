@@ -11,7 +11,7 @@ export interface RenderOptions {
   color?: boolean;
   /** Terminal only: width in columns, clamped to 60..100. */
   width?: number;
-  /** Home directory, shown as `~` in log roots. Pass os.homedir() from the CLI. */
+  /** Home directory, shown as `~` in roots and project names. Defaults to os.homedir(). */
   homeDir?: string;
 }
 
