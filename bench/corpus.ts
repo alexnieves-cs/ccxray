@@ -35,6 +35,8 @@ import {
 /** Bump when the output for a given seed and size changes (invalidates cached corpora). */
 export const GENERATOR_VERSION = 1;
 export const DEFAULT_SEED = 0x5eed;
+/** Present in a corpus dir while it is being generated. */
+export const SENTINEL = '.generating';
 export const OUT_DIR = resolve(import.meta.dirname, 'out');
 
 export interface CorpusSummary {
@@ -439,7 +441,7 @@ export interface CorpusInfo {
 
 /**
  * Generate DIR/projects and DIR/manifest.json, or reuse them when the manifest matches. Refuses
- * to delete a non-empty DIR that has no manifest (it is not ours).
+ * to delete a non-empty DIR that has neither a manifest nor a `.generating` sentinel (not ours).
  */
 export async function ensureCorpus(
   dir: string,
@@ -448,7 +450,8 @@ export async function ensureCorpus(
 ): Promise<CorpusInfo> {
   const root = join(dir, 'projects');
   const manifest = join(dir, 'manifest.json');
-  if (existsSync(manifest) && existsSync(root)) {
+  const sentinel = join(dir, SENTINEL);
+  if (existsSync(manifest) && existsSync(root) && !existsSync(sentinel)) {
     try {
       const m = JSON.parse(readFileSync(manifest, 'utf8')) as CorpusSummary;
       if (
@@ -461,14 +464,20 @@ export async function ensureCorpus(
       // regenerate below
     }
   }
-  if (existsSync(dir) && readdirSync(dir).length > 0 && !existsSync(manifest))
-    throw new Error(`refusing to overwrite ${dir}: not empty and has no manifest.json`);
+  const ours = existsSync(manifest) || existsSync(sentinel);
+  if (existsSync(dir) && readdirSync(dir).length > 0 && !ours)
+    throw new Error(
+      `refusing to overwrite ${dir}: not empty and has no manifest.json or ${SENTINEL}`,
+    );
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
+  // Marks a corpus in progress: a crash leaves it behind, so the next run may overwrite the dir.
+  writeFileSync(sentinel, '');
   const t0 = performance.now();
   const summary = await generateCorpus({ root, targetBytes, seed });
   const genMs = performance.now() - t0;
   writeFileSync(manifest, `${JSON.stringify(summary, null, 2)}\n`);
+  rmSync(sentinel);
   return { root, dir, summary, reused: false, genMs };
 }
 
