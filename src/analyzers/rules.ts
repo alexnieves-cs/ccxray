@@ -14,6 +14,14 @@ export function turnTokens(u: Usage): number {
   return contextTokens(u) + u.output;
 }
 
+/**
+ * The chain analyzers follow in a session: every turn of a subagent transcript, else the main
+ * chain (inline sidechain turns excluded). Includes synthetic turns.
+ */
+export function chain(s: Session): Turn[] {
+  return s.turns.filter((t) => s.isSubagent || !t.isSidechain);
+}
+
 /** Main-chain, non-synthetic turns of a session, in timestamp order. */
 export function mainTurns(s: Session): Turn[] {
   return s.turns.filter((t) => !t.isSidechain && !t.isSynthetic);
@@ -104,9 +112,31 @@ export function mcpServer(toolName: string): string | undefined {
   return i > 0 ? rest.slice(0, i) : undefined;
 }
 
-/** Numeric-aware version compare, e.g. 2.1.99 < 2.1.100. */
+const SEMVER = /^v?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/**
+ * Version compare: the numeric core first (2.1.99 < 2.1.100, missing parts count as 0), then a
+ * prerelease sorts before its release (2.1.100-beta.1 < 2.1.100), prereleases compared
+ * numeric-aware. Strings that are not versions fall back to a numeric-aware string compare,
+ * after every version.
+ */
 export function compareVersions(a: string, b: string): number {
-  return a.localeCompare(b, 'en', { numeric: true });
+  const ma = SEMVER.exec(a);
+  const mb = SEMVER.exec(b);
+  if (!ma || !mb) {
+    if (ma || mb) return ma ? -1 : 1;
+    return a.localeCompare(b, 'en', { numeric: true });
+  }
+  const na = ma[1]!.split('.').map(Number);
+  const nb = mb[1]!.split('.').map(Number);
+  for (let i = 0; i < Math.max(na.length, nb.length); i++) {
+    const d = (na[i] ?? 0) - (nb[i] ?? 0);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  const pa = ma[2];
+  const pb = mb[2];
+  if (pa === undefined || pb === undefined) return pa === pb ? 0 : pa === undefined ? 1 : -1;
+  return pa.localeCompare(pb, 'en', { numeric: true });
 }
 
 export function median(xs: readonly number[]): number {

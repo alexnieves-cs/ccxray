@@ -1,13 +1,13 @@
 // A10 error-waste (SPEC §5): API errors (synthetic turns and api-error events) with their
-// retries [M], and failed tool calls re-issued with identical input [E].
+// retries [M], and failed tool calls re-issued with the same input [E].
 
 import type { Analyzer, Finding, Session, Turn } from '../model/index.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
-import { fmt, short, turnTokens } from './rules.js';
+import { chain, fmt, short, turnTokens } from './rules.js';
 
 /** A retry is the next real turn within this window after an error, on the same model. */
 export const RETRY_WINDOW_MS = 60_000;
-/** How many following turns to search for an identical re-call of a failed tool. */
+/** How many following turns to search for a repeat of a failed tool call. */
 export const RECALL_LOOKAHEAD_TURNS = 3;
 
 interface ApiError {
@@ -15,32 +15,52 @@ interface ApiError {
   uuid: string;
   label: string;
   tokens: number;
+  synthetic: boolean;
 }
 
-/** The chain analyzers follow: every turn of a subagent, else the main chain. */
-function chain(s: Session): Turn[] {
-  return s.turns.filter((t) => s.isSubagent || !t.isSidechain);
-}
-
-function apiErrors(s: Session): ApiError[] {
-  const out = new Map<string, ApiError>();
+/**
+ * API errors of the chain, each counted once. Two sources: synthetic turns (the parser's
+ * api-error event for a synthetic turn has the turn's uuid and is the same error), and
+ * standalone events such as `system`/`api_error` records. A standalone event followed by a
+ * synthetic turn with no real turn between them is one error, kept as the synthetic turn.
+ * Events derived from turns outside chain() (inline sidechain turns) are skipped.
+ * UNVERIFIED: that Claude Code writes both a system api_error record and a synthetic turn for one
+ * failure (neither has been seen in a real log yet).
+ */
+export function apiErrors(s: Session): ApiError[] {
+  const turns = chain(s);
+  const inChain = new Set(turns.map((t) => t.uuid));
+  const allTurns = new Set(s.turns.map((t) => t.uuid));
   const labels = new Map<string, string>();
-  for (const e of s.events)
-    if (e.kind === 'api-error') {
-      const uuid = e.uuid ?? `${e.source.file}:${e.source.line}`;
-      labels.set(uuid, e.detail);
-      out.set(uuid, { ts: e.ts.getTime(), uuid, label: e.detail, tokens: 0 });
+  const standalone: ApiError[] = [];
+  for (const e of s.events) {
+    if (e.kind !== 'api-error') continue;
+    if (e.uuid !== undefined && allTurns.has(e.uuid)) {
+      if (inChain.has(e.uuid)) labels.set(e.uuid, e.detail);
+      continue;
     }
-  // A synthetic turn and the api-error event the parser derives from it (same uuid) are one error.
-  for (const t of chain(s))
-    if (t.isSynthetic)
-      out.set(t.uuid, {
-        ts: t.ts.getTime(),
-        uuid: t.uuid,
-        label: labels.get(t.uuid) ?? 'synthetic turn',
-        tokens: turnTokens(t.usage),
-      });
-  return [...out.values()].sort((a, b) => a.ts - b.ts);
+    const uuid = e.uuid ?? `${e.source.file}:${e.source.line}`;
+    standalone.push({ ts: e.ts.getTime(), uuid, label: e.detail, tokens: 0, synthetic: false });
+  }
+  const out: ApiError[] = [];
+  const linked = new Set<ApiError>();
+  for (const t of turns) {
+    if (!t.isSynthetic) continue;
+    const at = t.ts.getTime();
+    const prevReal = turns.filter((x) => !x.isSynthetic && x.ts.getTime() <= at).pop();
+    const from = prevReal?.ts.getTime() ?? -Infinity;
+    const ev = standalone.find((e) => !linked.has(e) && e.ts <= at && e.ts >= from);
+    if (ev !== undefined) linked.add(ev);
+    out.push({
+      ts: at,
+      uuid: t.uuid,
+      label: labels.get(t.uuid) ?? ev?.label ?? 'synthetic turn',
+      tokens: turnTokens(t.usage),
+      synthetic: true,
+    });
+  }
+  out.push(...standalone.filter((e) => !linked.has(e)));
+  return out.sort((a, b) => a.ts - b.ts);
 }
 
 /**
@@ -63,8 +83,8 @@ interface Recall {
 export const errorWaste: Analyzer = {
   id: 'error-waste',
   spec: 'A10',
-  description: 'API errors and retries; failed tool calls re-issued with identical input',
-  run(sessions) {
+  description: 'API errors and retries; failed tool calls re-issued with the same input',
+  run(sessions, ctx) {
     const findings: Finding[] = [];
     const recalls = new Map<string, Recall[]>();
     for (const s of sessions) {
@@ -85,7 +105,7 @@ export const errorWaste: Analyzer = {
             retries++;
         }
         const tokens = errors.reduce((a, e) => a + e.tokens, 0);
-        const synthetic = turns.filter((t) => t.isSynthetic).length;
+        const synthetic = errors.filter((e) => e.synthetic).length;
         findings.push({
           analyzer: 'error-waste',
           severity: 'info',
@@ -129,16 +149,23 @@ export const errorWaste: Analyzer = {
     }
     for (const [tool, rs] of [...recalls.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
       const tokens = rs.reduce((a, r) => a + r.tokens, 0);
+      // Raw inputs are compared only with --include-content; otherwise the match is weaker.
+      const same = ctx.includeContent ? 'identical input' : 'same tool, same input size [E]';
       findings.push({
         analyzer: 'error-waste',
         severity: 'info',
-        title: `${tool} failed and was re-called with identical input ${rs.length}× (~${fmt(tokens)} tokens [E])`,
+        title: `${tool} failed and was re-called (${same}) ${rs.length}× (~${fmt(tokens)} tokens [E])`,
         tokens: { value: tokens, kind: 'estimated' },
-        data: { tool, recalls: rs.length, sessions: new Set(rs.map((r) => r.s.id)).size },
+        data: {
+          tool,
+          recalls: rs.length,
+          sessions: new Set(rs.map((r) => r.s.id)).size,
+          match: ctx.includeContent ? 'identical' : 'same-size',
+        },
         evidence: rs.slice(0, 5).map((r) => ({
           sessionId: r.s.id,
           turnUuid: r.again.uuid,
-          detail: `identical ${tool} call after a failed one at turn ${r.failed.index + 1}`,
+          detail: `${ctx.includeContent ? 'identical' : 'same-size'} ${tool} call after a failed one at turn ${r.failed.index + 1}`,
           source: r.again.source,
         })),
         fix: {

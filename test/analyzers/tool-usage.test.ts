@@ -56,7 +56,7 @@ describe('A7 tool-usage', () => {
     expect(lin!.fix.summary).toContain('Disable the "linear" MCP server');
     const builtin = fs[3]!;
     expect(builtin.severity).toBe('info');
-    expect(builtin.data).toEqual({ unusedTools: ['Grep'], defChars: 200 });
+    expect(builtin.data).toEqual({ unusedTools: ['Grep'], deferredTools: [], defChars: 200 });
     expect(builtin.tokens).toEqual({ value: 50, kind: 'estimated' });
   });
 
@@ -107,5 +107,45 @@ describe('A7 tool-usage', () => {
 
   it('negative: no tool calls and no snapshot means no findings', async () => {
     expect(await run(toolUsage, [calls('n3').assistant()])).toEqual([]);
+  });
+
+  it('review: deferred tools are defined, cost 0 per cold turn and are listed separately', async () => {
+    const s = calls('r1', 'mcp__github__list_prs')
+      .attachment(
+        snapshot(toolDef('mcp__github__list_prs', 200), toolDef('mcp__github__get_file', 400)),
+      )
+      .attachment({
+        type: 'deferred_tools_record',
+        tools: ['mcp__github__search_code', { name: 'WebFetch' }],
+      });
+    const fs = await run(toolUsage, [s]);
+    const [gh] = servers(fs);
+    expect(gh!.data).toEqual({
+      server: 'github',
+      unusedTools: ['mcp__github__get_file', 'mcp__github__search_code'],
+      usedTools: ['mcp__github__list_prs'],
+      defChars: 400, // search_code is deferred: 0
+    });
+    expect(gh!.tokens.value).toBe(100);
+    expect(gh!.title).toContain('never called, 1 deferred');
+    expect(gh!.evidence[1]!.detail).toBe('deferred, 0 tokens/cold turn: mcp__github__search_code');
+    const builtin = fs.find((f) => f.data?.server === undefined && f.data?.unusedTools)!;
+    expect(builtin.data).toEqual({
+      unusedTools: ['WebFetch'],
+      deferredTools: ['WebFetch'],
+      defChars: 0,
+    });
+    expect(builtin.tokens.value).toBe(0);
+  });
+
+  it('review: snapshots in subagent transcripts are ignored', async () => {
+    const p = calls('r2', 'Bash').attachment(snapshot(toolDef('Bash', 100)));
+    const a = p
+      .agent('s1')
+      .attachment(snapshot(toolDef('mcp__x__y', 100)))
+      .prompt('x');
+    a.assistant();
+    const fs = await run(toolUsage, [p, a]);
+    expect(servers(fs)).toEqual([]);
   });
 });

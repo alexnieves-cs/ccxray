@@ -73,4 +73,18 @@ describe('A8 context-growth', () => {
     const [f] = await run(contextGrowth, [s], { compactionsPerSession: 1 });
     expect(f!.data?.compactions).toBe(1);
   });
+
+  it('review: subagent transcripts are covered too', async () => {
+    const p = session('a8/r1')
+      .prompt('go')
+      .assistant({ usage: { cacheWrite: 10_000 } });
+    const a = p.agent('big').prompt('explore');
+    a.assistant({ usage: { cacheWrite: 90_000 } }).assistant({
+      usage: { cacheWrite: 70_000, cacheRead: 90_000 },
+    });
+    const [f, ...rest] = await run(contextGrowth, [p, a]);
+    expect(rest).toEqual([]);
+    expect(f!.data).toMatchObject({ max: 160_000, turns: 2 });
+    expect(f!.title).toMatch(/^Subagent /);
+  });
 });

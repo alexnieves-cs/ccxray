@@ -2,7 +2,10 @@
 // write per turn) [M]; flags sessions that got large or were compacted repeatedly.
 
 import type { Analyzer, Finding, Session } from '../model/index.js';
-import { contextTokens, fmt, mainTurns, short } from './rules.js';
+import { chain, contextTokens, fmt, short } from './rules.js';
+
+/** Non-synthetic turns of the chain A8 follows (subagent transcripts included). */
+const realTurns = (s: Session) => chain(s).filter((t) => !t.isSynthetic);
 
 export const CURVE_POINTS = 50;
 
@@ -25,7 +28,7 @@ export function downsample(xs: readonly number[], n = CURVE_POINTS): number[] {
  * UNVERIFIED (FORMAT.md Q5): which markers one compaction writes; no real compaction seen yet.
  */
 export function countCompactions(s: Session): number {
-  const turnTimes = mainTurns(s).map((t) => t.ts.getTime());
+  const turnTimes = realTurns(s).map((t) => t.ts.getTime());
   const marks = s.events
     .filter((e) => e.kind === 'compaction')
     .map((e) => e.ts.getTime())
@@ -47,7 +50,7 @@ export const contextGrowth: Analyzer = {
     const { contextLargeTokens, compactionsPerSession } = ctx.thresholds;
     const findings: Finding[] = [];
     for (const s of sessions) {
-      const turns = mainTurns(s);
+      const turns = realTurns(s);
       if (turns.length === 0) continue;
       const sizes = turns.map((t) => contextTokens(t.usage));
       const max = Math.max(...sizes);

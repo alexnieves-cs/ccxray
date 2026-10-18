@@ -2,7 +2,8 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { session, text, toolUse, type SessionBuilder } from '../../scripts/make-fixture.js';
 import { errorWaste } from '../../src/analyzers/error-waste.js';
-import { cleanup, run } from '../helpers/analyze.js';
+import { loadSessions } from '../../src/parser/index.js';
+import { cleanup, ctx, run, tree } from '../helpers/analyze.js';
 
 afterAll(cleanup);
 
@@ -46,7 +47,7 @@ describe('A10 error-waste', () => {
     expect(f!.data).toEqual({ errors: 1, syntheticTurns: 0, apiErrorEvents: 1, retries: 0 });
   });
 
-  it('positive: a failed Bash call re-issued with identical input', async () => {
+  it('positive: a failed Bash call re-issued with the same input', async () => {
     const s = session('a10/p3')
       .prompt('test it')
       .assistant(bash('pnpm tset'))
@@ -58,7 +59,9 @@ describe('A10 error-waste', () => {
     expect(rest).toEqual([]);
     // failed result 400 chars → 100 [E]; re-call input {"command":"pnpm tset"} 23 chars → 6 [E].
     expect(f!.tokens).toEqual({ value: 106, kind: 'estimated' });
-    expect(f!.data).toEqual({ tool: 'Bash', recalls: 1, sessions: 1 });
+    expect(f!.data).toEqual({ tool: 'Bash', recalls: 1, sessions: 1, match: 'same-size' });
+    expect(f!.title).toContain('same tool, same input size [E]');
+    expect(f!.title).not.toContain('identical');
     expect(f!.evidence[0]!.detail).not.toContain('tset');
   });
 
@@ -82,6 +85,45 @@ describe('A10 error-waste', () => {
       .toolResult({ chars: 400, isError: true });
     for (const c of ['ls', 'pwd', 'date']) s.assistant(bash(c)).toolResult(10);
     s.assistant(bash('pnpm tset')).toolResult(10);
+    expect(await run(errorWaste, [s])).toEqual([]);
+  });
+
+  it('review: says "identical" only when raw inputs were compared (--include-content)', async () => {
+    const s = session('a10/r1')
+      .prompt('test it')
+      .assistant(bash('pnpm tset'))
+      .toolResult({ chars: 400, isError: true })
+      .assistant(bash('pnpm tset'))
+      .toolResult(100);
+    const { sessions } = await loadSessions({ roots: [tree([s])], includeContent: true });
+    const [f] = errorWaste.run(sessions, { ...ctx(), includeContent: true });
+    expect(f!.data?.match).toBe('identical');
+    expect(f!.title).toContain('(identical input)');
+  });
+
+  it('review: a system api_error and its synthetic turn are one error', async () => {
+    const s = session('a10/r2')
+      .prompt('go')
+      .assistant({ usage: { cacheWrite: 10_000 } })
+      .prompt('next')
+      .record('system', { subtype: 'api_error' });
+    synthetic(s)
+      .gap('5m')
+      .assistant({ usage: { cacheWrite: 10_000 } });
+    const [f] = await run(errorWaste, [s]);
+    expect(f!.data).toEqual({ errors: 1, syntheticTurns: 1, apiErrorEvents: 0, retries: 0 });
+  });
+
+  it('review: synthetic inline sidechain turns are outside the main chain', async () => {
+    const s = session('a10/r3')
+      .prompt('go')
+      .assistant({ usage: { cacheWrite: 10_000 } })
+      .assistant({
+        model: '<synthetic>',
+        requestId: null,
+        sidechain: true,
+        envelope: { agentId: 'x', isApiErrorMessage: true },
+      });
     expect(await run(errorWaste, [s])).toEqual([]);
   });
 });

@@ -6,6 +6,7 @@
 import type { Analyzer, Finding, Session, SessionEvent } from '../model/index.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
 import {
+  chain,
   compareVersions,
   contextTokens,
   fmt,
@@ -33,15 +34,17 @@ function crosses2_1_100(a: string, b: string): boolean {
   return compareVersions(a, '2.1.100') < 0 && compareVersions(b, '2.1.100') >= 0;
 }
 
-/** Latest tools-snapshot across main sessions, with the session it came from. */
+/** Latest tools-snapshot across main (non-subagent) sessions, with the session it came from. */
 export function latestSnapshot(
   sessions: readonly Session[],
 ): { s: Session; ev: Snapshot } | undefined {
   let best: { s: Session; ev: Snapshot } | undefined;
-  for (const s of sessions)
+  for (const s of sessions) {
+    if (s.isSubagent) continue;
     for (const ev of s.events)
       if (ev.kind === 'tools-snapshot' && (best === undefined || ev.ts >= best.ev.ts))
         best = { s, ev };
+  }
   return best;
 }
 
@@ -52,7 +55,8 @@ export const fixedOverhead: Analyzer = {
   run(sessions, ctx) {
     const baselines: Baseline[] = [];
     for (const s of sessions) {
-      if (s.isSubagent) continue;
+      // A resumed/continued session, or one cut by --since, does not start from a cold context.
+      if (s.isSubagent || s.continued === true || chain(s)[0]?.index !== 0) continue;
       const first = mainTurns(s)[0];
       if (first === undefined) continue;
       baselines.push({
@@ -80,12 +84,14 @@ export const fixedOverhead: Analyzer = {
         severity: 'info',
         title:
           `Baseline context ${fmt(all)} tokens per fresh session ` +
-          `(median of ${baselines.length})` +
+          `(median of ${baselines.length}; fixed overhead inferred [E], includes first ` +
+          `prompt/attachments)` +
           (latest ? `; ${fmt(latest.median)} on ${latest.version}` : ''),
         tokens: { value: all, kind: 'measured' },
         data: {
           medianBaseline: all,
           sessions: baselines.length,
+          inferred: true,
           versions: versions.map(({ version, median: m, sessions: n }) => ({
             version,
             median: m,
@@ -102,9 +108,11 @@ export const fixedOverhead: Analyzer = {
             'Fixed overhead is paid on every cold turn: trim MCP servers and CLAUDE.md you do not need',
         },
       });
-      for (let i = 1; i < versions.length; i++) {
-        const a = versions[i - 1]!;
-        const b = versions[i]!;
+      // Jumps only between consecutive versions with enough fresh sessions to trust the median.
+      const solid = versions.filter((v) => v.sessions >= ctx.thresholds.baselineMinSessions);
+      for (let i = 1; i < solid.length; i++) {
+        const a = solid[i - 1]!;
+        const b = solid[i]!;
         const delta = b.median - a.median;
         if (delta < ctx.thresholds.baselineJumpTokens) continue;
         const known = crosses2_1_100(a.version, b.version);

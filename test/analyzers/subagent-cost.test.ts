@@ -110,4 +110,31 @@ describe('A9 subagent-cost', () => {
       .toolResult(20);
     expect(await run(subagentCost, [s])).toEqual([]);
   });
+
+  it('review: inline sidechain turns become pseudo-subagents, without double counting', async () => {
+    const p = session('a9/r1')
+      .prompt('go')
+      .assistant({ usage: { cacheWrite: 10_000 } })
+      .assistant({ sidechain: true, envelope: { agentId: 'inl' }, usage: { cacheWrite: 3_000 } })
+      .assistant({ sidechain: true, envelope: { agentId: 'inl' }, usage: { cacheWrite: 1_000 } })
+      // Same message as the transcript's turn below (another requestId): counted once.
+      .assistant({
+        sidechain: true,
+        envelope: { agentId: 'file' },
+        msgId: 'msg_dup0001',
+        usage: { cacheWrite: 500 },
+      });
+    const a = p
+      .agent('file')
+      .prompt('x')
+      .assistant({ msgId: 'msg_dup0001', usage: { cacheWrite: 500 } });
+    const [f, ...rest] = await run(subagentCost, [p, a]);
+    expect(rest).toEqual([]);
+    // parent main chain 10,000; transcript `file` 500; inline `inl` 3,000 + 1,000.
+    expect(f!.data).toMatchObject({ subagents: 2, subagentTokens: 4_500, parentTokens: 10_000 });
+    expect(f!.data?.agents).toEqual([
+      expect.objectContaining({ agentId: 'inl', tokens: 4_000, turns: 2, inline: true }),
+      expect.objectContaining({ agentId: 'file', tokens: 500, turns: 1 }),
+    ]);
+  });
 });
