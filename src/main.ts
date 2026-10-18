@@ -1,4 +1,5 @@
 import { parseArgs } from 'node:util';
+import { captureCommand } from './commands/capture.js';
 import { doctor } from './commands/doctor.js';
 import { fixCommand } from './commands/fix-mcp.js';
 import { VERSION } from './version.js';
@@ -10,6 +11,7 @@ Usage:
   ccxray session <id|latest>
   ccxray doctor [--root DIR]... [--json]
   ccxray fix mcp [--settings FILE] [--apply]   (preview; see ccxray fix mcp --help)
+  ccxray capture --i-understand-this-is-api-key-only   (opt-in; see docs/capture.md)
 
 Options:
   --root DIR      projects dir to read (repeatable; default: CLAUDE_CONFIG_DIR, ~/.claude)
@@ -43,6 +45,7 @@ export async function main(
     return doctor({ roots, json: values.json === true }, out);
   }
   if (positionals[0] === 'fix') return fixCommand(argv, out);
+  if (positionals[0] === 'capture') return captureCommand(argv, out);
   out(HELP);
   return 0;
 }

@@ -166,6 +166,12 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - Cross-session copies keep the copy whose file sessionId matches the record's envelope `sessionId`, else the earliest file; the sidechain-replay and cross-session rules themselves are from ccusage docs and not yet seen locally.
 - `prompt_snapshot` tool names come from `name` or `schema.name`; `systemPrompt[]` parts are strings or `{text}`.
 
+**Fix-module assumptions added in M5 [UNVERIFIED]** (details in [cc-slim.md](cc-slim.md) and [capture.md](capture.md)):
+- `ccxray fix mcp`: permission rule syntax `mcp__<server>__<tool>` and server-wide `mcp__<server>` / `mcp__<server>__*` is taken from Claude Code's permission docs, not re-checked against a running version. Whether a deny rule also removes the tool's definition from the request (saving tokens), rather than only blocking calls, is unknown and must be measured.
+- `ccxray fix mcp` consumes `tool-usage` findings with `data = { server, unusedTools, usedTools, defChars? }` (full `mcp__server__tool` names). The pipeline entry point (`buildReport` in `src/pipeline.ts`) is not merged yet; see the TODO in `src/commands/fix-mcp.ts`.
+- cc-slim hook: PostToolUse stdin fields (`hook_event_name`, `tool_name`, `tool_input`, `tool_response`), the Bash `tool_response` shape `{ stdout, stderr, interrupted, isImage }`, and whether `hookSpecificOutput.updatedMCPToolOutput` (documented for MCP tools) has any effect on Bash. If it has none, only the PreToolUse command-wrap design in cc-slim.md §3.3 can work.
+- capture: Claude Code with `ANTHROPIC_API_KEY` sends `x-api-key`, and an OAuth login sends `Authorization: Bearer`; the first request is `POST /v1/messages` (optionally with a query string).
+
 ### 4.5 Token estimator
 - Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.
 - Calibration (M2): on turns where only one new tool_result was added, compare the estimate against the measured delta in `input + cache_write`, and report the median ratio in `doctor`.
@@ -217,7 +223,7 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 - **Savings benchmark** (for README claims, later): Alex's own sessions, before/after applying the fixes over comparable weeks, reporting tokens per assistant turn and the cache hit ratio. Any claim of "equal quality" needs a task-pass-rate benchmark (e.g. a small SWE-bench-lite subset with an API key) and is out of scope until then.
 
 ## 9. Privacy and ToS
-- Reads files only. No network calls, no telemetry, no account. Enforced in CI.
+- Reads files only. No network calls, no telemetry, no account. Enforced in CI. The single exception is the opt-in `ccxray capture` bundle (`dist/capture.js`), which only *listens* on 127.0.0.1 and never connects out; CI checks that too ([capture.md](capture.md)).
 - Reports contain token counts, tool names, file paths (relative) and commands (first tokens only) by default. Prompt and output text appears only with `--include-content`.
 - HTML reports are self-contained and load nothing remote.
 - No features for multi-account rotation, limit evasion, subscription-OAuth reuse in other harnesses, or cache keep-alive pings. `capture` mode is API-key only and opt-in.
