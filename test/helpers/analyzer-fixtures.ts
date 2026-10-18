@@ -10,7 +10,7 @@ import {
   type Session,
   type Thresholds,
 } from '../../src/model/index.js';
-import { loadSessions } from '../../src/parser/index.js';
+import { loadSessions, type LoadOptions } from '../../src/parser/index.js';
 
 export const FX = join(import.meta.dirname, '..', 'fixtures', 'projects');
 
@@ -26,11 +26,20 @@ export async function fixture(...names: string[]): Promise<Session[]> {
 }
 
 /** Sessions of DSL builders, written under a fresh temp dir. */
-export async function built(name: string, builders: SessionBuilder[]): Promise<Session[]> {
+export async function built(
+  name: string,
+  builders: SessionBuilder[],
+  opts: LoadOptions = {},
+): Promise<Session[]> {
+  return (await loadSessions({ roots: [writeBuilt(name, builders)], ...opts })).sessions;
+}
+
+/** Write DSL builders under a fresh temp dir; returns the projects root. */
+export function writeBuilt(name: string, builders: SessionBuilder[]): string {
   tmp ??= mkdtempSync(join(tmpdir(), 'ccxray-analyzers-'));
   const root = join(tmp, name);
   writeTree(root, builders);
-  return (await loadSessions({ roots: [root] })).sessions;
+  return root;
 }
 
 export function ctx(over: Partial<Thresholds> = {}): AnalyzerContext {
