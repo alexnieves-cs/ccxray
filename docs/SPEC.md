@@ -152,6 +152,15 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 5. Is compaction marked by a distinct record (e.g. a summary type or `isCompactSummary`)?
 6. How field names drift across CC versions (keep a version → quirks table in `parser/quirks.ts`).
 
+**Parser assumptions added in M1 [UNVERIFIED]** (details in [FORMAT.md](FORMAT.md#parser-implementation-notes-m1)):
+- Lines without `requestId` are deduped by `message.id` within one file only.
+- Older versions may write partial `output_tokens` on earlier block lines; the largest is kept.
+- String `assistant.message.content` is one text block.
+- Compaction markers: `isCompactSummary`, `system`/`compact_boundary`, `summary` (Q5). `system`/`api_error` is an API error.
+- `isMeta: true` user lines are client-injected, not typed prompts.
+- One file = one session (its first `sessionId`). Subagent files are below `{sessionId}/` or named `agent-<id>.jsonl`, reuse the parent's sessionId, and get `Session.id = <parent>:agent-<id>` (Q4).
+- `prompt_snapshot` tool names come from `name` or `schema.name`; `systemPrompt[]` parts are strings or `{text}`.
+
 ### 4.5 Token estimator
 - Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.
 - Calibration (M2): on turns where only one new tool_result was added, compare the estimate against the measured delta in `input + cache_write`, and report the median ratio in `doctor`.
@@ -188,7 +197,7 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 | **M5 Fix modules (preview)** | `ccxray fix mcp` (mcp-diet: emit a settings `permissions.deny` diff for never-used MCP tools; never writes without `--apply`); `cc-slim` design doc + prototype PostToolUse hook for Bash output; optional `ccxray capture` (API-key only, local echo server, measures tool-definition bytes, never forwards subscription OAuth) | the diff is valid JSON and merges into the existing settings in tests; the cc-slim prototype has a unit test for "keep failure lines, head/tail, dedupe stack frames"; a benchmark script exists. **No savings claim in the README until the benchmark (§8) shows it.** |
 
 ## 7. Test plan
-- **Fixtures** (`test/fixtures/*.jsonl`, all synthetic or scrubbed): `minimal-single-turn`, `multi-block-same-msgid` (dedupe), `sidechain-replay`, `cross-session-copy`, `synthetic-error-turn` (like the real 2.1.296 not-logged-in case), `ttl-gap-rebuild`, `version-change-rebuild`, `model-switch`, `big-bash-output`, `repeated-read-unchanged`, `repeated-read-after-edit` (negative), `malformed-lines`, `nested-subagents-dir`, `unknown-record-types`, `string-vs-array-content`.
+- **Fixtures** (`test/fixtures/projects/<name>/`, each a fake `projects/` tree; all synthetic or scrubbed): `minimal-single-turn`, `multi-block-same-msgid` (dedupe), `sidechain-replay`, `cross-session-copy`, `synthetic-error-turn` (like the real 2.1.296 not-logged-in case), `ttl-gap-rebuild`, `version-change-rebuild`, `model-switch`, `big-bash-output`, `repeated-read-unchanged`, `repeated-read-after-edit` (negative), `malformed-lines`, `nested-subagents-dir`, `unknown-record-types`, `string-vs-array-content`.
 - **Generator:** `scripts/make-fixture.ts` builds sessions from a compact DSL, so tests can declare the expected findings.
 - **Scrubber:** `scripts/scrub-fixture.ts` replaces text, paths and ids with deterministic hashes while keeping lengths and usage, so a real log can be turned into a shareable fixture.
 - **Unit tests** per analyzer; **snapshot tests** per reporter; **property tests** (fast-check) that the parser never throws.

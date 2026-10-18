@@ -81,6 +81,24 @@ Keys **[M: 58/58]**: `input_tokens`, `output_tokens`, `cache_creation_input_toke
 - Same response, several lines: confirmed **[M]**, see above. Key = (`message.id`, `requestId`).
 - Sidechain replay and cross-session copies: **UNVERIFIED** (single session, no sidechains). Implemented per ccusage's documented behavior **[D]**.
 
+## Parser implementation notes (M1)
+
+How `src/parser/` applies the evidence above. No new evidence here; every item marked **[UNVERIFIED]** is also marked `// UNVERIFIED:` in code and listed in SPEC §4.4.
+
+- **Record types.** Known: `user`, `assistant`, `attachment`, `system`, `summary`, plus metadata `queue-operation`, `last-prompt`, `cost-state`, `atis-latch`, `ai-title`. Anything else, and objects without a string `type` (counted as `(missing)`), goes to `unknownRecordTypes`. Count maps have no prototype, so a `type` such as `valueOf` or `__proto__` is counted like any other (found by the fuzz test).
+- **Lines.** Blank lines and lines that are not a JSON object are counted and skipped. A UTF-8 BOM on line 1 and CRLF endings are tolerated. A record without a valid `timestamp` takes the previous record's timestamp in the same file (warning `assistant without timestamp` for assistant lines).
+- **Same response.** Lines with the same (`message.id`, `requestId`) in one file merge into one Turn: blocks are concatenated (a repeated `tool_use` id is kept once), usage comes from the line with the largest `output_tokens` (first such line on ties), `stop_reason` from the last line that has one, uuid/ts/source from the first line.
+- **Missing requestId [UNVERIFIED].** Lines are merged by `message.id` within the file only and never deduped across files. Missing `message.id`: each line is its own Turn (warning).
+- **Sidechain replay.** A response whose first line has `isSidechain: true` is dropped if any non-sidechain response in any file has the same `message.id`. This is order-independent, slightly broader than "already seen".
+- **Cross-session copy.** Files are parsed in sorted path order; the first file to hold a (`message.id`, `requestId`) keeps it. Prompts and tool_results in the copied lines are *not* deduped: tool_results whose tool_use was dropped become warning `tool_result without matching tool_use`.
+- **Sessions [UNVERIFIED].** A file belongs to one session: its first envelope `sessionId` (else the file stem). Files with the same id merge into one Session.
+- **Subagents [UNVERIFIED, Q4].** A file below a session dir (`{sessionId}/…/*.jsonl`) or named `agent-<id>.jsonl` is a subagent transcript. `parentSessionId` is the first dir under the project (nested) or the envelope `sessionId` (flat). `agentId` comes from the file name, else the envelope. `Session.id` is `<parentSessionId>:agent-<agentId>` (or `<parentSessionId>:<file stem>`); `:` does not occur in a sessionId UUID, so it cannot collide with the parent.
+- **Prompts.** A `user` line with string content, or array content without `tool_result` blocks, is a typed prompt; chars = string length or summed `text` block lengths. Lines with `isMeta: true` are skipped **[UNVERIFIED: client-injected]**.
+- **Tool results.** Joined by `tool_use_id` to a Turn of the same Session. chars = string length or summed `text` block lengths (image blocks count 0). `estTokens` = ceil(chars/4) [E].
+- **Synthetic turns.** `model: "<synthetic>"`, or an envelope `isApiErrorMessage: true` or `error`. Each yields an `api-error` event whose detail is the `error` string (≤ 80 chars) or `isApiErrorMessage`; message text is never kept.
+- **Events.** Compaction: `isCompactSummary: true` user line, `system` + `subtype: compact_boundary`, `summary` record (all **[UNVERIFIED, Q5]**; the user line is not a prompt). `system` + `subtype: api_error` → api-error **[UNVERIFIED]**. `instructions` attachment → files with path, chars, sha256 (content dropped). `prompt_snapshot` with `tools[]` → tools-snapshot with per-tool `JSON.stringify(tool).length`; tool name from `name`, else `schema.name`; `systemPromptChars` sums string parts and `{text}` parts **[UNVERIFIED part shape]**.
+- **Content.** Prompt and tool_result text is kept only with `includeContent`. `doctor` prints counts only.
+
 ## How to extend this document
 
 1. `pnpm probe > /tmp/probe.json` on a machine with real logs (read-only; prints counts and key paths only).
