@@ -56,6 +56,9 @@ export interface FileData {
   metaToolUseId?: string;
   /** Parent side of subagent links: `toolUseResult.agentId` → the tool_result's tool_use_id. */
   agentLinks: Map<string, string>;
+  /** Every user/assistant record has `isSidechain: true` and a string `agentId` (undefined:
+   * no such record). */
+  allSidechain?: boolean;
 }
 
 const PERSISTED = '<persisted-output>';
@@ -117,6 +120,9 @@ export class FileParser {
     }
     d.sessionId ??= str(r.sessionId);
     d.agentId ??= str(r.agentId);
+    if (type === 'user' || type === 'assistant')
+      d.allSidechain =
+        d.allSidechain !== false && r.isSidechain === true && typeof r.agentId === 'string';
     d.cwd ??= str(r.cwd);
     const own = parseTs(r.timestamp);
     if (own !== undefined) {
@@ -242,10 +248,11 @@ export class FileParser {
 /**
  * Session identity of a file. Main transcripts use the first envelope `sessionId` (else the file
  * stem); UNVERIFIED: every record in a file belongs to that one session.
- * [M] CC 2.1.302 (FORMAT.md Q4): subagents live in `{sessionId}/subagents/agent-<id>.jsonl`, with
- * the parent's sessionId and envelope `agentId` = `<id>`.
- * UNVERIFIED: other files below `{sessionId}/`, and flat `agent-<id>.jsonl` files next to the
- * parent (older layouts, parent = envelope sessionId), are treated as subagents too.
+ * A file is a subagent transcript when its path is a subagent layout (`DiscoveredFile.subagentOf`:
+ * [M] CC 2.1.302 `{sessionId}/subagents/agent-<id>.jsonl`, with the parent's sessionId and
+ * envelope `agentId` = `<id>`), or, UNVERIFIED, when every user/assistant record has
+ * `isSidechain: true` and an `agentId` (e.g. a flat `agent-<id>.jsonl` next to the parent; parent
+ * = envelope sessionId). Being deeper below the root does not make a file a subagent.
  * Session.id is `<parentSessionId>:agent-<agentId>` (or `<parentSessionId>:<file stem>`), a ccxray
  * choice: `:` never occurs in a sessionId UUID, so it cannot collide with the parent.
  */
@@ -253,10 +260,11 @@ export function sessionIdentity(
   f: FileData,
 ): Pick<Session, 'id' | 'isSubagent' | 'agentId' | 'parentSessionId'> {
   const stem = fileStem(f.file);
-  const agentFile = stem.startsWith('agent-');
-  if (!f.file.nested && !agentFile) return { id: f.sessionId ?? stem, isSubagent: false };
-  const parentSessionId = f.file.nested ? f.file.dirs[0] : f.sessionId;
-  const agentId = agentFile ? stem.slice('agent-'.length) : f.agentId;
+  const byLayout = f.file.subagentOf;
+  if (byLayout === undefined && f.allSidechain !== true)
+    return { id: f.sessionId ?? stem, isSubagent: false };
+  const parentSessionId = byLayout ?? f.sessionId;
+  const agentId = stem.startsWith('agent-') ? stem.slice('agent-'.length) : f.agentId;
   const suffix = agentId !== undefined ? `agent-${agentId}` : stem;
   return {
     id: `${parentSessionId ?? 'unknown'}:${suffix}`,

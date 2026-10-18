@@ -158,7 +158,7 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - String `assistant.message.content` is one text block.
 - Compaction markers: `isCompactSummary`, `system`/`compact_boundary`, `summary` (Q5). `system`/`api_error` is an API error.
 - `isMeta: true` user lines are client-injected, not typed prompts.
-- One file = one session (its first `sessionId`). Subagent files other than the [M] `{sessionId}/subagents/agent-<id>.jsonl` layout (other nested files, flat `agent-<id>.jsonl`) are treated as subagents too (Q4). `Session.id = <parent>:agent-<id>` is a ccxray choice.
+- One file = one session (its first `sessionId`). Besides the [M] `{sessionId}/subagents/agent-<id>.jsonl` layout, `{sessionId}/agent-<id>.jsonl` (UUID-shaped `{sessionId}` dir) and files whose every user/assistant record is `isSidechain` with an `agentId` (e.g. flat `agent-<id>.jsonl`) are treated as subagents (Q4); any other file, at any depth, is a main session whose project is its immediate parent dir. `Session.id = <parent>:agent-<id>` is a ccxray choice.
 - `<persisted-output>` sizes: `KB` = 1024, and the externalization threshold is unknown (Q1).
 - Cross-session copies keep the copy whose file sessionId matches the record's envelope `sessionId`, else the earliest file; the sidechain-replay and cross-session rules themselves are from ccusage docs and not yet seen locally.
 - `prompt_snapshot` tool names come from `name` or `schema.name`; `systemPrompt[]` parts are strings or `{text}`.
