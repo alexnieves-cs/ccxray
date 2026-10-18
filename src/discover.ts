@@ -8,12 +8,21 @@ import { basename, join, relative, resolve, sep } from 'node:path';
 export interface DiscoveredFile {
   path: string;
   root: string;
-  /** Project directory name under the root ('' for a file directly in the root). */
+  /**
+   * Project directory name: the file's immediate parent dir, or for a subagent laid out under
+   * its parent session (`subagentOf`), the dir that holds `{sessionId}/`. '' when that is the
+   * root itself. Works for any root depth (a `projects/` dir or one above such trees).
+   */
   project: string;
-  /** Path segments between the project dir and the file, e.g. ['{sessionId}', 'subagents']. */
+  /** Path segments between the project dir and the file: ['{sessionId}', 'subagents'],
+   * ['{sessionId}'] or []. */
   dirs: string[];
-  /** true when the file is below a subdirectory of the project dir. */
-  nested: boolean;
+  /**
+   * Parent sessionId when the path is a subagent layout: `{sessionId}/subagents/*.jsonl` ([M]
+   * CC 2.1.302) or `{sessionId}/agent-<id>.jsonl` (UNVERIFIED: older layout), where `{sessionId}`
+   * is UUID-shaped. Any other file is a main transcript by layout.
+   */
+  subagentOf?: string;
   size: number;
   mtimeMs: number;
   /** Sibling `<stem>.meta.json` (subagent metadata, [M] CC 2.1.302), when it exists. */
@@ -113,15 +122,10 @@ async function walk(
       }
       if (seen.has(rp)) continue;
       seen.add(rp);
-      const parts = relative(root, p).split(sep);
-      const project = parts.length > 1 ? parts[0]! : '';
-      const dirs = parts.slice(1, -1);
       out.files.push({
         path: p,
         root,
-        project,
-        dirs,
-        nested: dirs.length > 0,
+        ...layout(relative(root, p).split(sep)),
         size: st.size,
         mtimeMs: st.mtimeMs,
         ...(names.has(`${e.name.slice(0, -'.jsonl'.length)}.meta.json`)
@@ -133,3 +137,20 @@ async function walk(
 }
 
 export const fileStem = (f: DiscoveredFile): string => basename(f.path, '.jsonl');
+
+/** A Claude Code sessionId (UUID). Fixture and real ids are both this shape. */
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Classify a path (segments relative to the root, file name last); see DiscoveredFile. */
+function layout(parts: string[]): Pick<DiscoveredFile, 'project' | 'dirs' | 'subagentOf'> {
+  const name = parts[parts.length - 1]!;
+  const dirs = parts.slice(0, -1);
+  const n = dirs.length;
+  const at = (i: number): string => (i >= 0 ? dirs[i]! : '');
+  if (n >= 2 && dirs[n - 1] === 'subagents' && SESSION_ID.test(dirs[n - 2]!))
+    return { project: at(n - 3), dirs: dirs.slice(n - 2), subagentOf: dirs[n - 2]! };
+  // UNVERIFIED (FORMAT.md Q4): agent-<id>.jsonl directly inside a session dir.
+  if (n >= 1 && name.startsWith('agent-') && SESSION_ID.test(dirs[n - 1]!))
+    return { project: at(n - 2), dirs: dirs.slice(n - 1), subagentOf: dirs[n - 1]! };
+  return { project: at(n - 1), dirs: [] };
+}

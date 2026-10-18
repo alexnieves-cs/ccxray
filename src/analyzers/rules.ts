@@ -1,6 +1,6 @@
 // Small shared predicates for analyzers and the `session` view. Pure, no I/O.
-// The A2 rebuild rule lives here so the session view (M4) and the cache-rebuild analyzer (M2)
-// flag exactly the same turns.
+// The A2 rebuild rule and the A3 TTL live here so the session view (M4) and the cache-rebuild
+// analyzer (M2) flag exactly the same turns. The A6 repeat rule is in repeated-read.ts.
 
 import type { Session, Thresholds, Turn, Usage } from '../model/index.js';
 
@@ -30,9 +30,10 @@ export function mainTurns(s: Session): Turn[] {
 /**
  * SPEC §5 A2: turn n (not the first, non-sidechain) rebuilt the cache when
  * `cache_creation ≥ max(rebuildMinCacheWrite, rebuildPrevContextFraction × prev context)` and
- * `cache_read ≤ (1 − rebuildReadDropFraction) × prev cache_read`. `prev` is the previous
- * non-synthetic turn of the same chain. With prev cache_read = 0 the drop condition holds
- * (0 ≤ 0): the previous turn wrote the cache and this one did not read it.
+ * `cache_read ≤ (1 − rebuildReadDropFraction) × prev cache_read`, with `prev cache_read > 0`
+ * (the literal rule: cache_read cannot drop from 0, SPEC §5 A2 notes). `prev` is the previous
+ * non-synthetic turn of the same main chain. The one A2 predicate: the cache-rebuild analyzer
+ * and the `session` 🔁 flag both use it.
  */
 export function isRebuild(prev: Turn | undefined, cur: Turn, th: Thresholds): boolean {
   if (prev === undefined || cur.isSidechain || cur.isSynthetic) return false;
@@ -42,6 +43,7 @@ export function isRebuild(prev: Turn | undefined, cur: Turn, th: Thresholds): bo
   );
   return (
     cur.usage.cacheWrite >= minWrite &&
+    prev.usage.cacheRead > 0 &&
     cur.usage.cacheRead <= (1 - th.rebuildReadDropFraction) * prev.usage.cacheRead
   );
 }
@@ -58,46 +60,20 @@ export function rebuildTurns(s: Session, th: Thresholds): Set<string> {
 }
 
 /**
- * SPEC §5 A3 (a): the cache TTL that applies to a session: 1 h when it wrote any
- * `ephemeral_1h` tokens, else 5 min.
+ * SPEC §5 A3 (a): the cache TTL that applies to a session: 1 h when it wrote any `ephemeral_1h`
+ * tokens (decided over the whole session, before since/until filtering: `Session.wrote1hCache`),
+ * else 5 min.
+ * UNVERIFIED: that a session which wrote ephemeral_1h tokens at all keeps its cached prefix for
+ * 1 h (a session could mix 1h and 5m entries; the split is measured, its meaning not).
  */
+export function sessionTtl(s: Session): '5m' | '1h' {
+  const oneHour = s.wrote1hCache ?? s.turns.some((t) => (t.usage.cacheWrite1h ?? 0) > 0);
+  return oneHour ? '1h' : '5m';
+}
+
+/** sessionTtl in ms. */
 export function cacheTtlMs(s: Session, th: Thresholds): number {
-  return s.turns.some((t) => (t.usage.cacheWrite1h ?? 0) > 0) ? th.ttl1hMs : th.ttl5mMs;
-}
-
-const MUTATING = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
-
-function field(input: unknown, key: string): unknown {
-  return typeof input === 'object' && input !== null
-    ? (input as Record<string, unknown>)[key]
-    : undefined;
-}
-
-/**
- * SPEC §5 A6: tool_use ids of `Read` calls that repeat an earlier Read of the same file_path
- * (same offset/limit) in the session's main chain, with no Edit/Write/MultiEdit/NotebookEdit of
- * that path and no Bash command mentioning it in between. A subagent session is one chain.
- */
-export function repeatedReadIds(s: Session): Set<string> {
-  const seen = new Map<string, string>(); // read key → path
-  const out = new Set<string>();
-  for (const t of s.turns) {
-    if ((t.isSidechain && !s.isSubagent) || t.isSynthetic) continue;
-    for (const u of t.toolUses) {
-      const path = field(u.input, 'file_path') ?? field(u.input, 'notebook_path');
-      if (u.name === 'Read' && typeof path === 'string') {
-        const key = JSON.stringify([path, field(u.input, 'offset'), field(u.input, 'limit')]);
-        if (seen.has(key)) out.add(u.id);
-        else seen.set(key, path);
-      } else if (MUTATING.has(u.name) && typeof path === 'string') {
-        for (const [k, p] of seen) if (p === path) seen.delete(k);
-      } else if (u.name === 'Bash') {
-        const cmd = field(u.input, 'command');
-        if (typeof cmd === 'string') for (const [k, p] of seen) if (cmd.includes(p)) seen.delete(k);
-      }
-    }
-  }
-  return out;
+  return sessionTtl(s) === '1h' ? th.ttl1hMs : th.ttl5mMs;
 }
 
 /**

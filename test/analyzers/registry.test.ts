@@ -24,9 +24,19 @@ describe('analyzer registry', () => {
     };
     const a = await runAll();
     expect(await runAll()).toBe(a);
-    for (const secret of ['say hi', 'Use pnpm', 'pnpm test', 'look around', 'Synthetic title'])
+    // A5 (M2) shows a Bash command's first two words by design (SPEC §5), e.g. `pnpm test`; the
+    // rest of a command (here `--verbose` of `pnpm build --verbose`) must never appear.
+    for (const secret of ['say hi', 'Use pnpm', '--verbose', 'look around', 'Synthetic title'])
       expect(a).not.toContain(secret);
-    for (const id of ['fixed-overhead', 'tool-usage', 'subagent-cost', 'error-waste'])
+    for (const id of [
+      'cache-rebuild',
+      'fixed-overhead',
+      'big-tool-output',
+      'repeated-read',
+      'tool-usage',
+      'subagent-cost',
+      'error-waste',
+    ])
       expect(a).toContain(`"analyzer":"${id}"`);
   });
 });

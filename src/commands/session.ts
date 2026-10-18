@@ -1,7 +1,8 @@
 // `ccxray session <id|latest>`: per-turn drill-down for one session (SPEC §3).
 
 import { parseArgs } from 'node:util';
-import { cacheTtlMs, rebuildTurns, repeatedReadIds } from '../analyzers/rules.js';
+import { repeatedReadToolUseIds } from '../analyzers/repeated-read.js';
+import { cacheTtlMs, rebuildTurns } from '../analyzers/rules.js';
 import { defaultRoots } from '../discover.js';
 import {
   applyThresholdOverrides,
@@ -19,25 +20,9 @@ import {
   type TurnFlag,
   type UsageSum,
 } from '../reporters/session.js';
+import { splitThresholds } from './analyze.js';
 
 const MIN_PREFIX = 4;
-
-/** Split `--threshold.<key>=<value>` arguments from the rest. */
-export function splitThresholdArgs(argv: readonly string[]): {
-  rest: string[];
-  overrides: Record<string, string>;
-} {
-  const rest: string[] = [];
-  const overrides: Record<string, string> = {};
-  for (const a of argv) {
-    const m = /^--threshold\.([^=]+)=(.*)$/.exec(a);
-    if (m) overrides[m[1]!] = m[2]!;
-    else if (a.startsWith('--threshold.'))
-      throw new Error(`expected --threshold.<key>=<value>, got ${a}`);
-    else rest.push(a);
-  }
-  return { rest, overrides };
-}
 
 /** Pick the session for `query`: `latest`, a full id, or a unique prefix of ≥ 4 chars. */
 export function resolveSession(
@@ -82,9 +67,14 @@ const sumUsage = (turns: readonly Turn[]): UsageSum => {
   return t;
 };
 
-function rows(s: Session, turns: readonly Turn[], chain: string, th: Thresholds): SessionRow[] {
+function rows(
+  s: Session,
+  turns: readonly Turn[],
+  chain: string,
+  th: Thresholds,
+  dupReads: ReadonlySet<string>,
+): SessionRow[] {
   const rebuilds = rebuildTurns(s, th);
-  const dupReads = repeatedReadIds(s);
   const ttl = cacheTtlMs(s, th);
   return turns.map((t, i) => {
     const tools: Record<string, number> = {};
@@ -120,17 +110,25 @@ export function buildSessionView(
   th: Thresholds,
 ): { view: SessionView; subagentRows: SessionRow[] } {
   const mainChain = s.turns.filter((t) => s.isSubagent || !t.isSidechain);
-  const mainRows = rows(s, mainChain, s.isSubagent ? `agent-${s.agentId ?? s.id}` : 'main', th);
-  const spawnRow = new Map<string, number>();
-  mainChain.forEach((t, i) => t.toolUses.forEach((u) => spawnRow.set(u.id, i + 1)));
   const subs = s.isSubagent
     ? []
     : all
         .filter((x) => x.isSubagent && x.parentSessionId === s.id)
         .sort((a, b) => a.firstTs.getTime() - b.firstTs.getTime() || (a.id < b.id ? -1 : 1));
+  // The A6 rule itself, so 📄 marks exactly the reads A6 reports (subagent edits count).
+  const dupReads = repeatedReadToolUseIds([s, ...subs]);
+  const mainRows = rows(
+    s,
+    mainChain,
+    s.isSubagent ? `agent-${s.agentId ?? s.id}` : 'main',
+    th,
+    dupReads,
+  );
+  const spawnRow = new Map<string, number>();
+  mainChain.forEach((t, i) => t.toolUses.forEach((u) => spawnRow.set(u.id, i + 1)));
   const subagentRows: SessionRow[] = [];
   const subagents: SubagentSummary[] = subs.map((x) => {
-    subagentRows.push(...rows(x, x.turns, `agent-${x.agentId ?? x.id}`, th));
+    subagentRows.push(...rows(x, x.turns, `agent-${x.agentId ?? x.id}`, th, dupReads));
     const models = [...new Set(x.turns.filter((t) => !t.isSynthetic).map((t) => t.model))];
     return {
       id: x.id,
@@ -175,7 +173,7 @@ export async function sessionCommand(
   let values: { root?: string[]; json?: boolean; ascii?: boolean };
   let positionals: string[];
   try {
-    const split = splitThresholdArgs(argv);
+    const split = splitThresholds(argv);
     th = applyThresholdOverrides(DEFAULT_THRESHOLDS, split.overrides);
     ({ values, positionals } = parseArgs({
       args: split.rest,

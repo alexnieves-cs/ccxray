@@ -28,14 +28,15 @@ describe('discover', () => {
     expect(defaultRoots({}, 'h')).toHaveLength(2);
   });
 
-  it('dedupes roots by realpath, skips missing roots, flags nested files', async () => {
+  it('dedupes roots by realpath, skips missing roots, flags subagent layouts', async () => {
     const root = join(FIXTURES_DIR, 'nested-subagents-dir');
     const d = await discover([root, root + sep, join(root, '.'), join(TMP, 'missing')]);
     expect(d.roots).toEqual([root]);
-    expect(d.files.map((f) => [f.project, f.nested, f.dirs.length])).toEqual([
-      ['-home-dev-nested-subagents-dir', false, 0],
-      ['-home-dev-nested-subagents-dir', true, 2],
-      ['-home-dev-nested-subagents-dir', true, 2],
+    const sid = d.files[0]!.path.split(sep).pop()!.slice(0, -'.jsonl'.length);
+    expect(d.files.map((f) => [f.project, f.subagentOf, f.dirs.length])).toEqual([
+      ['-home-dev-nested-subagents-dir', undefined, 0],
+      ['-home-dev-nested-subagents-dir', sid, 2],
+      ['-home-dev-nested-subagents-dir', sid, 2],
     ]);
     expect(d.files[1]!.dirs[1]).toBe('subagents');
     expect(d.files.map((f) => f.metaPath !== undefined)).toEqual([false, true, false]);
