@@ -41,6 +41,11 @@ export async function doctor(
   }
   const turns = sessions.reduce((a, s) => a + s.turns.length, 0);
   const subagents = sessions.filter((s) => s.isSubagent).length;
+  const linked = sessions.filter((s) => s.parentToolUseId !== undefined).length;
+  const persisted = sessions.reduce(
+    (a, s) => a + s.turns.reduce((b, t) => b + t.toolResults.filter((r) => r.persisted).length, 0),
+    0,
+  );
   const d = stats.dedupe;
   lines.push(
     'Roots:',
@@ -49,6 +54,7 @@ export async function doctor(
     `Lines: ${n(stats.lines)} · blank ${n(stats.blankLines)} · malformed ${n(stats.malformedLines)}`,
     `Sessions: ${n(sessions.length)} (${n(subagents)} subagent) · assistant turns ${n(turns)}` +
       ` · synthetic turns ${n(stats.syntheticTurns)}`,
+    `Persisted tool outputs: ${n(persisted)} · subagents linked to a tool_use: ${n(linked)}`,
     `Dedupe drops: same-response lines ${n(d.sameResponseLines)} · sidechain replays` +
       ` ${n(d.sidechainReplays)} · cross-session copies ${n(d.crossSessionCopies)}`,
     '',

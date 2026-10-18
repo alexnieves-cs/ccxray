@@ -44,6 +44,7 @@ describe('doctor', () => {
     expect(out).toMatch(/Unknown record types:\n {2}future-thing +2\n/);
     expect(out).toContain('Sessions: 5 (2 subagent) · assistant turns 9');
     expect(out).toContain('ai-title-record');
+    expect(out).toContain('Persisted tool outputs: 0 · subagents linked to a tool_use: 2');
     for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(100);
     for (const secret of ['Use pnpm', 'Synthetic title', 'continuing', 'TODOs', 'say hi'])
       expect(out).not.toContain(secret);

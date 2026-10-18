@@ -47,6 +47,27 @@ export interface FileData {
   toolResults: ToolResult[];
   prompts: UserPrompt[];
   events: SessionEvent[];
+  /** `toolUseId` from the sibling `agent-<id>.meta.json`, when read. */
+  metaToolUseId?: string;
+  /** Parent side of subagent links: `toolUseResult.agentId` → the tool_result's tool_use_id. */
+  agentLinks: Map<string, string>;
+}
+
+const PERSISTED = '<persisted-output>';
+const UNITS: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3 };
+
+/**
+ * [M] CC 2.1.302 (FORMAT.md Q1): an externalized output is a string starting `<persisted-output>`
+ * with a line `Output too large (36.4KB). Full output saved to: <path>`.
+ * UNVERIFIED: KB = 1024 (one sample: 36.4KB reported for a 37,277-byte file fits 1024, not 1000).
+ */
+export function persistedInfo(content: unknown): ToolResult['persisted'] {
+  const first = Array.isArray(content)
+    ? content.find((b): b is Rec => isRec(b) && typeof b.text === 'string')?.text
+    : content;
+  if (typeof first !== 'string' || !first.trimStart().startsWith(PERSISTED)) return undefined;
+  const m = /Output too large \((\d+(?:\.\d+)?)\s*(B|KB|MB|GB)\)/.exec(first.slice(0, 500));
+  return { reportedBytes: m ? Math.round(Number(m[1]) * UNITS[m[2]!]!) : null };
 }
 
 /** Consumes the records of one file, in line order. */
@@ -60,7 +81,15 @@ export class FileParser {
     private readonly stats: ParseStats,
     private readonly includeContent: boolean,
   ) {
-    this.data = { file, versions: [], responses: [], toolResults: [], prompts: [], events: [] };
+    this.data = {
+      file,
+      versions: [],
+      responses: [],
+      toolResults: [],
+      prompts: [],
+      events: [],
+      agentLinks: new Map(),
+    };
   }
 
   private warn = (key: string): void => inc(this.stats.warnings, key);
@@ -117,8 +146,12 @@ export class FileParser {
     const c = r.message.content;
     if (Array.isArray(c)) {
       let results = 0;
+      // [M] 2.1.302 (FORMAT.md Q4): the parent's Agent tool_result line carries
+      // `toolUseResult.agentId`, matching the subagent's `agent-<id>.jsonl`.
+      const tur = isRec(r.toolUseResult) ? str(r.toolUseResult.agentId) : undefined;
       for (const b of c) {
         if (!isToolResultBlock(b)) continue;
+        if (results === 0 && tur !== undefined) this.data.agentLinks.set(tur, b.tool_use_id);
         results++;
         const chars = contentChars(b.content);
         const tr: ToolResult = {
@@ -129,6 +162,8 @@ export class FileParser {
           ts,
         };
         if (typeof b.is_error === 'boolean') tr.isError = b.is_error;
+        const persisted = persistedInfo(b.content);
+        if (persisted !== undefined) tr.persisted = persisted;
         if (this.includeContent) tr.text = contentText(b.content);
         this.data.toolResults.push(tr);
       }
@@ -194,10 +229,12 @@ export class FileParser {
 /**
  * Session identity of a file. Main transcripts use the first envelope `sessionId` (else the file
  * stem); UNVERIFIED: every record in a file belongs to that one session.
- * UNVERIFIED (FORMAT.md Q4): subagent transcripts are files below `{sessionId}/` (e.g.
- * `{sessionId}/subagents/agent-<id>.jsonl`) or flat `agent-<id>.jsonl` files, and reuse the
- * parent's sessionId. Their Session.id is `<parentSessionId>:agent-<agentId>` (or
- * `<parentSessionId>:<file stem>`); `:` never occurs in a sessionId UUID, so it cannot collide.
+ * [M] CC 2.1.302 (FORMAT.md Q4): subagents live in `{sessionId}/subagents/agent-<id>.jsonl`, with
+ * the parent's sessionId and envelope `agentId` = `<id>`.
+ * UNVERIFIED: other files below `{sessionId}/`, and flat `agent-<id>.jsonl` files next to the
+ * parent (older layouts, parent = envelope sessionId), are treated as subagents too.
+ * Session.id is `<parentSessionId>:agent-<agentId>` (or `<parentSessionId>:<file stem>`), a ccxray
+ * choice: `:` never occurs in a sessionId UUID, so it cannot collide with the parent.
  */
 export function sessionIdentity(
   f: FileData,
@@ -224,7 +261,10 @@ export function buildSessions(
   kept: readonly (readonly PendingResponse[])[],
   stats: ParseStats,
 ): Session[] {
-  const sessions = new Map<string, { s: Session; results: ToolResult[] }>();
+  const sessions = new Map<
+    string,
+    { s: Session; results: ToolResult[]; links: Map<string, string>; metaToolUseId?: string }
+  >();
   files.forEach((f, i) => {
     const ident = sessionIdentity(f);
     let g = sessions.get(ident.id);
@@ -240,7 +280,7 @@ export function buildSessions(
         lastTs: f.lastTs ?? EPOCH,
         ccVersions: [],
       };
-      g = { s, results: [] };
+      g = { s, results: [], links: new Map() };
       sessions.set(ident.id, g);
     }
     const s = g.s;
@@ -253,6 +293,8 @@ export function buildSessions(
     s.prompts.push(...f.prompts);
     s.events.push(...f.events);
     g.results.push(...f.toolResults);
+    for (const [a, id] of f.agentLinks) g.links.set(a, id);
+    g.metaToolUseId ??= f.metaToolUseId;
     for (const r of kept[i] ?? []) {
       s.turns.push(toTurn(r, s.id));
       if (r.isSynthetic) stats.syntheticTurns++;
@@ -268,7 +310,15 @@ export function buildSessions(
   });
 
   const out: Session[] = [];
-  for (const { s, results } of sessions.values()) {
+  for (const { s, results, metaToolUseId } of sessions.values()) {
+    if (s.isSubagent && s.agentId !== undefined) {
+      const viaParent =
+        s.parentSessionId !== undefined
+          ? sessions.get(s.parentSessionId)?.links.get(s.agentId)
+          : undefined;
+      const id = metaToolUseId ?? viaParent;
+      if (id !== undefined) s.parentToolUseId = id;
+    }
     const byToolUse = new Map<string, Turn>();
     for (const t of s.turns) for (const u of t.toolUses) byToolUse.set(u.id, t);
     for (const tr of results) {

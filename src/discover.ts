@@ -16,6 +16,8 @@ export interface DiscoveredFile {
   nested: boolean;
   size: number;
   mtimeMs: number;
+  /** Sibling `<stem>.meta.json` (subagent metadata, [M] CC 2.1.302), when it exists. */
+  metaPath?: string;
 }
 
 export interface Discovery {
@@ -75,6 +77,9 @@ async function walk(dir: string, root: string, out: Discovery, seen: Set<string>
     out.errors++;
     return;
   }
+  // Only *.jsonl is parsed. Other files (*.meta.json, *.prefix.json, tool-results/*.txt…) are
+  // ignored, except that a subagent's `.meta.json` is noted for parentToolUseId.
+  const names = new Set(entries.map((e) => e.name));
   for (const e of entries) {
     const p = join(dir, e.name);
     if (e.isDirectory()) await walk(p, root, out, seen);
@@ -98,6 +103,9 @@ async function walk(dir: string, root: string, out: Discovery, seen: Set<string>
         nested: dirs.length > 0,
         size: st.size,
         mtimeMs: st.mtimeMs,
+        ...(names.has(`${e.name.slice(0, -'.jsonl'.length)}.meta.json`)
+          ? { metaPath: join(dir, `${e.name.slice(0, -'.jsonl'.length)}.meta.json`) }
+          : {}),
       });
     }
   }

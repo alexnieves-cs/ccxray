@@ -1,10 +1,11 @@
 // Parser entry point (SPEC §4): discover → stream parse → dedupe → sessions. Never throws on
 // bad input; everything odd is counted in ParseStats.
 
+import { readFile } from 'node:fs/promises';
 import { discover } from '../discover.js';
 import type { ParseStats, Session } from '../model/index.js';
 import { dedupeAcrossFiles } from './dedupe.js';
-import { counter, inc } from './records.js';
+import { counter, inc, isRec, str } from './records.js';
 import { buildSessions, FileParser, finalize, type FileData } from './session.js';
 import { emptyCounts, streamJsonl } from './stream.js';
 
@@ -51,7 +52,9 @@ export async function loadSessions(
     stats.bytes += f.size;
     const p = new FileParser(f, stats, opts.includeContent === true);
     await streamJsonl(f.path, p.onRecord, counts);
-    files.push(p.finish());
+    const data = p.finish();
+    if (f.metaPath !== undefined) data.metaToolUseId = await readMetaToolUseId(f.metaPath, stats);
+    files.push(data);
   }
   stats.lines = counts.lines;
   stats.blankLines = counts.blankLines;
@@ -65,6 +68,17 @@ export async function loadSessions(
   );
   const sessions = buildSessions(files, kept, stats);
   return { sessions: filterSessions(sessions, opts), stats };
+}
+
+/** `toolUseId` of a subagent's `agent-<id>.meta.json` ([M] 2.1.302). Only that key is read. */
+async function readMetaToolUseId(path: string, stats: ParseStats): Promise<string | undefined> {
+  try {
+    const v: unknown = JSON.parse(await readFile(path, 'utf8'));
+    return isRec(v) ? str(v.toolUseId) : undefined;
+  } catch {
+    inc(stats.warnings, 'unreadable agent meta.json');
+    return undefined;
+  }
 }
 
 function filterSessions(sessions: Session[], opts: LoadOptions): Session[] {

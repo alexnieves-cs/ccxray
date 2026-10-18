@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { FIXTURES, FIXTURES_DIR } from '../scripts/make-fixture.js';
 import { defaultRoots, discover } from '../src/discover.js';
 import { compareVersions, quirksFor } from '../src/parser/quirks.js';
+import { persistedInfo } from '../src/parser/session.js';
 import { emptyCounts, streamJsonl } from '../src/parser/stream.js';
 
 const TMP = mkdtempSync(join(tmpdir(), 'ccxray-units-'));
@@ -37,6 +38,8 @@ describe('discover', () => {
       ['-home-dev-nested-subagents-dir', true, 2],
     ]);
     expect(d.files[1]!.dirs[1]).toBe('subagents');
+    expect(d.files.map((f) => f.metaPath !== undefined)).toEqual([false, true, false]);
+    expect(d.files[1]!.metaPath!.endsWith(`${sep}agent-n1.meta.json`)).toBe(true);
     expect(d.files.every((f) => f.size > 0 && f.mtimeMs > 0)).toBe(true);
   });
 });
@@ -73,6 +76,22 @@ describe('streamJsonl', () => {
   });
 });
 
+describe('persistedInfo', () => {
+  it('parses the reported size (KB = 1024, UNVERIFIED) and tolerates a missing figure', () => {
+    expect(persistedInfo('<persisted-output>\nOutput too large (36.4KB). Full output…')).toEqual({
+      reportedBytes: 37274,
+    });
+    expect(
+      persistedInfo([{ type: 'text', text: '<persisted-output>\nOutput too large (2MB).' }]),
+    ).toEqual({
+      reportedBytes: 2097152,
+    });
+    expect(persistedInfo('<persisted-output>\nsomething else')).toEqual({ reportedBytes: null });
+    expect(persistedInfo('plain output')).toBeUndefined();
+    expect(persistedInfo(42)).toBeUndefined();
+  });
+});
+
 describe('quirks', () => {
   it('compares versions numerically', () => {
     expect(compareVersions('2.1.100', '2.1.99')).toBeGreaterThan(0);
@@ -92,7 +111,7 @@ describe('make-fixture', () => {
   it('committed fixtures match the generator (run `pnpm fixtures` to update)', () => {
     for (const [name, build] of Object.entries(FIXTURES)) {
       const dir = join(FIXTURES_DIR, name);
-      const want = new Map(build().map((b) => [b.relPath, b.toJsonl()]));
+      const want = new Map(build().flatMap((b) => b.files()));
       const have = listFiles(dir).map((p) => relative(dir, p));
       expect(have.sort(), name).toEqual([...want.keys()].sort());
       for (const [rel, content] of want)

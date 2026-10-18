@@ -61,6 +61,13 @@ export interface ToolResult {
   ts?: Date;
   /** Raw content text, kept only when the parser was run with includeContent. */
   text?: string;
+  /**
+   * Set when Claude Code externalized the output: the inline content is a `<persisted-output>`
+   * preview and the full output went to `{sessionId}/tool-results/` ([M] 2.1.302, FORMAT.md Q1).
+   * `chars` stays the inline (preview) size, which is what entered the context.
+   * `reportedBytes` parses "Output too large (36.4KB)", KB = 1024 (UNVERIFIED); null if absent.
+   */
+  persisted?: { reportedBytes: number | null };
 }
 
 /**
@@ -87,7 +94,7 @@ export interface Turn {
   ccVersion?: string;
   /** Envelope `isSidechain`. */
   isSidechain: boolean;
-  /** Envelope `agentId`, when present (subagent transcripts). UNVERIFIED field name. */
+  /** Envelope `agentId`, when present (subagent transcripts; [M] CC 2.1.302, FORMAT.md Q4). */
   agentId?: string;
   /**
    * true for `model: "<synthetic>"` or envelopes carrying `isApiErrorMessage` / `error`.
@@ -163,11 +170,14 @@ export interface Session {
   files: string[];
   /** true when the records come from a sidechain / subagent transcript. */
   isSubagent: boolean;
-  /** For subagent sessions: the agent id (from the file name or envelope). UNVERIFIED. */
+  /** For subagent sessions: the agent id (file name `agent-<id>.jsonl`, else envelope `agentId`). */
   agentId?: string;
   /** For subagent sessions: the parent session id, when known. */
   parentSessionId?: string;
-  /** For subagent sessions: the parent's Task/Agent tool_use id, when it can be linked. UNVERIFIED. */
+  /**
+   * For subagent sessions: the parent's Agent/Task tool_use id, from `agent-<id>.meta.json`
+   * `toolUseId`, else the parent tool_result whose `toolUseResult.agentId` matches ([M] 2.1.302).
+   */
   parentToolUseId?: string;
   /** Deduped assistant turns, sorted by ts. */
   turns: Turn[];

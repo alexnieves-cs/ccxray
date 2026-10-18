@@ -96,6 +96,8 @@ export interface ToolResultSpec {
   content?: unknown;
   isError?: boolean;
   toolUseId?: string;
+  /** Extra envelope fields, e.g. { toolUseResult: { agentId } }. */
+  envelope?: Rec;
 }
 
 export class SessionBuilder {
@@ -110,6 +112,7 @@ export class SessionBuilder {
   private pending: string[] = [];
   private sidechain = false;
   private agentId?: string;
+  private readonly extra = new Map<string, string>();
 
   constructor(
     readonly name: string,
@@ -216,7 +219,7 @@ export class SessionBuilder {
       content: s.content ?? 'o'.repeat(s.chars ?? 0),
     };
     if (s.isError !== undefined) block.is_error = s.isError;
-    return this.record('user', { message: { role: 'user', content: [block] } });
+    return this.record('user', { message: { role: 'user', content: [block] }, ...s.envelope });
   }
 
   gap(d: string | number): this {
@@ -244,7 +247,7 @@ export class SessionBuilder {
    * A subagent transcript sharing this sessionId, with isSidechain and agentId set. Written to
    * `{sessionId}/subagents/agent-<id>.jsonl`, or `agent-<id>.jsonl` next to the parent if flat.
    */
-  agent(agentId: string, opts: { flat?: boolean } = {}): SessionBuilder {
+  agent(agentId: string, opts: { flat?: boolean; meta?: Rec; prefix?: Rec } = {}): SessionBuilder {
     const a = new SessionBuilder(`${this.name}/${agentId}`, { ...this.o, id: this.id });
     a.clock = this.clock;
     a.sidechain = true;
@@ -252,11 +255,30 @@ export class SessionBuilder {
     a.relPath = opts.flat
       ? join(this.o.project, `agent-${agentId}.jsonl`)
       : join(this.o.project, this.id, 'subagents', `agent-${agentId}.jsonl`);
+    const stem = a.relPath.slice(0, -'.jsonl'.length);
+    if (opts.meta) a.sideFile(`${stem}.meta.json`, `${JSON.stringify(opts.meta)}\n`);
+    if (opts.prefix) a.sideFile(`${stem}.prefix.json`, `${JSON.stringify(opts.prefix)}\n`);
     return a;
+  }
+
+  /** Path relative to the projects root, inside this session's `{sessionId}/` dir. */
+  sessionPath(...parts: string[]): string {
+    return join(this.o.project, this.id, ...parts);
+  }
+
+  /** A non-JSONL file written next to the transcript (meta.json, tool-results/*.txt…). */
+  sideFile(relPath: string, content: string): this {
+    this.extra.set(relPath, content);
+    return this;
   }
 
   toJsonl(): string {
     return `${this.lines.join('\n')}\n`;
+  }
+
+  /** Every file this builder writes: [path relative to the projects root, content]. */
+  files(): [string, string][] {
+    return [[this.relPath, this.toJsonl()], ...this.extra];
   }
 }
 
@@ -272,11 +294,12 @@ export function session(name: string, o: SessionOpts = {}): SessionBuilder {
 
 /** Write builders as a projects tree under `root`. */
 export function writeTree(root: string, builders: readonly SessionBuilder[]): void {
-  for (const b of builders) {
-    const p = join(root, b.relPath);
-    mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, b.toJsonl());
-  }
+  for (const b of builders)
+    for (const [rel, content] of b.files()) {
+      const p = join(root, rel);
+      mkdirSync(dirname(p), { recursive: true });
+      writeFileSync(p, content);
+    }
 }
 
 // ---- Committed fixtures (SPEC §7). Expected totals are written by hand in test/parser.test.ts.
@@ -520,12 +543,16 @@ export const FIXTURES: Record<string, () => SessionBuilder[]> = {
     p.prompt('do two things').assistant({
       usage: { input: 5, cacheWrite: 9000, output: 70 },
       blocks: [
-        toolUse('Task', { description: 'a', prompt: 'a' }),
-        toolUse('Task', { description: 'b', prompt: 'b' }),
+        toolUse('Agent', { description: 'a', prompt: 'a' }, 'toolu_agent_n1'),
+        toolUse('Agent', { description: 'b', prompt: 'b' }, 'toolu_agent_n2'),
       ],
     });
+    // n1 is linked by its meta.json (CC 2.1.302 layout); n2 only by the parent's toolUseResult.
     const n1 = p
-      .agent('n1')
+      .agent('n1', {
+        meta: { agentType: 'general-purpose', description: 'a', toolUseId: 'toolu_agent_n1' },
+        prefix: { v: 1, by: 'synthetic', state: {}, outlines: [] },
+      })
       .prompt('a')
       .assistant({
         usage: { input: 3, cacheWrite: 4000, output: 20 },
@@ -542,12 +569,39 @@ export const FIXTURES: Record<string, () => SessionBuilder[]> = {
       .assistant({ usage: { input: 3, cacheWrite: 4100, output: 12 }, blocks: [text('nothing')] });
     p.sync(n1)
       .toolResult(7)
-      .toolResult(7)
+      .toolResult({
+        chars: 7,
+        envelope: { toolUseResult: { isAsync: false, status: 'completed', agentId: 'n2' } },
+      })
       .assistant({
         usage: { input: 4, cacheWrite: 200, cacheRead: 9000, output: 30 },
         blocks: [text('both done')],
       });
     return [p, n1, n2];
+  },
+
+  'persisted-tool-output': () => {
+    const s = fx('persisted-tool-output', 'main');
+    const id = 'toolu_persisted0001';
+    // POSIX path inside the content, so the fixture is byte-identical on every OS.
+    const saved = `/home/dev/.claude/projects/-home-dev-persisted-tool-output/${s.id}/tool-results/${id}.txt`;
+    const preview =
+      `<persisted-output>\nOutput too large (36.4KB). Full output saved to: ${saved}\n\n` +
+      `Preview (first 2KB):\n${'o'.repeat(2048)}\n</persisted-output>`;
+    s.prompt('run the full suite')
+      .assistant({
+        usage: { input: 3, cacheWrite: 2000, cacheRead: 15000, output: 40 },
+        blocks: [toolUse('Bash', { command: 'pnpm test' }, id)],
+      })
+      .toolResult({ content: preview })
+      .assistant({
+        usage: { input: 2, cacheWrite: 700, cacheRead: 17000, output: 30 },
+        blocks: [toolUse('Bash', { command: 'pnpm lint' })],
+      })
+      .toolResult(300)
+      .assistant({ usage: { input: 1, cacheWrite: 100, cacheRead: 17700, output: 20 } })
+      .sideFile(s.sessionPath('tool-results', `${id}.txt`), 'o'.repeat(37277));
+    return [s];
   },
 
   'unknown-record-types': () => {

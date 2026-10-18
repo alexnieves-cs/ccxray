@@ -234,7 +234,10 @@ describe('fixtures', () => {
         isSubagent: true,
         agentId: a,
         parentSessionId: P,
+        // n1 via agent-n1.meta.json, n2 via the parent's toolUseResult.agentId.
+        parentToolUseId: `toolu_agent_${a}`,
       });
+    expect(get(P).parentToolUseId).toBeUndefined();
     expect(totals(get(P))).toEqual({ input: 9, cacheWrite: 9200, cacheRead: 9000, output: 100 });
     expect(totals(get(`${P}:agent-n1`))).toEqual({
       input: 5,
@@ -249,12 +252,26 @@ describe('fixtures', () => {
       output: 12,
     });
     expect(results(get(P)).map((r) => [r.name, r.chars])).toEqual([
-      ['Task', 7],
-      ['Task', 7],
+      ['Agent', 7],
+      ['Agent', 7],
     ]);
     expect(get(`${P}:agent-n1`).turns.every((t) => t.isSidechain && t.agentId === 'n1')).toBe(true);
     expect(stats.dedupe).toEqual({ ...NO_DROPS, sameResponseLines: 1 });
     expect(stats.warnings).toEqual({});
+  });
+
+  it('persisted-tool-output: externalized output keeps its inline size and the reported size', async () => {
+    const { sessions, stats } = await load('persisted-tool-output');
+    const s = only(sessions);
+    expect(stats.files).toBe(1); // tool-results/*.txt is not parsed
+    expect(stats.warnings).toEqual({});
+    const rs = s.turns.flatMap((t) => t.toolResults);
+    // 19 + (49 + 132 + 1) + 1 + 21 + (2048 + 1) + 19 chars of preview, as logged inline.
+    expect(rs.map((r) => [r.toolName, r.chars, r.estTokens, r.persisted])).toEqual([
+      ['Bash', 2291, 573, { reportedBytes: 37274 }],
+      ['Bash', 300, 75, undefined],
+    ]);
+    expect(totals(s)).toEqual({ input: 6, cacheWrite: 2800, cacheRead: 49700, output: 90 });
   });
 
   it('unknown-record-types: counted; attachments and compaction become events', async () => {
@@ -362,11 +379,11 @@ describe('loadSessions options', () => {
   it('all fixtures together: no cross-fixture dedupe, exact session and turn counts', async () => {
     const { readdirSync } = await import('node:fs');
     const roots = readdirSync(FX).map((n) => join(FX, n));
-    expect(roots).toHaveLength(15);
+    expect(roots).toHaveLength(16);
     const { sessions, stats } = await loadSessions({ roots });
-    expect(sessions).toHaveLength(19);
-    expect(sessions.reduce((a, s) => a + s.turns.length, 0)).toBe(44);
-    expect(stats.files).toBe(19);
+    expect(sessions).toHaveLength(20);
+    expect(sessions.reduce((a, s) => a + s.turns.length, 0)).toBe(47);
+    expect(stats.files).toBe(20);
     expect(stats.dedupe).toEqual({
       sameResponseLines: 7,
       sidechainReplays: 1,
