@@ -12,6 +12,7 @@
   "files": [
     "bin",
     "dist",
+    "hooks",
     "schema"
   ],
   "engines": {
@@ -28,7 +29,8 @@
     "test:watch": "vitest",
     "scrub": "tsx scripts/scrub-fixture.ts",
     "probe": "tsx scripts/probe-format.ts",
-    "fixtures": "tsx scripts/make-fixture.ts"
+    "fixtures": "tsx scripts/make-fixture.ts",
+    "bench:slim": "tsx bench/slim.ts"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
