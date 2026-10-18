@@ -1,7 +1,7 @@
 // `ccxray capture` server (opt-in, API-key only; docs/capture.md). Built as its own bundle,
 // dist/capture.js, the only file allowed to import node:http (test/no-network.test.ts).
 // It binds 127.0.0.1 only, makes no outbound connection, forwards nothing, measures the first
-// POST /v1/messages request, answers it with an error and stops.
+// POST /v1/messages request that has tools, answers it with an error and stops.
 // Requests with `Authorization: Bearer` (OAuth / subscription) are rejected and not read.
 // The x-api-key value is only checked for presence; it is never stored or printed.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -20,6 +20,8 @@ export interface CaptureHandle {
 }
 
 const MAX_BODY = 64 * 1024 * 1024;
+const OAUTH_REFUSED =
+  'Refused an OAuth request (Authorization: Bearer or an sk-ant-oat token). Nothing was recorded.\n';
 
 function reply(res: ServerResponse, status: number, message: string): void {
   res.writeHead(status, { 'content-type': 'application/json', connection: 'close' });
@@ -42,11 +44,18 @@ export function startCapture(opts: CaptureOptions): Promise<CaptureHandle> {
       else res.on('close', shut);
       finish(code);
     };
+    // UNVERIFIED: Claude Code with ANTHROPIC_API_KEY sends `x-api-key`, and a subscription
+    // (OAuth) login sends `Authorization: Bearer`. OAuth access tokens start with `sk-ant-oat`;
+    // one passed as x-api-key is refused the same way.
     const auth = req.headers.authorization;
-    if (typeof auth === 'string' && /^\s*bearer\b/i.test(auth)) {
+    const key = req.headers['x-api-key'];
+    const oauthKey = (Array.isArray(key) ? key : [key]).some(
+      (k) => typeof k === 'string' && k.trimStart().startsWith('sk-ant-oat'),
+    );
+    if ((typeof auth === 'string' && /^\s*bearer\b/i.test(auth)) || oauthKey) {
       req.resume();
       reply(res, 401, 'ccxray capture only measures API-key requests; OAuth requests are refused');
-      opts.out('Refused a request with Authorization: Bearer (OAuth). Nothing was recorded.\n');
+      opts.out(OAUTH_REFUSED);
       return stop(1);
     }
     const path = (req.url ?? '').split('?')[0];
@@ -54,7 +63,6 @@ export function startCapture(opts: CaptureOptions): Promise<CaptureHandle> {
       req.resume();
       return reply(res, 404, 'ccxray capture only measures POST /v1/messages');
     }
-    const key = req.headers['x-api-key'];
     if (typeof key !== 'string' || key.length === 0) {
       req.resume();
       reply(res, 401, 'ccxray capture needs an x-api-key request');
@@ -89,6 +97,13 @@ export function startCapture(opts: CaptureOptions): Promise<CaptureHandle> {
         return stop(1);
       }
       chunks.length = 0;
+      // UNVERIFIED: Claude Code may send small requests without tools first (e.g. a title or
+      // quota check). Skip those and measure the first request that carries a `tools` array.
+      if (!Array.isArray((body as { tools?: unknown } | null)?.tools)) {
+        reply(res, 400, 'ccxray capture skipped a request without tools; waiting for the next one');
+        opts.out(`Skipped a /v1/messages request without tools (${size} bytes); waiting.\n`);
+        return;
+      }
       opts.out(formatMeasurement(measureRequest(body, size)));
       reply(res, 400, 'ccxray capture measured this request and does not forward it. Stopping.');
       stop(0);

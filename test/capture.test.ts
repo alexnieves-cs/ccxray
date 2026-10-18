@@ -104,6 +104,31 @@ describe('capture: server', () => {
     expect(s.out()).not.toContain('OAUTH');
   });
 
+  it('refuses an OAuth token passed as x-api-key, with the Bearer message', async () => {
+    const s = await start();
+    const status = await send(
+      s.port,
+      { 'x-api-key': 'sk-ant-oat01-OAUTHTOKEN' },
+      JSON.stringify(BODY),
+    );
+    expect(status).toBe(401);
+    expect(await s.done).toBe(1);
+    expect(s.out()).toContain('Refused an OAuth request');
+    expect(s.out()).not.toContain('OAUTHTOKEN');
+    expect(s.out()).not.toContain('tools (');
+  });
+
+  it('skips requests without a tools array and measures the first one with tools', async () => {
+    const s = await start();
+    const noTools = { model: 'small', messages: [{ role: 'user', content: 'TITLE-PROMPT' }] };
+    expect(await send(s.port, { 'x-api-key': KEY }, JSON.stringify(noTools))).toBe(400);
+    expect(s.out()).toContain('Skipped a /v1/messages request without tools');
+    expect(await send(s.port, { 'x-api-key': KEY }, JSON.stringify(BODY))).toBe(400);
+    expect(await s.done).toBe(0);
+    expect(s.out()).toContain('tools (2)');
+    expect(s.out()).not.toContain('TITLE-PROMPT');
+  });
+
   it('refuses requests without x-api-key', async () => {
     const s = await start();
     expect(await send(s.port, {}, JSON.stringify(BODY))).toBe(401);

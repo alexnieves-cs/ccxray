@@ -28,7 +28,8 @@ Options: `--port N` (default: a free port), `--timeout SECONDS` (default 300).
   anywhere else. CI checks the built `dist/capture.js` for outbound client calls and for a
   `listen` that is not on `127.0.0.1` (`test/no-network.test.ts`).
 - Measures only `POST /v1/messages`. Other paths get a 404 and are not read.
-- **Refuses OAuth.** Any request with an `Authorization: Bearer …` header (how a Claude
+- **Refuses OAuth.** Any request with an `Authorization: Bearer …` header, or an `x-api-key`
+  starting with `sk-ant-oat` (an OAuth token), (how a Claude
   subscription login authenticates) gets a 401, its body is not read, nothing is recorded, and
   capture exits. Reusing subscription OAuth outside Claude Code is against the ToS (CLAUDE.md
   rule 5), so capture doesn't touch it.
@@ -37,7 +38,9 @@ Options: `--port N` (default: a free port), `--timeout SECONDS` (default 300).
 - Prints **sizes only**: request body bytes [M], chars of the tool definitions, system prompt
   and messages [M], each tool's name and definition chars [M], and tokens as chars/4 [E].
   No prompt, system or tool description text is printed or saved.
-- Measures the **first** matching request, answers it with an error and exits.
+- Skips requests whose body has no `tools` array (answered with an error, nothing printed but
+  their size) and measures the **first request that has one**, answers it with an error and exits.
+  **[UNVERIFIED]** that the first request with tools is the main-loop request.
 - The server code is a separate bundle (`dist/capture.js`), loaded by the CLI with a dynamic
   import only when `capture` runs, so the main bundle has no network code at all.
 
