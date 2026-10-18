@@ -9,10 +9,11 @@
 //   - a turn whose previous turn read nothing from cache (e.g. turn 2 after a cold turn 1) never
 //     counts, because cache_read cannot drop from 0;
 //   - with --since/--until, the first in-window turn has no in-window turn n-1 and is not checked.
-// Tokens are measured: the sum of cacheWrite of the rebuild turns.
+// Tokens are measured: the sum of cacheWrite of the rebuild turns. The per-cause split in
+// data.causes is estimated (tokensKind: 'estimated'): the cause is an attribution guess.
 import type { Analyzer, Finding, Session, Thresholds, Turn } from '../model/index.js';
 import { formatCompact, formatInt } from '../reporters/format.js';
-import { rebuildCause, REBUILD_CAUSES, type RebuildCause } from './rebuild-cause.js';
+import { ChainState, rebuildCause, REBUILD_CAUSES, type RebuildCause } from './rebuild-cause.js';
 import { evidenceFor, MAX_EVIDENCE, plural, realTurns, type Evidence } from './util.js';
 
 const KNOWN_ISSUE = 'https://github.com/anthropics/claude-code/issues/46917';
@@ -25,6 +26,7 @@ export interface Rebuild {
   cause: RebuildCause;
   detail: string;
   gapMs: number;
+  ttl: '5m' | '1h';
 }
 
 export function isRebuild(prev: Turn, turn: Turn, th: Thresholds): boolean {
@@ -41,12 +43,13 @@ export function findRebuilds(sessions: readonly Session[], th: Thresholds): Rebu
   const out: Rebuild[] = [];
   for (const s of sessions) {
     const chain = realTurns(s).filter((t) => !t.isSidechain);
-    for (let i = 1; i < chain.length; i++) {
-      const prev = chain[i - 1]!;
+    const state = new ChainState(s);
+    for (let i = 0; i < chain.length; i++) {
       const turn = chain[i]!;
-      if (!isRebuild(prev, turn, th)) continue;
-      const c = rebuildCause(s, chain.slice(0, i), turn, th);
-      out.push({ session: s, turn, prev, ...c });
+      const prev = chain[i - 1];
+      if (prev !== undefined && isRebuild(prev, turn, th))
+        out.push({ session: s, turn, prev, ...rebuildCause(s, prev, turn, th, state) });
+      state.advance(turn);
     }
   }
   return out;
@@ -55,8 +58,15 @@ export function findRebuilds(sessions: readonly Session[], th: Thresholds): Rebu
 function fixFor(cause: RebuildCause, rebuilds: readonly Rebuild[], th: Thresholds): string {
   switch (cause) {
     case 'ttl-expiry': {
-      const short = rebuilds.filter((r) => r.gapMs > th.ttl5mMs && r.gapMs <= FIFTEEN_MIN).length;
-      return `batch prompts; you had ${plural(short, 'gap')} of 5–15 min`;
+      // Worded per TTL: a 5m session is told about short breaks, a 1h session about long ones.
+      const five = rebuilds.filter((r) => r.ttl === '5m');
+      const hour = rebuilds.length - five.length;
+      const short = five.filter((r) => r.gapMs > th.ttl5mMs && r.gapMs <= FIFTEEN_MIN).length;
+      const parts = [
+        ...(five.length > 0 ? [`you had ${plural(short, 'gap')} of 5–15 min (5m TTL)`] : []),
+        ...(hour > 0 ? [`${plural(hour, 'break')} over 1h (1h TTL)`] : []),
+      ];
+      return `batch prompts; ${parts.join(', ')}`;
     }
     case 'cc-upgrade':
       return 'restart after upgrading; known issue: anthropics/claude-code#46917';
@@ -96,6 +106,8 @@ export const cacheRebuild: Analyzer = {
         cause,
         count: rs.length,
         tokens: rs.reduce((a, r) => a + r.turn.usage.cacheWrite, 0),
+        // The total is measured; splitting it by cause is an attribution guess (CLAUDE.md rule 2).
+        tokensKind: 'estimated' as const,
         fix: fixFor(cause, rs, th),
       };
     }).filter((c) => c.count > 0);

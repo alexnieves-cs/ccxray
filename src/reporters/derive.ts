@@ -4,13 +4,16 @@
 //
 // Finding.data conventions (PROVISIONAL inter-stream contract between analyzers and reporters,
 // also in docs/SPEC.md §4.1; may change until M4):
-//   causes?:  { cause: string; count: number; tokens?: number; fix?: string }[]
-//             per-cause breakdown, e.g. for cache-rebuild (A2/A3). `tokens` has the finding's kind.
+//   causes?:  { cause: string; count: number; tokens?: number; tokensKind?: TokenKind;
+//               fix?: string }[]
+//             per-cause breakdown, e.g. for cache-rebuild (A2/A3). `tokens` has `tokensKind`
+//             when given (A3 marks its split 'estimated': the cause is a guess), else the
+//             finding's kind.
 //   tool?:    string   tool name, e.g. `Bash`; groups WHERE IT WENT by tool.
 //   command?: string   raw Bash command; reporters only ever show shortCommand() of it.
 // Any other key: numbers and booleans are kept; strings are kept in JSON only when short
 // (see json.ts); nothing else is rendered.
-import type { Finding, Report, Severity } from '../model/index.js';
+import type { Finding, Report, Severity, TokenKind } from '../model/index.js';
 import { shortCommand } from './format.js';
 
 function finiteOr(n: number, fallback: number): number {
@@ -38,6 +41,8 @@ export interface CauseRow {
   cause: string;
   count: number;
   tokens?: number;
+  /** Kind of `tokens`; undefined means the finding's kind. */
+  tokensKind?: TokenKind;
   fix?: string;
 }
 
@@ -54,6 +59,9 @@ export function causeRows(f: Finding): CauseRow[] {
       cause: o.cause,
       count: o.count,
       ...(isFiniteNumber(o.tokens) ? { tokens: o.tokens } : {}),
+      ...(o.tokensKind === 'measured' || o.tokensKind === 'estimated'
+        ? { tokensKind: o.tokensKind }
+        : {}),
       ...(typeof o.fix === 'string' ? { fix: o.fix } : {}),
     });
   }

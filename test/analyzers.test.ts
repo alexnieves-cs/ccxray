@@ -134,7 +134,8 @@ describe('A2/A3 cache-rebuild', () => {
             cause: 'ttl-expiry',
             count: 1,
             tokens: 20600,
-            fix: 'batch prompts; you had 1 gap of 5–15 min',
+            tokensKind: 'estimated',
+            fix: 'batch prompts; you had 1 gap of 5–15 min (5m TTL)',
           },
         ],
         rebuilds: 1,
@@ -155,6 +156,7 @@ describe('A2/A3 cache-rebuild', () => {
         cause: 'cc-upgrade',
         count: 1,
         tokens: 21000,
+        tokensKind: 'estimated',
         fix: 'restart after upgrading; known issue: anthropics/claude-code#46917',
       },
     ]);
@@ -169,6 +171,7 @@ describe('A2/A3 cache-rebuild', () => {
         cause: 'model-switch',
         count: 1,
         tokens: 18400,
+        tokensKind: 'estimated',
         fix: '/model mid-session invalidates the cache',
       },
     ]);
@@ -247,12 +250,14 @@ describe('A2/A3 cache-rebuild', () => {
         cause: 'ttl-expiry',
         count: 2,
         tokens: 42000,
-        fix: 'batch prompts; you had 1 gap of 5–15 min',
+        tokensKind: 'estimated',
+        fix: 'batch prompts; you had 1 gap of 5–15 min (5m TTL), 1 break over 1h (1h TTL)',
       },
       {
         cause: 'unknown',
         count: 1,
         tokens: 21000,
+        tokensKind: 'estimated',
         fix: 'no known cause; check the evidence turns by hand',
       },
     ]);
