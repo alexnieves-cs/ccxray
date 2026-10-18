@@ -15,9 +15,13 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import type { Finding } from '../model/index.js';
+import { defaultRoots } from '../discover.js';
 import { planMcpDeny } from '../fix/mcp.js';
+import { DEFAULT_THRESHOLDS, type Finding } from '../model/index.js';
+import { loadSessions } from '../parser/index.js';
+import { buildReport } from '../pipeline.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
+import { defaultSince, parseDate, UsageError } from './analyze.js';
 
 export interface FindingsQuery {
   roots?: string[];
@@ -47,21 +51,29 @@ Prints a diff and writes nothing unless --apply is given (a timestamped backup i
 See docs/fix-mcp.md.
 `;
 
-// TODO(M2/M4 integration): the analyzers and src/pipeline.ts land in other branches. Once
-// merged, replace this with a static `import { buildReport } from '../pipeline.js'` (a dynamic
-// import of a variable path resolves relative to dist/cli.js at runtime and would miss the
-// bundled module).
-// UNVERIFIED: assumed call shape buildReport(query) → Promise<{ findings: Finding[] }>.
-async function defaultLoadFindings(q: FindingsQuery): Promise<readonly Finding[]> {
-  const spec = '../pipeline.js';
-  let mod: { buildReport?: (q: FindingsQuery) => Promise<{ findings: Finding[] }> };
-  try {
-    mod = (await import(spec)) as typeof mod;
-  } catch {
-    throw new Error('fix mcp needs the analyzer pipeline, which is not in this build yet');
-  }
-  if (typeof mod.buildReport !== 'function') throw new Error('pipeline has no buildReport');
-  return (await mod.buildReport(q)).findings;
+/**
+ * The real pipeline, as `ccxray` (src/commands/analyze.ts) runs it: loadSessions, then
+ * buildReport with the default thresholds and no content. Same window defaults: `--since`
+ * parsed by analyze's parseDate, else the last 7 days.
+ */
+async function defaultLoadFindings(
+  q: FindingsQuery,
+  now = new Date(),
+): Promise<readonly Finding[]> {
+  const since = q.since !== undefined ? parseDate(q.since, '--since') : defaultSince(now);
+  const { sessions, stats } = await loadSessions({
+    roots: q.roots ?? defaultRoots(),
+    since,
+    project: q.project,
+    includeContent: false,
+  });
+  return buildReport({
+    sessions,
+    stats,
+    ctx: { thresholds: DEFAULT_THRESHOLDS, now, includeContent: false },
+    window: { since: q.since ?? since.toISOString(), until: null, project: q.project ?? null },
+    includeContent: false,
+  }).findings;
 }
 
 function stamp(now: Date): string {
@@ -116,11 +128,18 @@ export async function fixCommand(
   const roots = (values.root as unknown[] | undefined)?.filter(
     (r): r is string => typeof r === 'string',
   );
-  const findings = await (deps.loadFindings ?? defaultLoadFindings)({
-    ...(roots ? { roots } : {}),
-    ...(typeof values.since === 'string' ? { since: values.since } : {}),
-    ...(typeof values.project === 'string' ? { project: values.project } : {}),
-  });
+  let findings: readonly Finding[];
+  try {
+    findings = await (deps.loadFindings ?? ((q) => defaultLoadFindings(q, deps.now)))({
+      ...(roots ? { roots } : {}),
+      ...(typeof values.since === 'string' ? { since: values.since } : {}),
+      ...(typeof values.project === 'string' ? { project: values.project } : {}),
+    });
+  } catch (err) {
+    if (!(err instanceof UsageError)) throw err;
+    out(`ccxray fix mcp: ${err.message}\n`);
+    return 2;
+  }
 
   const before = existsSync(target) ? readFileSync(target, 'utf8') : null;
   let plan;
