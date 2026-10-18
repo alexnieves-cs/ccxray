@@ -1,4 +1,5 @@
 // Small pure helpers shared by analyzers. No I/O, no clock, no environment.
+import { posix } from 'node:path';
 import type { Finding, Session, Turn } from '../model/index.js';
 
 /** Evidence entries kept per finding. Counts in titles and data stay exact. */
@@ -28,6 +29,27 @@ export function displayPath(path: string, cwd: string | undefined): string {
       if (path.startsWith(base + sep)) return path.slice(base.length + 1);
   }
   return path.replace(HOME_PREFIX, '~');
+}
+
+// The same home prefixes anywhere in a string (e.g. inside a shell word).
+const HOME_ANYWHERE =
+  /(?<![\w.~-])(?:\/home\/[^/\\\s'"]+|\/Users\/[^/\\\s'"]+|[A-Za-z]:[\\/]Users[\\/][^/\\\s'"]+)(?=[/\\\s'"]|$)/g;
+
+/** Every home directory inside `s` shown as `~` (for command words, not only path starts). */
+export const maskHome = (s: string): string => s.replace(HOME_ANYWHERE, '~');
+
+/**
+ * Canonical form of a file path for comparisons: `\` → `/`, relative paths resolved against
+ * `cwd`, `.`/`..` collapsed, and a Windows drive letter lowercased. Pure string work
+ * (posix.normalize), identical on every OS.
+ */
+export function normPath(p: string, cwd?: string): string {
+  let x = p.replace(/\\/g, '/');
+  const isAbs = (q: string): boolean => q.startsWith('/') || /^[A-Za-z]:\//.test(q);
+  if (!isAbs(x) && cwd !== undefined && cwd !== '')
+    x = `${cwd.replace(/\\/g, '/').replace(/\/+$/, '')}/${x}`;
+  x = x.replace(/^([A-Za-z]):/, (_, d: string) => `${d.toLowerCase()}:`);
+  return posix.normalize(x);
 }
 
 /** Last path segment, for either separator. */
