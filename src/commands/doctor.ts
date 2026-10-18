@@ -3,6 +3,7 @@
 import { defaultRoots } from '../discover.js';
 import { loadSessions } from '../parser/index.js';
 import { quirksFor } from '../parser/quirks.js';
+import { calibrate } from '../tokens/calibrate.js';
 
 const WIDTH = 100;
 const n = (x: number): string => x.toLocaleString('en-US');
@@ -23,6 +24,15 @@ function table(title: string, m: Record<string, number>): string[] {
   if (rows.length === 0) return [`${title}: none`];
   const w = Math.min(60, Math.max(...rows.map(([k]) => k.length)));
   return [`${title}:`, ...rows.map(([k, v]) => fit(`  ${k.padEnd(w)}  ${n(v).padStart(10)}`))];
+}
+
+/** SPEC §4.5: one line, labeled as an estimate check. */
+function calibrationLine(sessions: Parameters<typeof calibrate>[0]): string {
+  const c = calibrate(sessions);
+  return c.medianRatio === null
+    ? 'Estimator calibration [E]: no usable samples (needs turns that added exactly one tool_result)'
+    : `Estimator calibration [E]: chars/4 estimate ÷ measured = ${c.medianRatio.toFixed(2)} ` +
+        `(median of ${n(c.samples)} single-tool_result turns)`;
 }
 
 export async function doctor(
@@ -63,6 +73,7 @@ export async function doctor(
     `Sessions: ${n(sessions.length)} (${n(subagents)} subagent) · assistant turns ${n(turns)}` +
       ` · synthetic turns ${n(stats.syntheticTurns)}`,
     `Persisted tool outputs: ${n(persisted)} · subagents linked to a tool_use: ${n(linked)}`,
+    calibrationLine(sessions),
     `Dedupe drops: same-response lines ${n(d.sameResponseLines)} · sidechain replays` +
       ` ${n(d.sidechainReplays)} · cross-session copies ${n(d.crossSessionCopies)}`,
     '',

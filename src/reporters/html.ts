@@ -24,6 +24,7 @@ import {
   formatTokens,
   formatUtc,
   formatVersionRange,
+  kindTag,
   relSource,
   resolveHome,
   shortId,
@@ -124,7 +125,7 @@ function findingRow(f: Finding, n: number, roots: string[], home: string): strin
   const causes = causeRows(f)
     .map(
       (c) =>
-        `<li>${formatInt(c.count)} × ${e(c.cause)}${c.tokens !== undefined ? ` (${e(formatTokens(c.tokens, f.tokens.kind))})` : ''}${c.fix ? ` → ${e(c.fix)}` : ''}</li>`,
+        `<li>${formatInt(c.count)} × ${e(c.cause)}${c.tokens !== undefined ? ` (${e(formatTokens(c.tokens, c.tokensKind ?? f.tokens.kind))}${c.tokensKind ? ` ${kindTag(c.tokensKind)}` : ''})` : ''}${c.fix ? ` → ${e(c.fix)}` : ''}</li>`,
     )
     .join('');
   const evidence = f.evidence

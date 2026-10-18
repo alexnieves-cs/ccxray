@@ -30,7 +30,8 @@
     "scrub": "tsx scripts/scrub-fixture.ts",
     "probe": "tsx scripts/probe-format.ts",
     "fixtures": "tsx scripts/make-fixture.ts",
-    "bench:slim": "tsx bench/slim.ts"
+    "bench:slim": "tsx bench/slim.ts",
+    "validate:real": "pnpm build && tsx scripts/validate-real.ts"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

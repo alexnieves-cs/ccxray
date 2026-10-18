@@ -1,0 +1,17 @@
+ccxray session 9fa3ebf8 · ~-app · Claude Code 2.1.302 · 2026-10-01 23:58 – 2026-10-02 00:04 UTC
+TOKENS [M]  input 9 · cache write 48,300 · cache read 47,000 · output 250 · hit ratio 49% · 4 turns
+
+     # time UTC gap     model          input  c.write    c.read  output  flags   tools
+  ── 2026-10-01 ──
+     1 23:58:01 -       sonnet-4-5         3   20,000         0     100          Read
+     2 23:58:03 2s      sonnet-4-5         2    1,100    20,000      50  📄📦    Read, Bash
+  ── 2026-10-02 ──
+     3 00:04:07 6m04s*  sonnet-4-5         3   27,000         0      80  🔁      Agent
+     4 00:04:11 4s      <synthetic>        0        0         0       0          API error
+     5 00:04:12 1s      sonnet-4-5         1      200    27,000      20          Bash×2, mcp__githu…
+
+SUBAGENTS (1) [M]
+  agent          model            turns   input   c.write     c.read  output from #
+  x1             haiku-4-5            1       2     3,000          0      10     #3
+
+flags: 🔁 cache rebuild (A2) · 📄 repeated read · 📦 output ≥ ~5k tokens [E] · * gap > cache TTL 5m
