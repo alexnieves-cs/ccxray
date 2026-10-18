@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ccxray:schema:report:v1",
+  "title": "ccxray report v1",
+  "description": "Output of `ccxray --json`. Mirrors the Report type in src/model/types.ts. Token fields in totals and sessions are measured from usage fields; a finding says whether its tokens are measured or estimated. Unknown properties are allowed so that additive changes stay compatible within v1.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "tool",
+    "generatedAt",
+    "window",
+    "includeContent",
+    "stats",
+    "totals",
+    "sessions",
+    "findings"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "ccxray" },
+        "version": { "type": "string" }
+      }
+    },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "window": {
+      "type": "object",
+      "required": ["since", "until", "project"],
+      "properties": {
+        "since": { "type": ["string", "null"] },
+        "until": { "type": ["string", "null"] },
+        "project": { "type": ["string", "null"] }
+      }
+    },
+    "includeContent": {
+      "type": "boolean",
+      "description": "true only when --include-content was passed; otherwise the report holds no prompt or file contents."
+    },
+    "stats": { "$ref": "#/$defs/parseStats" },
+    "totals": {
+      "type": "object",
+      "required": ["all", "bySession", "byProject", "byModel", "byDay"],
+      "properties": {
+        "all": { "$ref": "#/$defs/tokenTotals" },
+        "bySession": { "$ref": "#/$defs/totalsMap" },
+        "byProject": { "$ref": "#/$defs/totalsMap" },
+        "byModel": { "$ref": "#/$defs/totalsMap" },
+        "byDay": {
+          "type": "object",
+          "description": "Keyed by UTC day YYYY-MM-DD.",
+          "propertyNames": { "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+          "additionalProperties": { "$ref": "#/$defs/tokenTotals" }
+        }
+      }
+    },
+    "sessions": { "type": "array", "items": { "$ref": "#/$defs/sessionSummary" } },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "calibration": {
+      "type": "object",
+      "description": "Estimator calibration (SPEC 4.5).",
+      "required": ["samples", "medianRatio", "note"],
+      "properties": {
+        "samples": { "$ref": "#/$defs/count" },
+        "medianRatio": { "type": ["number", "null"] },
+        "note": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "countMap": { "type": "object", "additionalProperties": { "$ref": "#/$defs/count" } },
+    "tokenTotals": {
+      "type": "object",
+      "description": "Measured token sums over deduped, non-synthetic assistant turns.",
+      "required": [
+        "input",
+        "cacheWrite",
+        "cacheWrite5m",
+        "cacheWrite1h",
+        "cacheRead",
+        "output",
+        "cacheHitRatio",
+        "turns"
+      ],
+      "properties": {
+        "input": { "$ref": "#/$defs/count" },
+        "cacheWrite": { "$ref": "#/$defs/count" },
+        "cacheWrite5m": { "$ref": "#/$defs/count" },
+        "cacheWrite1h": { "$ref": "#/$defs/count" },
+        "cacheRead": { "$ref": "#/$defs/count" },
+        "output": { "$ref": "#/$defs/count" },
+        "cacheHitRatio": {
+          "description": "read / (read + write + input); null when the denominator is 0.",
+          "oneOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
+        },
+        "turns": { "$ref": "#/$defs/count" }
+      }
+    },
+    "totalsMap": { "type": "object", "additionalProperties": { "$ref": "#/$defs/tokenTotals" } },
+    "parseStats": {
+      "type": "object",
+      "required": [
+        "roots",
+        "files",
+        "bytes",
+        "lines",
+        "blankLines",
+        "malformedLines",
+        "recordTypes",
+        "unknownRecordTypes",
+        "attachmentTypes",
+        "dedupe",
+        "syntheticTurns",
+        "ccVersions",
+        "warnings"
+      ],
+      "properties": {
+        "roots": {
+          "type": "array",
+          "description": "Log directories scanned, with the home directory shown as ~.",
+          "items": { "type": "string" }
+        },
+        "files": { "$ref": "#/$defs/count" },
+        "bytes": { "$ref": "#/$defs/count" },
+        "lines": { "$ref": "#/$defs/count" },
+        "blankLines": { "$ref": "#/$defs/count" },
+        "malformedLines": { "$ref": "#/$defs/count" },
+        "recordTypes": { "$ref": "#/$defs/countMap" },
+        "unknownRecordTypes": { "$ref": "#/$defs/countMap" },
+        "attachmentTypes": { "$ref": "#/$defs/countMap" },
+        "dedupe": {
+          "type": "object",
+          "required": ["sameResponseLines", "sidechainReplays", "crossSessionCopies"],
+          "properties": {
+            "sameResponseLines": { "$ref": "#/$defs/count" },
+            "sidechainReplays": { "$ref": "#/$defs/count" },
+            "crossSessionCopies": { "$ref": "#/$defs/count" }
+          }
+        },
+        "syntheticTurns": { "$ref": "#/$defs/count" },
+        "ccVersions": { "$ref": "#/$defs/countMap" },
+        "warnings": { "$ref": "#/$defs/countMap" }
+      }
+    },
+    "sessionSummary": {
+      "type": "object",
+      "required": [
+        "id",
+        "project",
+        "isSubagent",
+        "firstTs",
+        "lastTs",
+        "turns",
+        "ccVersions",
+        "models",
+        "totals"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "project": { "type": "string" },
+        "isSubagent": { "type": "boolean" },
+        "firstTs": { "type": "string", "format": "date-time" },
+        "lastTs": { "type": "string", "format": "date-time" },
+        "turns": { "$ref": "#/$defs/count" },
+        "ccVersions": { "type": "array", "items": { "type": "string" } },
+        "models": { "type": "array", "items": { "type": "string" } },
+        "totals": { "$ref": "#/$defs/tokenTotals" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["analyzer", "severity", "title", "tokens", "evidence", "fix"],
+      "properties": {
+        "analyzer": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["info", "warn", "high"] },
+        "title": { "type": "string" },
+        "tokens": {
+          "type": "object",
+          "required": ["value", "kind"],
+          "properties": {
+            "value": { "type": "number", "minimum": 0 },
+            "kind": { "enum": ["measured", "estimated"] }
+          }
+        },
+        "data": {
+          "type": "object",
+          "description": "Analyzer-specific structured data. Never holds prompt or file contents."
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["sessionId", "turnUuid", "detail"],
+            "properties": {
+              "sessionId": { "type": "string" },
+              "turnUuid": { "type": "string" },
+              "detail": { "type": "string" },
+              "source": {
+                "type": "object",
+                "required": ["file", "line"],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "description": "<project>/<file>.jsonl relative to the projects root."
+                  },
+                  "line": { "type": "integer", "minimum": 1 }
+                }
+              }
+            }
+          }
+        },
+        "fix": {
+          "type": "object",
+          "required": ["summary"],
+          "properties": {
+            "summary": { "type": "string" },
+            "diff": { "type": "string" },
+            "docsUrl": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
