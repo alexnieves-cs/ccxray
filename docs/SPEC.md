@@ -170,6 +170,9 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - A7: a `prompt_snapshot`'s `tools[]` lists every tool sent on a cold turn (deferred tools may be missing), so a tool counts as defined only when some snapshot lists it (Q3).
 - A7: in `mcp__<server>__<tool>`, the server name ends at the first `__` after `mcp__`.
 - A8: compaction markers with no assistant turn between them belong to one compaction (Q5).
+- A4: a resumed or continued session's first envelope record has a non-null `parentUuid` (`Session.continued`); such sessions, and sessions whose first kept turn is not the chain's first, are not baselines.
+- A7: `deferred_tools_record` attachments name tools whose definitions are not sent up front; names are read from `tools` / `toolNames` / `names` / `deferredTools` arrays (strings or `{name}`), and those tools cost 0 tokens per cold turn.
+- A10: a `system`/`api_error` record followed by a synthetic turn, with no real turn between them, is one error.
 
 ### 4.5 Token estimator
 - Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.

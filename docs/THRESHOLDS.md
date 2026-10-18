@@ -13,6 +13,7 @@ is listed here and used by the code.
 | `ttl5mMs` | 300000 (5 min) | A3 rebuild-cause, `session` `*` gap mark | Idle gap that expires a 5-minute cache entry. |
 | `ttl1hMs` | 3600000 (1 h) | A3 rebuild-cause, `session` `*` gap mark | Idle gap that expires a 1-hour cache entry; applies when the session wrote any `ephemeral_1h` tokens. |
 | `baselineJumpTokens` | 2000 | A4 fixed-overhead | Increase of the median first-turn context [M] between two consecutive Claude Code versions worth flagging. |
+| `baselineMinSessions` | 3 | A4 fixed-overhead | Fresh sessions a Claude Code version needs before its median baseline is compared for a jump; versions with fewer are reported but not compared. |
 | `bigToolOutputTokens` | 5000 | A5 big-tool-output, `session` 📦 flag | Estimated tokens [E, chars/4] for one `tool_result` to count as big. |
 | `contextLargeTokens` | 150000 | A8 context-growth | Peak context per turn [M] that flags a session. |
 | `compactionsPerSession` | 2 | A8 context-growth | Compactions in one session that flag it (markers with no assistant turn between them count once). |
