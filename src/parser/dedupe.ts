@@ -37,9 +37,9 @@ export function jsonLength(v: unknown, fallback: number): number {
 export interface AssistantLine {
   r: AssistantRecord;
   /** The line's own timestamp, if valid. */
-  ownTs?: Date;
+  ownTs?: number;
   /** Fallback timestamp (previous record in the file, or epoch). */
-  ts: Date;
+  ts: number;
   source: SourcePointer;
   rawLength: number;
   /** The file's session id (first envelope sessionId seen so far). */
@@ -241,7 +241,7 @@ export interface FileResponses {
   turns: readonly Turn[];
   foreign: ReadonlySet<Turn>;
   localOnly: ReadonlySet<Turn>;
-  firstTs?: Date;
+  firstTs?: number;
 }
 
 /**
@@ -269,8 +269,7 @@ export function dedupeAcrossFiles(
 
   const dropped = new Set<Turn>();
   const own = (t: Turn): boolean => !fileOf.get(t.source.file)!.foreign.has(t);
-  const first = (t: Turn): number =>
-    fileOf.get(t.source.file)!.firstTs?.getTime() ?? Number.POSITIVE_INFINITY;
+  const first = (t: Turn): number => fileOf.get(t.source.file)!.firstTs ?? Number.POSITIVE_INFINITY;
   for (let i = 0; i < all.length;) {
     let j = i + 1;
     while (j < all.length && all[j]!.messageId === all[i]!.messageId) j++;

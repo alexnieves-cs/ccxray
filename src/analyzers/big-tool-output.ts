@@ -99,9 +99,7 @@ export const bigToolOutput: Analyzer = {
       const persisted = g.hits.filter((h) => h.result.persisted);
       const label = g.command !== undefined ? `\`${g.command}\`` : g.tool;
       const evidence: Evidence[] = [...g.hits]
-        .sort(
-          (a, b) => b.result.chars - a.result.chars || a.turn.ts.getTime() - b.turn.ts.getTime(),
-        )
+        .sort((a, b) => b.result.chars - a.result.chars || a.turn.ts - b.turn.ts)
         .slice(0, MAX_EVIDENCE)
         .map((h) =>
           evidenceFor(

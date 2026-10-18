@@ -49,7 +49,7 @@ describe('review regressions', () => {
     const { sessions, stats } = await loadSessions({ roots: [root] });
     const t = sessions[0]!.turns[0]!;
     expect(t.usage).toEqual({ input: 5, cacheWrite: 0, cacheRead: 9000, output: 0 });
-    expect(t.ts.toISOString()).toBe('2026-10-01T09:00:05.000Z');
+    expect(new Date(t.ts).toISOString()).toBe('2026-10-01T09:00:05.000Z');
     expect(t).toMatchObject({ uuid: 'u-a', model: 'm', blockCounts: { text: 1, tool_use: 1 } });
     expect(stats.warnings).toEqual({
       'assistant without message.usage': 1,
@@ -280,5 +280,38 @@ describe('subagent classification (m2 repro: root one level above projects/ tree
         ['-home-dev-t', `${sid}:w`, true, sid],
       ].sort(),
     );
+  });
+  it('a genuine 1970-01-01T00:00:00Z timestamp is not mistaken for "no timestamp"', async () => {
+    // Timestamps are epoch-ms numbers, so a real ts of 0 equals the EPOCH placeholder by value.
+    const root = freshRoot();
+    const env = { sessionId: 's9', requestId: 'req_9' };
+    const reply = (uuid: string, id: string, timestamp: string): unknown => ({
+      ...env,
+      type: 'assistant',
+      uuid,
+      timestamp,
+      message: {
+        id,
+        model: 'm',
+        content: [text('a')],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+    });
+    writeLines(root, join('-p', 'a.jsonl'), [
+      {
+        ...env,
+        type: 'user',
+        uuid: 'p',
+        timestamp: '1970-01-01T00:00:00.000Z',
+        message: { role: 'user', content: 'hi' },
+      },
+      reply('u1', 'msg_1', '1970-01-01T00:00:10.000Z'),
+    ]);
+    writeLines(root, join('-p', 'b.jsonl'), [reply('u2', 'msg_2', '1970-01-01T00:00:20.000Z')]);
+    const { sessions } = await loadSessions({ roots: [root] });
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]!.firstTs).toBe(0);
+    expect(sessions[0]!.lastTs).toBe(20_000);
+    expect(sessions[0]!.turns.map((t) => t.ts)).toEqual([10_000, 20_000]);
   });
 });

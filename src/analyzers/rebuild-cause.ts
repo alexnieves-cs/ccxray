@@ -38,7 +38,7 @@ export class ChainState {
     this.ttl = sessionTtl(s); // UNVERIFIED: see sessionTtl in rules.ts
   }
   /** Add tools snapshots up to `ts` (events are sorted by ts). */
-  private snapshotsUntil(ts: Date): void {
+  private snapshotsUntil(ts: number): void {
     const ev = this.s.events;
     while (this.next < ev.length && ev[this.next]!.ts <= ts) {
       const e = ev[this.next++]!;
@@ -68,7 +68,7 @@ export function rebuildCause(
   th: Thresholds,
   state: ChainState,
 ): CauseResult {
-  const gapMs = turn.ts.getTime() - prev.ts.getTime();
+  const gapMs = turn.ts - prev.ts;
   const ttl = state.ttl;
   const r = (cause: RebuildCause, detail: string): CauseResult => ({ cause, detail, gapMs, ttl });
 

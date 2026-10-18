@@ -105,11 +105,7 @@ export const cacheRebuild: Analyzer = {
     }).filter((c) => c.count > 0);
     const top = [...causes].sort((a, b) => b.tokens - a.tokens)[0]!;
     const evidence: Evidence[] = [...rebuilds]
-      .sort(
-        (a, b) =>
-          b.turn.usage.cacheWrite - a.turn.usage.cacheWrite ||
-          a.turn.ts.getTime() - b.turn.ts.getTime(),
-      )
+      .sort((a, b) => b.turn.usage.cacheWrite - a.turn.usage.cacheWrite || a.turn.ts - b.turn.ts)
       .slice(0, MAX_EVIDENCE)
       .map((r) => evidenceFor(r.turn, detailOf(r)));
     const finding: Finding = {
