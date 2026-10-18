@@ -1,6 +1,8 @@
 name: bench
 
-# Perf numbers are recorded, never gated (SPEC §8): this job fails only if a bench script errors.
+# Perf numbers are recorded, never gated (SPEC §8). The job is informational: a bench script error
+# shows on the job (pnpm bench still exits 1 locally) but never turns the PR checks red.
+# 1 GB is manual: `pnpm bench:full`.
 on:
   workflow_dispatch:
   pull_request:
@@ -14,6 +16,7 @@ permissions:
 jobs:
   bench:
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
