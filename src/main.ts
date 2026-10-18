@@ -1,5 +1,6 @@
 import { parseArgs } from 'node:util';
 import { doctor } from './commands/doctor.js';
+import { fixCommand } from './commands/fix-mcp.js';
 import { VERSION } from './version.js';
 
 const HELP = `ccxray ${VERSION}: explain where your Claude Code tokens go (local only, no network)
@@ -8,6 +9,7 @@ Usage:
   ccxray [--since DATE] [--project NAME] [--json] [--html FILE]
   ccxray session <id|latest>
   ccxray doctor [--root DIR]... [--json]
+  ccxray fix mcp [--settings FILE] [--apply]   (preview; see ccxray fix mcp --help)
 
 Options:
   --root DIR      projects dir to read (repeatable; default: CLAUDE_CONFIG_DIR, ~/.claude)
@@ -40,6 +42,7 @@ export async function main(
     );
     return doctor({ roots, json: values.json === true }, out);
   }
+  if (positionals[0] === 'fix') return fixCommand(argv, out);
   out(HELP);
   return 0;
 }
