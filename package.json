@@ -1,0 +1,46 @@
+{
+  "name": "ccxray-dev",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Local-only CLI that explains where Claude Code tokens go. Reads your transcripts; no network calls.",
+  "license": "MIT",
+  "author": "Alex Nieves",
+  "type": "module",
+  "bin": {
+    "ccxray": "bin/ccxray.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "schema"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm build && vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/node": "20.19.43",
+    "eslint": "9.39.5",
+    "prettier": "3.9.10",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.2",
+    "vitest": "3.2.7"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

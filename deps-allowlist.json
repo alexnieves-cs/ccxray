@@ -1,0 +1,4 @@
+{
+  "$comment": "Runtime dependencies allowed in package.json \"dependencies\". Adding one needs a PR that explains why and confirms it makes no network calls (CLAUDE.md hard rule 1).",
+  "runtime": []
+}

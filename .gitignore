@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+bench/out/
+*.log
+.DS_Store
+# Real transcripts must never be committed (CLAUDE.md hard rule 4).
+.claude/
+real-logs/
