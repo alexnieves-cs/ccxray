@@ -10,6 +10,7 @@ import type { Finding } from '../model/index.js';
 import { unifiedDiff } from './diff.js';
 
 /** `data` of a `tool-usage` finding (M4 / A7), as agreed with that stream. */
+// UNVERIFIED: this data shape is an inter-stream agreement, not yet checked against M4's A7.
 export interface ToolUsageData {
   server: string;
   unusedTools: string[];
@@ -47,7 +48,8 @@ export interface McpDenyPlan {
   diff: string;
 }
 
-// Claude Code builds MCP tool names as mcp__<server>__<tool> from [A-Za-z0-9_-] characters.
+// UNVERIFIED: Claude Code builds MCP tool names as mcp__<server>__<tool> from [A-Za-z0-9_-]
+// characters (server names are normalized to that set). Not confirmed against a real log.
 // Anything else is rejected so a finding can never inject another rule form such as `Bash(...)`.
 const NAME = /^[A-Za-z0-9_-]+$/;
 
@@ -79,6 +81,8 @@ function parseSettings(existing: string | Record<string, unknown> | null): {
   settings: Record<string, unknown>;
 } {
   if (existing === null) return { before: '', settings: {} };
+  // A leading BOM is not JSON; parse without it (it is put back on output, see planMcpDeny).
+  if (typeof existing === 'string' && existing.startsWith('\uFEFF')) existing = existing.slice(1);
   if (typeof existing !== 'string')
     return {
       before: `${JSON.stringify(existing, null, 2)}\n`,
@@ -101,7 +105,12 @@ export function planMcpDeny(
   existingSettings: string | Record<string, unknown> | null,
   opts: McpDenyOptions = {},
 ): McpDenyPlan {
-  const { before, settings } = parseSettings(existingSettings);
+  const raw = typeof existingSettings === 'string' ? existingSettings : null;
+  const bom = raw?.startsWith('\uFEFF') ? '\uFEFF' : '';
+  const crlf = raw?.includes('\r\n') === true;
+  const { settings } = parseSettings(existingSettings);
+  const before =
+    raw ?? (existingSettings === null ? '' : `${JSON.stringify(existingSettings, null, 2)}\n`);
   let perms = settings.permissions;
   if (perms !== undefined && (typeof perms !== 'object' || perms === null || Array.isArray(perms)))
     throw new Error('`permissions` in the settings file is not an object; not modified');
@@ -163,12 +172,22 @@ export function planMcpDeny(
   }
 
   if (added.length === 0) return { settings, text: before, added, servers, skipped, diff: '' };
+  const isNew = existingSettings === null;
   // Mutate in place so existing keys keep their position; new keys go last.
   if (perms === undefined) perms = settings.permissions = {};
   const p = perms as Record<string, unknown>;
   p.deny = [...(deny ?? []), ...added];
-  const text = `${JSON.stringify(settings, null, detectIndent(before))}\n`;
+  // Keep the file's BOM and line endings so the diff only shows the changed lines. Compact
+  // arrays/objects are still reflowed by JSON.stringify (documented in docs/fix-mcp.md).
+  let text = `${JSON.stringify(settings, null, detectIndent(before.replace(/^\uFEFF/, '')))}\n`;
+  if (crlf) text = text.replace(/\n/g, '\r\n');
+  text = bom + text;
   const label = opts.label ?? 'settings.json';
-  const diff = unifiedDiff(before, text, { from: `a/${label}`, to: `b/${label}` });
+  // An absolute label (POSIX `/x` or Windows `C:/x`) is shown as is, never as `a//x`.
+  const abs = /^(\/|[A-Za-z]:\/)/.test(label);
+  const diff = unifiedDiff(before, text, {
+    from: isNew ? '/dev/null' : abs ? label : `a/${label}`,
+    to: abs ? label : `b/${label}`,
+  });
   return { settings, text, added, servers, skipped, diff };
 }

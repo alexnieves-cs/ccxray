@@ -3,7 +3,11 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  lstatSync,
   readdirSync,
+  statSync,
+  chmodSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -178,6 +182,47 @@ describe('planMcpDeny', () => {
   });
 });
 
+describe('planMcpDeny: minimal rewrites (review fixes)', () => {
+  const f = [usage('gh', ['a'])];
+
+  it('parses a file with a leading BOM and keeps the BOM', () => {
+    const plan = planMcpDeny(f, '\uFEFF{\n  "model": "opus"\n}\n');
+    expect(plan.text.startsWith('\uFEFF{\n')).toBe(true);
+    expect(JSON.parse(plan.text.slice(1)).permissions.deny).toEqual(['mcp__gh']);
+    expect(plan.diff).not.toMatch(/^[-+]\uFEFF/m);
+  });
+
+  it('keeps CRLF line endings and only changes the lines it must', () => {
+    const before = '{\r\n  "model": "opus",\r\n  "env": {}\r\n}\r\n';
+    const plan = planMcpDeny(f, before);
+    expect(
+      plan.text
+        .split('\n')
+        .slice(0, -1)
+        .every((l) => l.endsWith('\r')),
+    ).toBe(true);
+    const minus = plan.diff.split('\n').filter((l) => /^-(?!--)/.test(l));
+    expect(minus).toEqual(['-  "env": {}\r']);
+    expect(applyPatch(before.replace(/\r\n/g, '\n'), plan.diff.replace(/\r/g, ''))).toBe(
+      plan.text.replace(/\r\n/g, '\n'),
+    );
+  });
+
+  it('uses /dev/null as the old side of a new file', () => {
+    expect(planMcpDeny(f, null, { label: 'x.json' }).diff).toMatch(
+      /^--- \/dev\/null\n\+\+\+ b\/x\.json\n/,
+    );
+  });
+
+  it('never writes a//… for an absolute path label', () => {
+    for (const label of ['/home/u/.claude/settings.json', 'C:/Users/u/.claude/settings.json']) {
+      const d = planMcpDeny(f, '{}\n', { label }).diff;
+      expect(d.startsWith(`--- ${label}\n+++ ${label}\n`)).toBe(true);
+      expect(d).not.toContain('a//');
+    }
+  });
+});
+
 describe('unifiedDiff', () => {
   it('marks a missing final newline and is empty for equal inputs', () => {
     expect(unifiedDiff('a\n', 'a\n', { from: 'a', to: 'b' })).toBe('');
@@ -198,12 +243,17 @@ describe('ccxray fix mcp', () => {
     }
     return { cwd, file };
   }
-  async function run(argv: string[], cwd: string): Promise<{ code: number; out: string }> {
+  async function run(
+    argv: string[],
+    cwd: string,
+    extra: { beforeCommit?: () => void } = {},
+  ): Promise<{ code: number; out: string }> {
     let out = '';
     const code = await fixCommand(argv, (s) => (out += s), {
       cwd,
       now,
       loadFindings: async () => findings,
+      ...extra,
     });
     return { code, out };
   }
@@ -254,6 +304,46 @@ describe('ccxray fix mcp', () => {
     expect(code).toBe(2);
     expect(out).toContain('custom.json: settings file is not valid JSON');
     expect(readFileSync(join(cwd, 'custom.json'), 'utf8')).toBe('{ "a": 1, }');
+  });
+
+  it('--apply follows symlinks and keeps the file mode', async (ctx) => {
+    if (process.platform === 'win32') return ctx.skip();
+    const { cwd } = setup(null);
+    const realFile = join(cwd, 'real-settings.json');
+    writeFileSync(realFile, EXISTING);
+    chmodSync(realFile, 0o640);
+    mkdirSync(join(cwd, '.claude'));
+    const link = join(cwd, '.claude', 'settings.local.json');
+    symlinkSync(realFile, link);
+    expect((await run(['fix', 'mcp', '--apply'], cwd)).code).toBe(0);
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(JSON.parse(readFileSync(realFile, 'utf8')).permissions.deny).toContain('mcp__slack');
+    expect(statSync(realFile).mode & 0o777).toBe(0o640);
+    expect(readdirSync(cwd).some((n) => n.startsWith('real-settings.json.ccxray-backup-'))).toBe(
+      true,
+    );
+  });
+
+  it('--apply aborts with exit 2 when the file changed during the run', async () => {
+    const { cwd, file } = setup(EXISTING);
+    const edited = EXISTING.replace('opus', 'sonnet');
+    const { code, out } = await run(['fix', 'mcp', '--apply'], cwd, {
+      beforeCommit: () => writeFileSync(file, edited),
+    });
+    expect(code).toBe(2);
+    expect(out).toContain('changed while ccxray was running; nothing was written');
+    expect(readFileSync(file, 'utf8')).toBe(edited);
+    expect(readdirSync(join(cwd, '.claude')).some((n) => n.includes('ccxray-tmp'))).toBe(false);
+  });
+
+  it('--apply picks a -1, -2… backup name when the timestamped one exists', async () => {
+    const { cwd, file } = setup(EXISTING);
+    const base = `${file}.ccxray-backup-2026-10-18T12-34-56-789Z`;
+    writeFileSync(base, 'older backup');
+    writeFileSync(`${base}-1`, 'older backup 1');
+    expect((await run(['fix', 'mcp', '--apply'], cwd)).code).toBe(0);
+    expect(readFileSync(base, 'utf8')).toBe('older backup');
+    expect(readFileSync(`${base}-2`, 'utf8')).toBe(EXISTING);
   });
 
   it('is routed from main (usage without a subcommand)', async () => {

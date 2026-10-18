@@ -1,12 +1,16 @@
 // `ccxray fix mcp`: print (and with --apply, write) a permissions.deny diff for MCP tools that
 // were never called. Dry run by default; --apply writes a timestamped backup first.
 import {
+  chmodSync,
   constants,
   copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
+  statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -26,6 +30,8 @@ export interface FixMcpDeps {
   loadFindings?: (q: FindingsQuery) => Promise<readonly Finding[]>;
   cwd?: string;
   now?: Date;
+  /** Test seam: runs after the new text is staged and before the file is re-checked. */
+  beforeCommit?: () => void;
 }
 
 export const FIX_MCP_HELP = `Usage: ccxray fix mcp [--settings FILE] [--apply] [--per-tool] [--root DIR]... [--since DATE] [--project NAME]
@@ -37,12 +43,15 @@ Prints a diff and writes nothing unless --apply is given (a timestamped backup i
                    alternatives: .claude/settings.json, ~/.claude/settings.json)
   --apply          write the change
   --per-tool       never use a server-wide rule (mcp__<server>), list each tool instead
+
+See docs/fix-mcp.md.
 `;
 
 // TODO(M2/M4 integration): the analyzers and src/pipeline.ts land in other branches. Once
 // merged, replace this with a static `import { buildReport } from '../pipeline.js'` (a dynamic
 // import of a variable path resolves relative to dist/cli.js at runtime and would miss the
-// bundled module). Assumed call shape: buildReport(query) → Promise<{ findings: Finding[] }>.
+// bundled module).
+// UNVERIFIED: assumed call shape buildReport(query) → Promise<{ findings: Finding[] }>.
 async function defaultLoadFindings(q: FindingsQuery): Promise<readonly Finding[]> {
   const spec = '../pipeline.js';
   let mod: { buildReport?: (q: FindingsQuery) => Promise<{ findings: Finding[] }> };
@@ -57,6 +66,19 @@ async function defaultLoadFindings(q: FindingsQuery): Promise<readonly Finding[]
 
 function stamp(now: Date): string {
   return now.toISOString().replace(/[:.]/g, '-');
+}
+
+/** Copy `file` to `<base>`, `<base>-1`, `<base>-2`… whichever does not exist yet. */
+function writeBackup(file: string, base: string): string {
+  for (let i = 0; ; i++) {
+    const name = i === 0 ? base : `${base}-${i}`;
+    try {
+      copyFileSync(file, name, constants.COPYFILE_EXCL);
+      return name;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST' || i >= 1000) throw err;
+    }
+  }
 }
 
 export async function fixCommand(
@@ -140,14 +162,25 @@ export async function fixCommand(
     return 0;
   }
   mkdirSync(dirname(target), { recursive: true });
+  // Write through symlinks onto the real file, and keep its permission bits.
+  const real = before !== null ? realpathSync(target) : target;
+  const mode = before !== null ? statSync(real).mode & 0o7777 : undefined;
   if (before !== null) {
-    const backup = `${target}.ccxray-backup-${stamp(deps.now ?? new Date())}`;
-    copyFileSync(target, backup, constants.COPYFILE_EXCL);
+    const backup = writeBackup(real, `${real}.ccxray-backup-${stamp(deps.now ?? new Date())}`);
     lines.push(`Backup: ${relative(cwd, backup) || backup}`);
   }
-  const tmp = `${target}.ccxray-tmp-${process.pid}`;
-  writeFileSync(tmp, plan.text);
-  renameSync(tmp, target);
+  const tmp = `${real}.ccxray-tmp-${process.pid}`;
+  writeFileSync(tmp, plan.text, mode !== undefined ? { mode } : {});
+  if (mode !== undefined) chmodSync(tmp, mode); // writeFileSync's mode is masked by umask
+  deps.beforeCommit?.();
+  const current = existsSync(real) ? readFileSync(real, 'utf8') : null;
+  if (current !== before) {
+    unlinkSync(tmp);
+    lines.push(`${shown} changed while ccxray was running; nothing was written. Re-run.`);
+    out(`${lines.join('\n')}\n`);
+    return 2;
+  }
+  renameSync(tmp, real);
   lines.push(`Wrote ${plan.added.length} deny rule(s) to ${shown}.`);
   out(`${lines.join('\n')}\n`);
   return 0;
