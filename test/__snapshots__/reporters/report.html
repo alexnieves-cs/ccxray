@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<meta name="referrer" content="no-referrer">
+<title>ccxray report</title>
+<style>
+:root{--bg:#fff;--fg:#1d1f23;--mut:#5f6670;--line:#d9dde3;--card:#f5f7fa;--hi:#c62828;--warn:#b26a00;--info:#1565c0;
+--c1:#7e57c2;--c2:#ef6c00;--c3:#2e7d32;--c4:#1565c0}
+@media (prefers-color-scheme:dark){:root{--bg:#15171a;--fg:#e6e8eb;--mut:#9aa3ad;--line:#2c3036;--card:#1e2125;
+--hi:#ef5350;--warn:#ffb74d;--info:#64b5f6;--c1:#b39ddb;--c2:#ffb74d;--c3:#81c784;--c4:#64b5f6}}
+*{box-sizing:border-box}body{margin:0 auto;max-width:1100px;padding:24px 16px;background:var(--bg);color:var(--fg);
+font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 8px}.mut{color:var(--mut)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px}
+.tile .v{font-size:20px;font-weight:600}.tile .l{color:var(--mut);font-size:12px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:6px;
+text-align:left;vertical-align:top}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.wrap{overflow-x:auto}.b{display:inline-block;font-size:10px;font-weight:700;border-radius:3px;padding:0 4px;
+margin-left:4px;border:1px solid currentColor}.b.m{color:var(--c3)}.b.e{color:var(--c2)}
+.sev-high{color:var(--hi);font-weight:600}.sev-warn{color:var(--warn);font-weight:600}.sev-info{color:var(--info)}
+details summary{cursor:pointer;color:var(--info)}pre{white-space:pre-wrap;background:var(--card);padding:8px;
+border-radius:6px}code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.key{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 12px}
+button{font:inherit;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+footer{margin-top:32px;color:var(--mut);font-size:12px;border-top:1px solid var(--line);padding-top:8px}
+</style>
+</head>
+<body>
+<h1>ccxray report</h1><p class="mut">4 sessions · Oct 11–18 2026 · Claude Code 2.1.290–2.1.296 · generated 2026-10-18 09:30 UTC</p>
+<p class="mut">Prompt and file contents: not included.</p>
+<h2>Summary (measured)</h2><div class="tiles">
+<div class="tile"><div class="v">4<span class="b m" title="measured from usage fields">M</span></div><div class="l">sessions (2 subagent)</div></div>
+<div class="tile"><div class="v">368<span class="b m" title="measured from usage fields">M</span></div><div class="l">assistant turns</div></div>
+<div class="tile"><div class="v">82%<span class="b m" title="measured from usage fields">M</span></div><div class="l">cache hit ratio</div></div>
+<div class="tile"><div class="v">58k<span class="b m" title="measured from usage fields">M</span></div><div class="l">input (uncached)</div></div>
+<div class="tile"><div class="v">2.8M<span class="b m" title="measured from usage fields">M</span></div><div class="l">cache write</div></div>
+<div class="tile"><div class="v">13.5M<span class="b m" title="measured from usage fields">M</span></div><div class="l">cache read</div></div>
+<div class="tile"><div class="v">133k<span class="b m" title="measured from usage fields">M</span></div><div class="l">output</div></div>
+</div>
+<h2>Token breakdown (measured)</h2>
+<svg viewBox="0 0 1000 24" preserveAspectRatio="none" width="100%" height="24" role="img" aria-label="token breakdown"><rect x="0.0" y="0" width="3.5" height="24" style="fill:var(--c1)"><title>input (uncached): 58,250</title></rect><rect x="3.5" y="0" width="171.0" height="24" style="fill:var(--c2)"><title>cache write: 2,818,900</title></rect><rect x="174.5" y="0" width="817.4" height="24" style="fill:var(--c3)"><title>cache read: 13,477,100</title></rect><rect x="991.9" y="0" width="8.1" height="24" style="fill:var(--c4)"><title>output: 133,470</title></rect></svg><p class="mut"><span class="key" style="background:var(--c1)"></span>input (uncached) 58k (&lt;1%)<span class="key" style="background:var(--c2)"></span>cache write 2.8M (17%)<span class="key" style="background:var(--c3)"></span>cache read 13.5M (82%)<span class="key" style="background:var(--c4)"></span>output 133k (1%)</p>
+<h2>Where it went (estimated)</h2><table><tr><th>analyzer</th><th class="n">tokens</th><th class="n">findings</th><th>by tool</th></tr><tr><td>repeated-read</td><td class="n">~182k<span class="b e" title="estimated">E</span></td><td class="n">1</td><td>Read 100%</td></tr><tr><td>big-tool-output</td><td class="n">~149k<span class="b e" title="estimated">E</span></td><td class="n">2</td><td>Bash 89%, Grep 11%</td></tr></table>
+<h2>Findings</h2>
+<p><button id="toggle" type="button">expand / collapse all evidence</button></p><div class="wrap"><table><tr><th class="n">#</th><th>severity</th><th>analyzer</th><th>finding</th><th class="n">tokens</th></tr><tr><td class="n">1</td><td class="sev-high">high</td><td>CACHE REBUILD</td><td>38 rebuilds cost 2.8M cache-write tokens<ul><li>29 × ttl-expiry (2.2M) → batch work; you had 29 gaps &gt; 5 min</li><li>6 × config-edit (414k) → edit CLAUDE.md between sessions</li><li>3 × cc-upgrade (201k) → known: #46917 (2.1.100+)</li></ul><p>→ see causes above · <a href="https://github.com/anthropics/claude-code/issues/46917" rel="noreferrer">docs</a></p><details class="ev"><summary>2 evidence</summary><div class="wrap"><table><tr><th>session</th><th>turn</th><th>source</th><th>detail</th></tr><tr><td><code>3fa2c1d0</code></td><td><code>a1000000-0000-4000-8000-000000000012</code></td><td><code>-home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl:120</code></td><td>gap 12m, cache_read 81k → 0</td></tr><tr><td><code>9b07e5aa</code></td><td><code>b2000000-0000-4000-8000-000000000020</code></td><td><code>-home-dev-src-acme-api/9b07e5aa-2222-4aaa-8bbb-000000000002.jsonl:655</code></td><td>version 2.1.290 → 2.1.296</td></tr></table></div></details></td><td class="n">2.8M<span class="b m" title="measured from usage fields">M</span></td></tr><tr><td class="n">2</td><td class="sev-warn">warn</td><td>REPEATED READ</td><td>src/api/client.ts read 7× unchanged in session 3fa2c1d0<p>→ reference the earlier read instead of re-reading (cc-slim dedupe, planned)</p><details class="ev"><summary>1 evidence</summary><div class="wrap"><table><tr><th>session</th><th>turn</th><th>source</th><th>detail</th></tr><tr><td><code>3fa2c1d0</code></td><td><code>a1000000-0000-4000-8000-000000000031</code></td><td><code>-home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl:412</code></td><td>read #2 of src/api/client.ts, no edit since read #1</td></tr></table></div></details></td><td class="n">~182k<span class="b e" title="estimated">E</span></td></tr><tr><td class="n">3</td><td class="sev-warn">warn</td><td>BIG TOOL OUTPUT</td><td>`pnpm test` returned 48k chars (×11) <code>pnpm test</code><p>→ pipe through `| tail -50`, or use --reporter=dot</p><details class="ev"><summary>2 evidence</summary><div class="wrap"><table><tr><th>session</th><th>turn</th><th>source</th><th>detail</th></tr><tr><td><code>9b07e5aa</code></td><td><code>b2000000-0000-4000-8000-000000000044</code></td><td><code>-home-dev-src-acme-api/9b07e5aa-2222-4aaa-8bbb-000000000002.jsonl:1207</code></td><td>Bash result 48,100 chars</td></tr><tr><td><code>3fa2c1d0</code></td><td><code>c3000000-0000-4000-8000-000000000007</code></td><td><code>-home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001/subagents/agent-7f3e.jsonl:88</code></td><td>Bash result 31,020 chars</td></tr></table></div></details></td><td class="n">~132k<span class="b e" title="estimated">E</span></td></tr><tr><td class="n">4</td><td class="sev-info">info</td><td>BIG TOOL OUTPUT</td><td>Grep returned 22k chars (×3)<p>→ narrow the glob or set head_limit</p><details class="ev"><summary>1 evidence</summary><div class="wrap"><table><tr><th>session</th><th>turn</th><th>source</th><th>detail</th></tr><tr><td><code>3fa2c1d0</code></td><td><code>a1000000-0000-4000-8000-000000000090</code></td><td><code>-home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl:2001</code></td><td>Grep result 22,000 chars</td></tr></table></div></details></td><td class="n">~17k<span class="b e" title="estimated">E</span></td></tr><tr><td class="n">5</td><td class="sev-info">info</td><td>TOOL USAGE</td><td>9 MCP tools from &quot;github&quot; server never called in 4 sessions<p>→ `ccxray fix mcp` (planned, M5) generates a permissions.deny diff</p><details class="ev"><summary>1 evidence</summary><div class="wrap"><table><tr><th>session</th><th>turn</th><th>source</th><th>detail</th></tr><tr><td><code>9b07e5aa</code></td><td><code>b2000000-0000-4000-8000-000000000001</code></td><td></td><td>tool list at first turn</td></tr></table></div></details></td><td class="n"></td></tr></table></div>
+<h2>Sessions</h2>
+<div class="wrap"><table><tr><th>session</th><th>project</th><th>kind</th><th>first turn</th><th class="n">turns</th><th>models</th><th>CC versions</th><th class="n">input</th><th class="n">cache write</th><th class="n">cache read</th><th class="n">output</th><th class="n">hit ratio</th></tr><tr><td><code>3fa2c1d0</code></td><td>-home-dev-src-acme-api</td><td>main</td><td>2026-10-11 14:02 UTC</td><td class="n">212</td><td>claude-opus-4-5</td><td>2.1.290</td><td class="n">41k</td><td class="n">1.9M</td><td class="n">9.4M</td><td class="n">88k</td><td class="n">83%</td></tr><tr><td><code>9b07e5aa</code></td><td>-home-dev-src-acme-api</td><td>main</td><td>2026-10-14 08:15 UTC</td><td class="n">97</td><td>claude-opus-4-5</td><td>2.1.290, 2.1.296</td><td class="n">13k</td><td class="n">641k</td><td class="n">3M</td><td class="n">31k</td><td class="n">82%</td></tr><tr><td><code>3fa2c1d0</code></td><td>-home-dev-src-acme-api</td><td>subagent</td><td>2026-10-11 15:00 UTC</td><td class="n">41</td><td>claude-haiku-4-5</td><td>2.1.290</td><td class="n">3.1k</td><td class="n">210k</td><td class="n">402k</td><td class="n">9.8k</td><td class="n">65%</td></tr><tr><td><code>c41d0f9e</code></td><td>-home-dev-src-acme-api</td><td>subagent</td><td>2026-10-18 07:59 UTC</td><td class="n">18</td><td>claude-haiku-4-5</td><td>2.1.296</td><td class="n">1.1k</td><td class="n">98k</td><td class="n">640k</td><td class="n">4.1k</td><td class="n">87%</td></tr></table></div>
+<h2>Parse stats</h2>
+<p class="sev-warn">4 malformed lines skipped · 1 unknown record type (x-future ×7) · 2 field warnings. Run <code>ccxray doctor</code> for details.</p><table><tr><th>log roots</th><td>~/.claude/projects</td></tr><tr><th>files / lines</th><td>6 / 21,877 (3 blank)</td></tr><tr><th>malformed lines (skipped)</th><td>4</td></tr><tr><th>record types</th><td>assistant ×9,812, user ×8,640, attachment ×1,203, queue-operation ×88, x-future ×7</td></tr><tr><th>unknown record types</th><td>x-future ×7</td></tr><tr><th>dedupe (lines dropped)</th><td>same response 1,950 · sidechain replays 12 · cross-session copies 2</td></tr><tr><th>synthetic turns (excluded)</th><td>3</td></tr><tr><th>field warnings</th><td>assistant without message.usage ×2</td></tr></table>
+<h2>Legend</h2><p><span class="b m" title="measured from usage fields">M</span> measured: taken directly from usage fields in the logs<br><span class="b e" title="estimated">E</span> estimated: chars/4 heuristic or attribution guess, never exact</p>
+<footer>Local-only report generated by ccxray 0.0.0-test. It was built from files on this machine and loads nothing from the network.</footer>
+<script>
+document.getElementById('toggle').addEventListener('click',function(){
+var d=document.querySelectorAll('details.ev');var open=!Array.prototype.every.call(d,function(x){return x.open;});
+Array.prototype.forEach.call(d,function(x){x.open=open;});});
+</script>
+</body>
+</html>
