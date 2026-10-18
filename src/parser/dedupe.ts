@@ -5,11 +5,17 @@
 //     response (any file) is dropped.
 //  3. Cross-session copy: the same (message.id, requestId) in several files is kept once
 //     (see dedupeAcrossFiles for which copy wins).
+//
+// Memory (SPEC §8, < 300 MB RSS for 1 GB): responses are plain Turn objects from the start, never
+// copied. Maps are keyed by the message.id string the Turn already holds (requestId compared on
+// lookup), so no composite key strings are built. Bookkeeping needed only while one file is read
+// lives in that file's ResponseMerger and is dropped with it.
 
-import type { ParseStats, SourcePointer, ToolUse, Usage } from '../model/index.js';
+import type { ParseStats, SourcePointer, ToolUse, Turn } from '../model/index.js';
 import {
   counter,
   inc,
+  intern,
   isRec,
   isToolUseBlock,
   readUsage,
@@ -17,32 +23,6 @@ import {
   str,
   type AssistantRecord,
 } from './records.js';
-
-export interface PendingResponse {
-  /** Dedupe key; `hasGlobalKey` is false when it is only unique within the file. */
-  key: string;
-  hasGlobalKey: boolean;
-  messageId: string;
-  requestId?: string;
-  uuid: string;
-  ts: Date;
-  model: string;
-  ccVersion?: string;
-  isSidechain: boolean;
-  agentId?: string;
-  /** Envelope `sessionId` of the first line, for choosing among cross-session copies. */
-  envSessionId?: string;
-  isSynthetic: boolean;
-  /** Short error label for api-error events (envelope `error` or `isApiErrorMessage`). */
-  apiError?: string;
-  usage: Usage;
-  stopReason?: string;
-  toolUses: ToolUse[];
-  blockCounts: Record<string, number>;
-  source: SourcePointer;
-  /** Which fields came from a line that had them (vs. placeholders). */
-  has: { usage: boolean; ts: boolean; uuid: boolean };
-}
 
 /** `JSON.stringify(v).length`, or `fallback` when stringify throws (e.g. ~20k-deep input). */
 export function jsonLength(v: unknown, fallback: number): number {
@@ -62,145 +42,284 @@ export interface AssistantLine {
   ts: Date;
   source: SourcePointer;
   rawLength: number;
+  /** The file's session id (first envelope sessionId seen so far). */
+  fileSessionId?: string;
 }
 
-/** Merge one assistant line into the file's responses. */
-export function addAssistantLine(
-  responses: Map<string, PendingResponse>,
-  line: AssistantLine,
-  opts: { stats: ParseStats; warn: (key: string) => void; includeContent: boolean },
-): void {
-  const { r, ownTs, source } = line;
-  const m = r.message;
-  const messageId = str(m.id);
-  const requestId = str(r.requestId);
-  if (messageId === undefined) opts.warn('assistant without message.id');
-  // UNVERIFIED: without requestId, message.id alone is assumed unique only within one file.
-  const hasGlobalKey = messageId !== undefined && requestId !== undefined;
-  const key =
-    messageId === undefined
-      ? `line:${source.file}:${source.line}`
-      : requestId === undefined
-        ? `msg:${messageId}`
-        : `${messageId}\u0000${requestId}`;
-  const usage = readUsage(m.usage);
-  if (usage === undefined) opts.warn('assistant without message.usage');
-  const uuid = str(r.uuid);
+const HAS_USAGE = 1;
+const HAS_TS = 2;
+const HAS_UUID = 4;
+const HAS_SID = 8;
 
-  const existing = responses.get(key);
-  const resp: PendingResponse = existing ?? {
-    key,
-    hasGlobalKey,
-    messageId: messageId ?? key,
-    requestId,
-    uuid: uuid ?? `${source.file}:${source.line}`,
-    ts: ownTs ?? line.ts,
-    model: 'unknown',
-    isSidechain: r.isSidechain === true,
-    isSynthetic: false,
-    usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 },
-    toolUses: [],
-    blockCounts: counter(),
-    source,
-    has: { usage: false, ts: ownTs !== undefined, uuid: uuid !== undefined },
-  };
-  if (existing !== undefined) opts.stats.dedupe.sameResponseLines++;
-
-  // Fill fields from the first line that has them (a first line may lack usage or timestamp).
-  if (!resp.has.ts && ownTs !== undefined) {
-    resp.ts = ownTs;
-    resp.has.ts = true;
+/** Map from (message.id, requestId) to a Turn without building composite key strings. */
+class PairMap {
+  private readonly m = new Map<string, Turn | Turn[]>();
+  get(messageId: string, requestId: string | undefined): Turn | undefined {
+    const v = this.m.get(messageId);
+    if (v === undefined) return undefined;
+    if (!Array.isArray(v)) return v.requestId === requestId ? v : undefined;
+    return v.find((t) => t.requestId === requestId);
   }
-  if (!resp.has.uuid && uuid !== undefined) {
-    resp.uuid = uuid;
-    resp.source = source;
-    resp.has.uuid = true;
-  }
-  // FORMAT.md: usage is identical on every line in 2.1.302. Older versions may have written
-  // partial output_tokens on earlier lines (UNVERIFIED), so after the first real usage, prefer
-  // the line with the largest output_tokens.
-  if (usage !== undefined && (!resp.has.usage || usage.output > resp.usage.output)) {
-    resp.usage = usage;
-    resp.has.usage = true;
-  }
-  const model = str(m.model);
-  if (resp.model === 'unknown' && model !== undefined) resp.model = model;
-  resp.ccVersion ??= str(r.version);
-  resp.agentId ??= str(r.agentId);
-  resp.envSessionId ??= str(r.sessionId);
-  const errLabel =
-    typeof r.error === 'string'
-      ? r.error.slice(0, 80)
-      : r.error !== undefined && r.error !== null && r.error !== false
-        ? 'error'
-        : r.isApiErrorMessage === true
-          ? 'isApiErrorMessage'
-          : undefined;
-  resp.apiError ??= errLabel;
-  resp.isSynthetic = resp.model === '<synthetic>' || resp.apiError !== undefined;
-  const stop = str(m.stop_reason);
-  if (stop !== undefined) resp.stopReason = stop;
-
-  // UNVERIFIED: string assistant content (not seen in 2.1.302) is treated as one text block.
-  const blocks = typeof m.content === 'string' ? [{ type: 'text' }] : m.content;
-  if (Array.isArray(blocks))
-    for (const b of blocks) {
-      const type = isRec(b) && typeof b.type === 'string' ? b.type : '(unknown)';
-      inc(resp.blockCounts, type);
-      if (!isToolUseBlock(b)) continue;
-      if (resp.toolUses.some((t) => t.id === b.id)) continue;
-      resp.toolUses.push({
-        id: b.id,
-        name: b.name,
-        input: opts.includeContent ? b.input : slimToolInput(b.name, b.input),
-        inputChars: jsonLength(b.input, line.rawLength),
-      });
+  /** Insert, or replace the entry with the same requestId. */
+  set(t: Turn): void {
+    const v = this.m.get(t.messageId);
+    if (v === undefined || (!Array.isArray(v) && v.requestId === t.requestId))
+      this.m.set(t.messageId, t);
+    else if (!Array.isArray(v)) this.m.set(t.messageId, [v, t]);
+    else {
+      const i = v.findIndex((x) => x.requestId === t.requestId);
+      if (i >= 0) v[i] = t;
+      else v.push(t);
     }
-  // Insert last, so nothing above can leave a half-built response in the map.
-  if (existing === undefined) responses.set(key, resp);
+  }
+}
+
+/**
+ * blockCounts are shared, frozen objects: one per distinct combination, reached through a
+ * transition table (like hidden classes), so 150k turns hold a handful of count objects.
+ * Bounded: past the cap, a turn gets its own unshared copy.
+ */
+const EMPTY_COUNTS: Record<string, number> = Object.freeze(counter());
+const transitions = new Map<Record<string, number>, Map<string, Record<string, number>>>();
+let sharedCounts = 0;
+function bumpCount(c: Record<string, number>, type: string): Record<string, number> {
+  if (!Object.isFrozen(c)) {
+    inc(c, type);
+    return c;
+  }
+  let next = transitions.get(c)?.get(type);
+  if (next !== undefined) return next;
+  const fresh = Object.assign(counter(), c);
+  inc(fresh, type);
+  if (sharedCounts >= 10_000) return fresh;
+  next = Object.freeze(fresh);
+  let tr = transitions.get(c);
+  if (tr === undefined) transitions.set(c, (tr = new Map()));
+  tr.set(type, next);
+  sharedCounts++;
+  return next;
+}
+
+const apiErrorLabel = (r: AssistantRecord): string | undefined =>
+  typeof r.error === 'string'
+    ? r.error.slice(0, 80)
+    : r.error !== undefined && r.error !== null && r.error !== false
+      ? 'error'
+      : r.isApiErrorMessage === true
+        ? 'isApiErrorMessage'
+        : undefined;
+
+/** Merges the assistant lines of one file (rule 1). */
+export class ResponseMerger {
+  /** Turns in first-line order. */
+  readonly turns: Turn[] = [];
+  /** Turns whose envelope sessionId differs from (or lacks) the file's sessionId. */
+  readonly foreign = new Set<Turn>();
+  /** Turns without message.id or requestId: unique within this file only. */
+  readonly localOnly = new Set<Turn>();
+  /** api-error labels (envelope `error` / `isApiErrorMessage`); rare. */
+  readonly apiErrors = new Map<Turn, string>();
+  private readonly byKey = new PairMap();
+  private readonly flags = new Map<Turn, number>();
+
+  constructor(
+    private readonly opts: {
+      stats: ParseStats;
+      warn: (key: string) => void;
+      includeContent: boolean;
+    },
+  ) {}
+
+  add(line: AssistantLine): void {
+    const { r, ownTs, source } = line;
+    const { stats, warn } = this.opts;
+    const m = r.message;
+    const messageId = str(m.id);
+    const requestId = str(r.requestId);
+    if (messageId === undefined) warn('assistant without message.id');
+    const usage = readUsage(m.usage);
+    if (usage === undefined) warn('assistant without message.usage');
+    const uuid = str(r.uuid);
+
+    const found = messageId === undefined ? undefined : this.byKey.get(messageId, requestId);
+    const t: Turn = found ?? {
+      sessionId: '',
+      uuid: uuid ?? `${source.file}:${source.line}`,
+      messageId: messageId ?? `line:${source.file}:${source.line}`,
+      requestId,
+      ts: ownTs ?? line.ts,
+      gapMs: null,
+      index: 0,
+      model: 'unknown',
+      ccVersion: undefined,
+      isSidechain: r.isSidechain === true,
+      agentId: undefined,
+      isSynthetic: false,
+      usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 },
+      stopReason: undefined,
+      toolUses: [],
+      toolResults: [],
+      blockCounts: EMPTY_COUNTS,
+      source,
+    };
+    let f: number;
+    if (found === undefined)
+      f = (ownTs !== undefined ? HAS_TS : 0) | (uuid !== undefined ? HAS_UUID : 0);
+    else {
+      stats.dedupe.sameResponseLines++;
+      f = this.flags.get(t) ?? 0;
+    }
+
+    // Fill fields from the first line that has them (a first line may lack usage or timestamp).
+    if (!(f & HAS_TS) && ownTs !== undefined) {
+      t.ts = ownTs;
+      f |= HAS_TS;
+    }
+    if (!(f & HAS_UUID) && uuid !== undefined) {
+      t.uuid = uuid;
+      t.source = source;
+      f |= HAS_UUID;
+    }
+    // FORMAT.md: usage is identical on every line in 2.1.302. Older versions may have written
+    // partial output_tokens on earlier lines (UNVERIFIED), so after the first real usage, prefer
+    // the line with the largest output_tokens.
+    if (usage !== undefined && (!(f & HAS_USAGE) || usage.output > t.usage.output)) {
+      t.usage = usage;
+      f |= HAS_USAGE;
+    }
+    const sid = str(r.sessionId);
+    if (!(f & HAS_SID)) {
+      if (sid === undefined) this.foreign.add(t);
+      else {
+        f |= HAS_SID;
+        if (sid === line.fileSessionId) this.foreign.delete(t);
+        else this.foreign.add(t);
+      }
+    }
+    const model = str(m.model);
+    if (t.model === 'unknown' && model !== undefined) t.model = intern(model);
+    t.ccVersion ??= intern(str(r.version));
+    t.agentId ??= intern(str(r.agentId));
+    if (!this.apiErrors.has(t)) {
+      const label = apiErrorLabel(r);
+      if (label !== undefined) this.apiErrors.set(t, label);
+    }
+    t.isSynthetic = t.model === '<synthetic>' || this.apiErrors.has(t);
+    const stop = str(m.stop_reason);
+    if (stop !== undefined) t.stopReason = intern(stop);
+
+    // UNVERIFIED: string assistant content (not seen in 2.1.302) is treated as one text block.
+    const blocks = typeof m.content === 'string' ? [{ type: 'text' }] : m.content;
+    if (Array.isArray(blocks))
+      for (const b of blocks) {
+        const type = isRec(b) && typeof b.type === 'string' ? b.type : '(unknown)';
+        t.blockCounts = bumpCount(t.blockCounts, type);
+        if (!isToolUseBlock(b)) continue;
+        if (t.toolUses.some((u) => u.id === b.id)) continue;
+        const name = intern(b.name);
+        const use: ToolUse = {
+          id: b.id,
+          name,
+          input: this.opts.includeContent ? b.input : slimToolInput(name, b.input),
+          inputChars: jsonLength(b.input, line.rawLength),
+        };
+        // Exact-size arrays: push() and spread grow a 17-slot backing store per turn (~150 B); concat is exact.
+        t.toolUses = t.toolUses.length === 0 ? [use] : t.toolUses.concat(use);
+      }
+    this.flags.set(t, f);
+    // Insert last, so nothing above can leave a half-built response in the merger.
+    if (found === undefined) {
+      this.turns.push(t);
+      // UNVERIFIED: without requestId, message.id alone is assumed unique only within one file.
+      if (messageId === undefined || requestId === undefined) this.localOnly.add(t);
+      if (messageId !== undefined) this.byKey.set(t);
+    }
+  }
 }
 
 export interface FileResponses {
-  responses: readonly PendingResponse[];
-  /** The file's session id (first envelope sessionId). */
-  sessionId?: string;
+  turns: readonly Turn[];
+  foreign: ReadonlySet<Turn>;
+  localOnly: ReadonlySet<Turn>;
   firstTs?: Date;
 }
 
 /**
- * Apply rules 2 and 3 across files. `files` must be sorted by path. Returns the kept responses
- * per file (same order as `files`).
+ * Apply rules 2 and 3 across files. `files` must be sorted by path. Returns the kept turns per
+ * file (same order as `files`). Uses one sort over all turns instead of hash maps, so the extra
+ * memory is a single pointer array (SPEC §8).
  */
 export function dedupeAcrossFiles(
   files: readonly FileResponses[],
   stats: ParseStats,
-): PendingResponse[][] {
-  // UNVERIFIED (FORMAT.md "Dedupe"): sidechain replay rule from ccusage docs; no replay seen yet.
-  const mainIds = new Set<string>();
-  for (const f of files) for (const r of f.responses) if (!r.isSidechain) mainIds.add(r.messageId);
-  // UNVERIFIED (FORMAT.md "Dedupe"): cross-session copies from ccusage docs; none seen yet. Keep
-  // the copy whose file's sessionId equals the record's own envelope sessionId, else the copy in
-  // the file with the earliest first timestamp, else the first file by path.
-  const best = new Map<string, { r: PendingResponse; own: boolean; first: number }>();
-  for (const f of files) {
-    const first = f.firstTs?.getTime() ?? Number.POSITIVE_INFINITY;
-    for (const r of f.responses) {
-      if (!r.hasGlobalKey) continue;
-      const own = r.envSessionId !== undefined && r.envSessionId === f.sessionId;
-      const cur = best.get(r.key);
-      if (cur === undefined || (own && !cur.own) || (own === cur.own && first < cur.first))
-        best.set(r.key, { r, own, first });
+): (readonly Turn[])[] {
+  const fileOf = new Map<string, FileResponses>();
+  const all: Turn[] = [];
+  for (const f of files)
+    for (const t of f.turns) {
+      if (!fileOf.has(t.source.file)) fileOf.set(t.source.file, f);
+      all.push(t);
     }
-  }
-  return files.map((f) =>
-    f.responses.filter((r) => {
-      if (r.isSidechain && mainIds.has(r.messageId)) {
-        stats.dedupe.sidechainReplays++;
-        return false;
+  const order = new Map<FileResponses, number>(files.map((f, i) => [f, i]));
+  const fileIndex = (t: Turn): number => order.get(fileOf.get(t.source.file)!)!;
+  const cmp = (a: string | undefined, b: string | undefined): number =>
+    a === b ? 0 : a === undefined ? -1 : b === undefined ? 1 : a < b ? -1 : 1;
+  // Stable sort; ties keep sorted-path order (all turns were pushed in file order).
+  all.sort((a, b) => cmp(a.messageId, b.messageId) || cmp(a.requestId, b.requestId));
+
+  const dropped = new Set<Turn>();
+  const own = (t: Turn): boolean => !fileOf.get(t.source.file)!.foreign.has(t);
+  const first = (t: Turn): number =>
+    fileOf.get(t.source.file)!.firstTs?.getTime() ?? Number.POSITIVE_INFINITY;
+  for (let i = 0; i < all.length;) {
+    let j = i + 1;
+    while (j < all.length && all[j]!.messageId === all[i]!.messageId) j++;
+    if (j - i > 1) {
+      // UNVERIFIED (FORMAT.md "Dedupe"): sidechain replay rule from ccusage docs; no replay seen
+      // yet. A sidechain response is dropped when a non-sidechain one has the same message.id.
+      const group = all.slice(i, j);
+      if (group.some((t) => !t.isSidechain))
+        for (const t of group)
+          if (t.isSidechain) {
+            dropped.add(t);
+            stats.dedupe.sidechainReplays++;
+          }
+      // UNVERIFIED (FORMAT.md "Dedupe"): cross-session copies from ccusage docs; none seen yet.
+      // Among the same (message.id, requestId) in several files, keep the copy whose file's
+      // sessionId equals the record's own envelope sessionId, else the one in the file with the
+      // earliest first timestamp, else the first file by path.
+      const live = group.filter(
+        (t) => !dropped.has(t) && !fileOf.get(t.source.file)!.localOnly.has(t),
+      );
+      for (let a = 0; a < live.length;) {
+        let b = a + 1;
+        while (b < live.length && live[b]!.requestId === live[a]!.requestId) b++;
+        let best = live[a]!;
+        for (let k = a + 1; k < b; k++) {
+          const t = live[k]!;
+          const o = own(t);
+          const bo = own(best);
+          if (
+            (o && !bo) ||
+            (o === bo &&
+              (first(t) < first(best) ||
+                (first(t) === first(best) && fileIndex(t) < fileIndex(best))))
+          )
+            best = t;
+        }
+        for (let k = a; k < b; k++)
+          if (live[k] !== best) {
+            dropped.add(live[k]!);
+            stats.dedupe.crossSessionCopies++;
+          }
+        a = b;
       }
-      if (!r.hasGlobalKey || best.get(r.key)?.r === r) return true;
-      stats.dedupe.crossSessionCopies++;
-      return false;
-    }),
+    }
+    i = j;
+  }
+  // No copy when nothing is dropped: finalize() copies into exact-size session arrays.
+  if (dropped.size === 0) return files.map((f) => f.turns);
+  return files.map((f) =>
+    f.turns.some((t) => dropped.has(t)) ? f.turns.filter((t) => !dropped.has(t)) : f.turns,
   );
 }

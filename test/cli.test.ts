@@ -18,8 +18,8 @@ describe('cli', () => {
     expect(out.trim()).toBe(VERSION);
   });
 
-  it('prints help by default', async () => {
-    expect((await run([])).out).toContain('Usage:');
+  it('prints help with --help', async () => {
+    expect((await run(['--help'])).out).toContain('Usage:');
   });
 
   it('the built bin runs', () => {
