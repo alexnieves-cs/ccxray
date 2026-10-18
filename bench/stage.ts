@@ -2,13 +2,15 @@
 //
 //   node --import tsx bench/stage.ts <load|pipeline> <projectsRoot>
 //
-// Prints one JSON line: { workMs, maxRssKiB, ... } or { skipped: "<reason>" }.
+// Prints one JSON line: { workMs, maxRssKiB, ... }. Both stages run src/ under tsx: importing
+// from dist/ would need a library entry in the published package (dist/ has only cli.js,
+// capture.js and slim.js bundles); the `doctor --json` stage in perf.ts runs dist/cli.js.
 // process.resourceUsage().maxRSS is in KiB on every platform per the Node docs (libuv divides
 // macOS's byte value by 1024).
 
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { DEFAULT_THRESHOLDS } from '../src/model/index.js';
 import { loadSessions } from '../src/parser/index.js';
+import { buildReport } from '../src/pipeline.js';
 
 const [stage, root] = process.argv.slice(2);
 if (root === undefined) {
@@ -26,23 +28,29 @@ if (stage === 'load') {
   const workMs = performance.now() - t0;
   emit({ workMs, bytes: stats.bytes, files: stats.files, sessions: sessions.length });
 } else if (stage === 'pipeline') {
-  // The full report pipeline (M2/M4) is not on this branch yet. When src/pipeline.ts lands this
-  // stage runs automatically; adapt the call below to its export if the name differs.
-  const path = resolve(import.meta.dirname, '..', 'src', 'pipeline.ts');
-  if (!existsSync(path)) {
-    emit({ skipped: 'src/pipeline.ts not present on this branch' });
-  } else {
-    const spec = '../src/pipeline.js';
-    const mod = (await import(spec)) as Record<string, unknown>;
-    const run = mod.runPipeline;
-    if (typeof run !== 'function') {
-      emit({ skipped: 'src/pipeline.ts has no runPipeline export' });
-    } else {
-      const t0 = performance.now();
-      await (run as (o: { roots: string[] }) => Promise<unknown>)({ roots: [root] });
-      emit({ workMs: performance.now() - t0 });
-    }
-  }
+  // The real pipeline as the default command runs it (src/commands/analyze.ts): loadSessions,
+  // then buildReport with every registered analyzer. No date window, so the whole corpus counts.
+  const now = new Date();
+  const t0 = performance.now();
+  const { sessions, stats } = await loadSessions({ roots: [root] });
+  const t1 = performance.now();
+  const report = buildReport({
+    sessions,
+    stats,
+    ctx: { thresholds: DEFAULT_THRESHOLDS, now, includeContent: false },
+    window: { since: '1970-01-01', until: null, project: null },
+    includeContent: false,
+  });
+  const t2 = performance.now();
+  emit({
+    workMs: t2 - t0,
+    loadMs: t1 - t0,
+    buildReportMs: t2 - t1,
+    bytes: stats.bytes,
+    files: stats.files,
+    sessions: sessions.length,
+    findings: report.findings.length,
+  });
 } else {
   process.stderr.write(`unknown stage: ${stage}\n`);
   process.exit(2);

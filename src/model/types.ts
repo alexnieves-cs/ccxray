@@ -118,7 +118,10 @@ export interface Turn {
   toolUses: ToolUse[];
   /** tool_results answering this turn's toolUses (joined by id), in log order. */
   toolResults: ToolResult[];
-  /** Number of content blocks by type, e.g. { text: 1, tool_use: 2, thinking: 1 }. */
+  /**
+   * Number of content blocks by type, e.g. { text: 1, tool_use: 2, thinking: 1 }. Read-only: the
+   * parser shares one frozen object per distinct combination (memory, SPEC §8).
+   */
   blockCounts: Record<string, number>;
   /** Pointer to the first JSONL line of this response. */
   source: SourcePointer;
@@ -161,6 +164,16 @@ export type SessionEvent =
       source: SourcePointer;
     }
   | {
+      /**
+       * Tool names from a `deferred_tools_record` attachment (seen in CC 2.1.302): tools whose
+       * definitions are not sent up front. Names only. UNVERIFIED: the attachment's shape.
+       */
+      kind: 'deferred-tools';
+      ts: Date;
+      tools: string[];
+      source: SourcePointer;
+    }
+  | {
       kind: 'api-error';
       ts: Date;
       uuid?: string;
@@ -188,6 +201,12 @@ export interface Session {
    * `toolUseId`, else the parent tool_result whose `toolUseResult.agentId` matches ([M] 2.1.302).
    */
   parentToolUseId?: string;
+  /**
+   * Main sessions: true when the first envelope record of a main transcript has a non-null
+   * `parentUuid`, i.e. the conversation continues an earlier one (resume / continue).
+   * UNVERIFIED: that resumed or continued sessions start this way.
+   */
+  continued?: boolean;
   /** Deduped assistant turns, sorted by ts. */
   turns: Turn[];
   prompts: UserPrompt[];
@@ -196,6 +215,11 @@ export interface Session {
   lastTs: Date;
   /** Distinct Claude Code versions seen in this session, in first-seen order. */
   ccVersions: string[];
+  /**
+   * true when any turn of the whole session wrote `ephemeral_1h` cache tokens, decided before
+   * since/until filtering (A3 picks the cache TTL from it). Optional; set by the parser.
+   */
+  wrote1hCache?: boolean;
 }
 
 /** Parse statistics, shown by `ccxray doctor` and embedded in reports. All counts are measured. */

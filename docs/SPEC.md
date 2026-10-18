@@ -81,7 +81,9 @@ TOP FINDINGS
 Run `ccxray session 3fa2` for per-turn detail · `--html` for a shareable report
 ```
 
-`session` view: one row per assistant turn with timestamp, gap since the previous turn, model, input, cache write, cache read, output, the tool calls made in that turn, and a flag column (🔁 rebuild, 📄 dup read, 📦 big output).
+Default command flags (M2): `--since DATE` (default: 7 days before now), `--until DATE` (a date-only value is inclusive: the end of that UTC day), `--project NAME`, `--json` (stdout), `--html FILE` (writes the file, **overwriting** it, and prints its path; with `--json` the JSON is printed first and the path goes to stderr), `--include-content`, `--root DIR` (repeatable), `--threshold.KEY=VALUE` (repeatable; unknown or non-own keys, empty or non-numeric values, `…Fraction` values outside [0, 1] and negative values are errors), `--no-color`. Dates are `YYYY-MM-DD` (a real calendar day; `2026-02-30` is rejected) or ISO 8601 `YYYY-MM-DDTHH:MM[:SS[.sss]]` with an optional `Z`/`±HH:MM` offset; **a date-time without an offset is UTC**, never local time. Anything else is an error. A subcommand (`doctor`, `session`) is recognized only as the first argument, so in `--project doctor` the word is the flag's value. Exit codes: 0 success, 1 no sessions in the window (the empty state is still printed), 2 bad arguments or an `--html` file that cannot be written (with its own message).
+
+`session` view: one row per assistant turn with timestamp, gap since the previous turn, model, input, cache write, cache read, output, the tool calls made in that turn, and a flag column (🔁 rebuild, 📄 dup read, 📦 big output; `R`/`D`/`B` with NO_COLOR or a non-UTF-8 locale). A `*` after the gap marks a gap longer than the cache TTL. Subagents are summarized after the table. `--json` prints the rows; thresholds: [docs/THRESHOLDS.md](THRESHOLDS.md).
 
 ## 4. Architecture
 
@@ -123,7 +125,7 @@ type Finding = {
 };
 ```
 
-**Finding.data conventions (provisional, reporters ↔ analyzers).** `Finding.data` is analyzer-specific, but reporters read three keys when present and well-formed: `causes: { cause, count, tokens?, fix? }[]` (per-cause breakdown, e.g. A2/A3; `tokens` has the finding's kind), `tool: string` (tool name; groups "where it went" by tool) and `command: string` (raw Bash command; reporters only show its first two words, never env assignments). Without `--include-content`, the JSON report keeps only those keys plus number/boolean scalars and strings of at most 80 chars. This contract may change until M4; the source of truth is the comment at the top of `src/reporters/derive.ts`.
+**Finding.data conventions (provisional, reporters ↔ analyzers).** `Finding.data` is analyzer-specific, but reporters read three keys when present and well-formed: `causes: { cause, count, tokens?, tokensKind?, fix? }[]` (per-cause breakdown, e.g. A2/A3; `tokens` has `tokensKind` when given, else the finding's kind; A3 sets `estimated` because assigning a cause is a guess), `tool: string` (tool name; groups "where it went" by tool) and `command: string` (raw Bash command; reporters only show its first two words, never env assignments). Without `--include-content`, the JSON report keeps only those keys plus number/boolean scalars and strings of at most 80 chars. This contract may change until M4; the source of truth is the comment at the top of `src/reporters/derive.ts`. A7's per-MCP-server data is a fixed contract consumed by M5 `ccxray fix mcp`: `{ server, unusedTools, usedTools, defChars? }` with full `mcp__server__tool` names (see `src/analyzers/tool-usage.ts`).
 
 ### 4.2 Transcript format: what is known
 Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusage's Claude adapter docs ([rust/adapters/claude/src/README.md](https://github.com/ccusage/ccusage/blob/main/rust/adapters/claude/src/README.md)) **[M: documented by a widely used parser]**; the Anthropic Messages API `usage` object ([docs](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching)).
@@ -161,14 +163,35 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - String `assistant.message.content` is one text block.
 - Compaction markers: `isCompactSummary`, `system`/`compact_boundary`, `summary` (Q5). `system`/`api_error` is an API error.
 - `isMeta: true` user lines are client-injected, not typed prompts.
-- One file = one session (its first `sessionId`). Subagent files other than the [M] `{sessionId}/subagents/agent-<id>.jsonl` layout (other nested files, flat `agent-<id>.jsonl`) are treated as subagents too (Q4). `Session.id = <parent>:agent-<id>` is a ccxray choice.
+- One file = one session (its first `sessionId`). Besides the [M] `{sessionId}/subagents/agent-<id>.jsonl` layout, `{sessionId}/agent-<id>.jsonl` (UUID-shaped `{sessionId}` dir) and files whose every user/assistant record is `isSidechain` with an `agentId` (e.g. flat `agent-<id>.jsonl`) are treated as subagents (Q4); any other file, at any depth, is a main session whose project is its immediate parent dir. `Session.id = <parent>:agent-<id>` is a ccxray choice.
 - `<persisted-output>` sizes: `KB` = 1024, and the externalization threshold is unknown (Q1).
 - Cross-session copies keep the copy whose file sessionId matches the record's envelope `sessionId`, else the earliest file; the sidechain-replay and cross-session rules themselves are from ccusage docs and not yet seen locally.
 - `prompt_snapshot` tool names come from `name` or `schema.name`; `systemPrompt[]` parts are strings or `{text}`.
 
+**Analyzer assumptions added in M2 [UNVERIFIED]** (marked `// UNVERIFIED:` in `src/analyzers/` and `src/tokens/calibrate.ts`):
+- A3 TTL: a session that wrote any `ephemeral_1h` tokens (decided over the whole session, before since/until filtering: `Session.wrote1hCache`) keeps its cached prefix for 1 h.
+- A3 config-edit: a mid-session CLAUDE.md edit produces a new `instructions` attachment (Q2); a file counts as edited when its sha256 differs from the latest earlier attachment of the same path (files that only appear do not count).
+- A3 tool-set-change: a new `prompt_snapshot` is logged when the tool set changes (Q3).
+- Calibration: request *n* carries all of turn *n-1*'s output tokens and nothing unlogged besides the tool_result.
+- `scripts/validate-real.ts`: the `ccusage session --json` shape, and that ccusage reports subagent usage under the parent sessionId.
+
+**Analyzer assumptions added in M4 [UNVERIFIED]** (marked `// UNVERIFIED:` in `src/analyzers/`):
+- A7: a `prompt_snapshot`'s `tools[]` lists every tool sent on a cold turn (deferred tools may be missing), so a tool counts as defined only when some snapshot lists it (Q3).
+- A7: in `mcp__<server>__<tool>`, the server name ends at the first `__` after `mcp__`.
+- A8: compaction markers with no assistant turn between them belong to one compaction (Q5).
+- A4: a resumed or continued session's first envelope record has a non-null `parentUuid` (`Session.continued`); such sessions, and sessions whose first kept turn is not the chain's first, are not baselines.
+- A7: `deferred_tools_record` attachments name tools whose definitions are not sent up front; names are read from `tools` / `toolNames` / `names` / `deferredTools` arrays (strings or `{name}`), and those tools cost 0 tokens per cold turn.
+- A10: a `system`/`api_error` record followed by a synthetic turn, with no real turn between them, is one error.
+
+**Fix-module assumptions added in M5 [UNVERIFIED]** (details in [cc-slim.md](cc-slim.md) and [capture.md](capture.md)):
+- `ccxray fix mcp`: permission rule syntax `mcp__<server>__<tool>` and server-wide `mcp__<server>` / `mcp__<server>__*` is taken from Claude Code's permission docs, not re-checked against a running version. Whether a deny rule also removes the tool's definition from the request (saving tokens), rather than only blocking calls, is unknown and must be measured.
+- *(Resolved at integration, no longer an assumption.)* `ccxray fix mcp` gets its `tool-usage` (A7) findings from the real pipeline, `loadSessions` then `buildReport` (`src/pipeline.ts`), the way the default command does (default thresholds, no content, `--since` default 7 days); the A7 data contract `{ server, unusedTools, usedTools, defChars? }` is in §4.1 and covered by `test/analyzers/tool-usage.test.ts` and an end-to-end `fix mcp` test on the built CLI.
+- cc-slim hook: PostToolUse stdin fields (`hook_event_name`, `tool_name`, `tool_input`, `tool_response`), the Bash `tool_response` shape `{ stdout, stderr, interrupted, isImage }`, and whether `hookSpecificOutput.updatedMCPToolOutput` (documented for MCP tools) has any effect on Bash. If it has none, only the PreToolUse command-wrap design in cc-slim.md §3.3 can work.
+- capture: Claude Code with `ANTHROPIC_API_KEY` sends `x-api-key`, and an OAuth login sends `Authorization: Bearer` (OAuth tokens start with `sk-ant-oat`, refused in either header). Requests go to `POST /v1/messages` (optionally with a query string). Claude Code may send requests without tools first, so capture skips bodies without a `tools` array and measures the first one that has it.
+
 ### 4.5 Token estimator
 - Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.
-- Calibration (M2): on turns where only one new tool_result was added, compare the estimate against the measured delta in `input + cache_write`, and report the median ratio in `doctor`.
+- Calibration (M2, `src/tokens/calibrate.ts`): for consecutive real turns *p → t* of one chain where *p* made exactly one tool call with one result, nothing else was logged in between (no prompt, no event), the model did not change and the result is ≥ 250 estimated tokens: `measured = ctx(t) − ctx(p) − output(p)` with `ctx = input + cache_write + cache_read`, and `ratio = estTokens / measured` (> 1 means chars/4 is high). The median ratio and sample count go into `Report.calibration` and one line of `doctor`. `cache_read` is included (the earlier draft said `input + cache_write` only) because a request's context is the sum of all three fields, and how it splits between them changes from turn to turn; only the growth of the sum is the added content.
 - No network tokenizer calls. An optional offline tokenizer can be plugged in later.
 
 ## 5. Analyzers
@@ -179,16 +202,24 @@ Each analyzer is a pure function with fixtures and snapshot tests. Thresholds ar
 |---|---|---|---|---|
 | A1 | **totals** | Sum the deduped usage per session/project/model/day; hit ratio = read / (read + write + input) | measured | n/a (context for everything else) |
 | A2 | **cache-rebuild** | Turn *n* (n>1 within a session, non-sidechain) has `cache_creation ≥ max(10k, 0.5 × prev context)` **and** `cache_read` dropped by ≥50% vs turn *n-1* | measured (cache_write of the turn) | depends on cause (A3) |
-| A3 | **rebuild-cause** | For each A2 hit, assign the first matching cause: (a) `gapMs > 5 min` (or > 60 min if the session wrote `ephemeral_1h` tokens) → **TTL expiry**; (b) `version` changed vs prev turn → **CC upgrade**; (c) `model` changed → **model switch**; (d) compaction record nearby → **compaction**; (e) CLAUDE.md / settings mtime inside the gap **[UNVERIFIED method]** → **config edit**; (f) MCP/tool set changed (inferred from new tool names appearing) **[E]**; else **unknown** | measured | TTL: "batch prompts; you had N gaps of 5–15 min". Upgrade: link known issues (#46917). Model switch: "/model mid-session invalidates the cache". Config edit: "edit CLAUDE.md between sessions". |
+| A3 | **rebuild-cause** | For each A2 hit, assign the first matching cause: (a) `gapMs > 5 min` (or > 60 min if the session wrote `ephemeral_1h` tokens) → **TTL expiry**; (b) `version` changed vs prev turn → **CC upgrade**; (c) `model` changed → **model switch**; (d) compaction record nearby → **compaction**; (e) CLAUDE.md / settings mtime inside the gap **[UNVERIFIED method]** → **config edit**; (f) MCP/tool set changed (inferred from new tool names appearing) **[E]**; else **unknown** | measured total (A2); per-cause split estimated [E] (attribution guess) | TTL: "batch prompts; you had N gaps of 5–15 min". Upgrade: link known issues (#46917). Model switch: "/model mid-session invalidates the cache". Config edit: "edit CLAUDE.md between sessions". |
 | A4 | **fixed-overhead** | First assistant turn of each session: `input + cache_write + cache_read` = baseline context. Report the median per CC version and a jump between versions ≥ 2k | measured (inferred meaning [E]) | "Your baseline grew 20k at 2.1.100" → link issue; suggest mcp-diet |
 | A5 | **big-tool-output** | `tool_result` est. tokens ≥ 5k (configurable); group by tool name + normalized command (Bash: first 2 tokens, e.g. `pnpm test`) | estimated | Bash: `| tail -n 100`, `--silent`, `--reporter=dot`; Grep: narrower glob / `head_limit`; later `cc-slim` |
 | A6 | **repeated-read** | Same `Read` file_path (with the same offset/limit) ≥ 2× in a session with no intervening Edit/Write/MultiEdit/Bash on that path | estimated (size of later reads) | "Reference the earlier read"; later the cc-slim dedupe hook |
-| A7 | **tool-usage** | Count tool_use by name across the window; list tools/MCP servers (`mcp__server__tool`) never called. The definition size of unused tools is unknown from logs **[UNVERIFIED]**, so report counts only unless capture data exists | count; tokens only with capture | `permissions.deny` / scope the MCP server to a subagent (mcp-diet, M5) |
+| A7 | **tool-usage** | Count tool_use by name across the window; list tools/MCP servers (`mcp__server__tool`) never called. Definition sizes come from `prompt_snapshot` attachments when logged (CC 2.1.302, FORMAT.md Q3); without one, report counts only | count; tokens [E] only with a snapshot or capture | `permissions.deny` / scope the MCP server to a subagent (mcp-diet, M5) |
 | A8 | **context-growth** | Per-session curve of context size (input + cache_read + cache_write); flag sessions over 150k or with ≥ 2 compactions | measured | "Start a new session / use /clear for unrelated tasks" |
 | A9 | **subagent-cost** | Sum usage of sidechain/subagent transcripts vs parent | measured | "Route exploratory subagents to a smaller model via the subagent `model:` field" |
 | A10 | **error-waste** | API error / synthetic turns, retries, tool_result `is_error` followed by an identical re-call | measured/estimated | context-specific |
 
 Every finding includes evidence pointers (session, turn uuid) so a user can verify it by hand.
+
+**M2 implementation notes.**
+- A1 totals count every deduped, non-synthetic turn of every session, **subagent sessions included** (they are real API spend). They go into `Report.totals`, not findings.
+- A2 checks only main-chain (non-sidechain) turns, so subagent transcripts are never checked. *n-1* is the previous non-synthetic turn. The literal rule needs `cache_read(n-1) > 0`, so a rebuild right after a cold first turn is not detected; with `--since`, the first in-window turn has no in-window *n-1*. A2 and A3 emit **one** aggregated finding (`data.causes`, evidence capped at 50 rebuilds with the largest cache writes; counts stay exact). Severity: high at ≥ 10 rebuilds or ≥ 500k tokens, else warn.
+- A3 per-cause tokens are labeled [E] in every reporter (`tokensKind: 'estimated'`); the finding total stays measured. The ttl-expiry fix is worded per TTL (5–15 min gaps for 5m sessions, breaks over 1 h for 1h sessions). A gap exactly equal to the TTL is not an expiry.
+- A3 tool-set-change [E]: a `prompt_snapshot` whose tool names differ from the previous snapshot, else tool names used at turn *n* that no earlier turn used and no earlier snapshot listed.
+- A5 tokens are the inline estimate. A `<persisted-output>` result also qualifies when its reported full size is ≥ threshold × 4 bytes; its full size goes to `data.persistedBytes`. Bash commands are grouped by `normalizeCommand`: leading `cd <dir> &&` / `cd <dir>;` (quoted dirs too) are dropped, then `shortCommand` keeps two words after env assignments and shows any word with `=` as `…`; path words are made relative to the cwd and home directories shown as `~`. Titles and `data.command` use only that form. Reads that A6 reports as repeats are left out of A5, so WHERE IT WENT never counts one result twice.
+- A6: one finding per (session, file path); different offset/limit ranges of a file are separate read keys but are reported together. Paths are compared canonically (`/` separators, resolved against the cwd, `.`/`..` collapsed, drive letter lowercased); offset/limit go through `Number()`, and offset 0/1 or limit 0 mean omitted (limit 1 stays a one-line read). Changes come from every chain of the session and from subagent sessions whose `parentSessionId` is the session, merged by timestamp. An Agent/Task tool_use and a compaction forget every read. A Bash command forgets a file when one of its words (split on whitespace, quotes and shell punctuation) has the file's name [E]. A read whose result `is_error` does not count. Paths are shown relative to the session cwd, else a leading home directory as `~`.
 
 ## 6. Milestones and acceptance tests
 
@@ -206,18 +237,19 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 - **Generator:** `scripts/make-fixture.ts` builds sessions from a compact DSL, so tests can declare the expected findings.
 - **Scrubber:** `scripts/scrub-fixture.ts` replaces text, paths and ids with deterministic hashes while keeping lengths and usage, so a real log can be turned into a shareable fixture.
 - **Unit tests** per analyzer; **snapshot tests** per reporter; **property tests** (fast-check) that the parser never throws.
-- **Real-log validation** (local only, never in CI): `pnpm validate:real` runs on `~/.claude` and prints parse stats, a ccusage cross-check and a finding sample.
+- **Real-log validation** (local only, never in CI): `pnpm validate:real [--root DIR] [--ccusage FILE]` runs on the default roots and prints parse stats, per-analyzer finding counts, A1 totals and, with a saved `npx ccusage@latest session --json` output, a per-session and total ±0.5% comparison. Counts only; session ids are hashed. The script never runs npx itself.
 - **No-network test** in CI (see M0).
 
 ## 8. Benchmarks and performance targets
 - Parse throughput ≥ **100 MB/s** of JSONL on an M-series laptop; 1 GB of logs analyzed in < 15 s; peak RSS < 300 MB (streaming, no full-file loads).
 - `npx ccxray` cold start (cached npx) < 1.5 s for 50 MB of logs.
 - Package size < 1 MB unpacked.
+- Memory regression guard: `test/memory.test.ts` checks heap retained by `loadSessions` per MB of a synthetic corpus (deterministic, unlike peak RSS). Notes on what the parser keeps: FORMAT.md "Parser implementation notes".
 - `bench/perf.ts` generates synthetic corpora (10 MB / 100 MB / 1 GB). CI (`.github/workflows/bench.yml`) runs the 10 MB and 100 MB sizes and records the results as an artifact (informational, never gating); the 1 GB run is manual via `pnpm bench:full`, because generating and parsing it three times per PR costs minutes of runner time and ~1 GB of disk.
 - **Savings benchmark** (for README claims, later): Alex's own sessions, before/after applying the fixes over comparable weeks, reporting tokens per assistant turn and the cache hit ratio. Any claim of "equal quality" needs a task-pass-rate benchmark (e.g. a small SWE-bench-lite subset with an API key) and is out of scope until then.
 
 ## 9. Privacy and ToS
-- Reads files only. No network calls, no telemetry, no account. Enforced in CI.
+- Reads files only. No network calls, no telemetry, no account. Enforced in CI. The single exception is the opt-in `ccxray capture` bundle (`dist/capture.js`), which only *listens* on 127.0.0.1 and never connects out; CI checks that too ([capture.md](capture.md)).
 - Reports contain token counts, tool names, file paths (relative) and commands (first tokens only) by default. Prompt and output text appears only with `--include-content`.
 - HTML reports are self-contained and load nothing remote.
 - No features for multi-account rotation, limit evasion, subscription-OAuth reuse in other harnesses, or cache keep-alive pings. `capture` mode is API-key only and opt-in.

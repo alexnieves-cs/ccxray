@@ -55,8 +55,8 @@ interface StageResult {
 }
 
 /**
- * Stages run per corpus size. To add one, append a line here. `pipeline` runs automatically once
- * src/pipeline.ts exists (see bench/stage.ts); until then it is recorded as skipped.
+ * Stages run per corpus size. To add one, append a line here. `pipeline` is loadSessions +
+ * buildReport (see bench/stage.ts).
  */
 const STAGES: { name: string; args: (root: string) => string[]; viaHook?: boolean }[] = [
   { name: 'loadSessions', args: (root) => ['--import', 'tsx', 'bench/stage.ts', 'load', root] },
@@ -173,7 +173,7 @@ interface Report {
   targets: typeof TARGETS;
   corpora: Record<string, CorpusInfo['summary'] & { genMs: number; reused: boolean }>;
   stages: StageResult[];
-  coldStart?: { versionMs: number[]; doctor: StageResult };
+  coldStart?: { versionMs: number[]; report: StageResult };
   pkg?: ReturnType<typeof packageSize>;
   errors: string[];
 }
@@ -222,8 +222,8 @@ export function toMarkdown(rep: Report): string {
   }
   L.push(
     '',
-    'MB/s uses the in-process time when there is one (loadSessions), else the wall time including Node startup (doctor).',
-    'loadSessions runs from source under the tsx loader, so its RSS includes the loader; doctor runs the built dist/cli.js.',
+    'MB/s uses the in-process time when there is one (loadSessions, pipeline), else the wall time including Node startup (doctor).',
+    'loadSessions and pipeline run from source under the tsx loader, so their RSS includes the loader; doctor runs the built dist/cli.js.',
     '',
     '## SPEC §8 targets',
     '',
@@ -240,11 +240,11 @@ export function toMarkdown(rep: Report): string {
       `| Parse throughput ≥ 100 MB/s | ${f1(s.rate)} MB/s [M] (loadSessions, ${load.size}) | ${verdict(s.rate >= 100)} |`,
     );
   }
-  const gb = done.find((r) => r.stage === 'doctor --json' && r.size === '1gb');
+  const gb = done.find((r) => r.stage === 'pipeline' && r.size === '1gb');
   if (gb) {
     const s = summarize(gb);
     L.push(
-      `| 1 GB in < 15 s | ${f2(s.wall / 1000)} s [M] (doctor --json end to end; full analysis not on this branch) | ${verdict(s.wall / 1000 < 15)} |`,
+      `| 1 GB in < 15 s | ${f2(s.wall / 1000)} s [M] (pipeline: loadSessions + buildReport, wall incl. tsx startup) | ${verdict(s.wall / 1000 < 15)} |`,
     );
   } else L.push('| 1 GB in < 15 s | not run (`pnpm bench:full`) | n/a |');
   if (done.length) {
@@ -256,13 +256,13 @@ export function toMarkdown(rep: Report): string {
     );
   }
   if (rep.coldStart) {
-    const d = summarize(rep.coldStart.doctor);
+    const d = summarize(rep.coldStart.report);
     const v = median(rep.coldStart.versionMs);
-    const size = rep.coldStart.doctor.size;
+    const size = rep.coldStart.report.size;
     const spec =
       size === TARGETS.coldStartCorpus ? '' : ` (SPEC target is for ${TARGETS.coldStartCorpus})`;
     L.push(
-      `| Cold start < ${TARGETS.coldStartSeconds} s for ${size}${spec} | ${f2(d.wall / 1000)} s [M] (\`node bin/ccxray.js doctor\`, ${f1(rep.coldStart.doctor.bytes / 1e6)} MB; not npx, report command not on this branch) | ${verdict(d.wall / 1000 < TARGETS.coldStartSeconds)} |`,
+      `| Cold start < ${TARGETS.coldStartSeconds} s for ${size}${spec} | ${f2(d.wall / 1000)} s [M] (\`node bin/ccxray.js --json\`, all sessions, ${f1(rep.coldStart.report.bytes / 1e6)} MB; not npx) | ${verdict(d.wall / 1000 < TARGETS.coldStartSeconds)} |`,
       `| (info) \`ccxray --version\` | ${Math.round(v)} ms [M] | n/a |`,
     );
   }
@@ -358,17 +358,20 @@ async function main(): Promise<number> {
     const versionMs: number[] = [];
     for (let i = 0; i < Math.max(iterations, 5); i++)
       versionMs.push(node(['bin/ccxray.js', '--version']).sample.wallMs);
-    const doctor: StageResult = {
-      stage: 'doctor (cold start)',
+    // The default report command, as `npx ccxray` runs it (SPEC §8), over the whole corpus.
+    const report: StageResult = {
+      stage: 'ccxray --json (cold start)',
       size,
       bytes: c.summary.bytes,
       samples: [],
     };
     for (let i = 0; i < iterations; i++)
-      doctor.samples.push(
-        node(['bin/ccxray.js', 'doctor', '--root', c.root], { hook: true }).sample,
+      report.samples.push(
+        node(['bin/ccxray.js', '--root', c.root, '--since', '1970-01-01', '--json'], {
+          hook: true,
+        }).sample,
       );
-    rep.coldStart = { versionMs, doctor };
+    rep.coldStart = { versionMs, report };
   });
   await attempt('package size', () => (rep.pkg = packageSize()));
 
