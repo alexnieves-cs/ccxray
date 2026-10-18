@@ -13,7 +13,7 @@ import type {
   UserPrompt,
 } from '../model/index.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
-import { addAssistantLine, jsonLength, type PendingResponse } from './dedupe.js';
+import { jsonLength, ResponseMerger } from './dedupe.js';
 import {
   contentChars,
   contentText,
@@ -43,7 +43,12 @@ export interface FileData {
   versions: string[];
   firstTs?: Date;
   lastTs?: Date;
-  responses: PendingResponse[];
+  /** Assistant responses of this file, merged per (message.id, requestId) (dedupe rule 1). */
+  turns: Turn[];
+  /** Dedupe bookkeeping from ResponseMerger (see dedupe.ts). */
+  foreign: ReadonlySet<Turn>;
+  localOnly: ReadonlySet<Turn>;
+  apiErrors: ReadonlyMap<Turn, string>;
   toolResults: ToolResult[];
   prompts: UserPrompt[];
   events: SessionEvent[];
@@ -73,7 +78,7 @@ export function persistedInfo(content: unknown): ToolResult['persisted'] {
 /** Consumes the records of one file, in line order. */
 export class FileParser {
   readonly data: FileData;
-  private readonly responses = new Map<string, PendingResponse>();
+  private readonly merger: ResponseMerger;
   private lastTs: Date | undefined;
   private rawLength = 0;
 
@@ -82,10 +87,14 @@ export class FileParser {
     private readonly stats: ParseStats,
     private readonly includeContent: boolean,
   ) {
+    this.merger = new ResponseMerger({ stats, warn: this.warn, includeContent });
     this.data = {
       file,
       versions: [],
-      responses: [],
+      turns: this.merger.turns,
+      foreign: this.merger.foreign,
+      localOnly: this.merger.localOnly,
+      apiErrors: this.merger.apiErrors,
       toolResults: [],
       prompts: [],
       events: [],
@@ -121,11 +130,7 @@ export class FileParser {
 
     if (isAssistantRecord(r)) {
       if (own === undefined) this.warn('assistant without timestamp');
-      addAssistantLine(
-        this.responses,
-        { r, ownTs: own, ts, source, rawLength },
-        { stats, warn: this.warn, includeContent: this.includeContent },
-      );
+      this.merger.add({ r, ownTs: own, ts, source, rawLength, fileSessionId: d.sessionId });
     } else if (isUserRecord(r)) this.user(r, ts, source);
     else if (isAttachmentRecord(r)) this.attachment(r, ts, source);
     else if (isSystemRecord(r)) {
@@ -160,17 +165,19 @@ export class FileParser {
         if (results === 0 && tur !== undefined) this.data.agentLinks.set(tur, b.tool_use_id);
         results++;
         const chars = contentChars(b.content);
+        // Common fields in the literal (in-object slots, one shape); rare ones added only when set.
         const tr: ToolResult = {
           toolUseId: b.tool_use_id,
+          toolName: undefined,
           chars,
           estTokens: estimateTokensFromChars(chars),
+          isError: typeof b.is_error === 'boolean' ? b.is_error : undefined,
           recordUuid: uuid,
           ts,
         };
-        if (typeof b.is_error === 'boolean') tr.isError = b.is_error;
+        if (this.includeContent) tr.text = contentText(b.content);
         const persisted = persistedInfo(b.content);
         if (persisted !== undefined) tr.persisted = persisted;
-        if (this.includeContent) tr.text = contentText(b.content);
         this.data.toolResults.push(tr);
       }
       if (results > 0) return;
@@ -228,7 +235,6 @@ export class FileParser {
   }
 
   finish(): FileData {
-    this.data.responses = [...this.responses.values()];
     return this.data;
   }
 }
@@ -265,7 +271,7 @@ const byTs = <T extends { ts: Date }>(a: T, b: T): number => a.ts.getTime() - b.
 /** Group files into sessions, attach kept responses as turns and join tool results. */
 export function buildSessions(
   files: readonly FileData[],
-  kept: readonly (readonly PendingResponse[])[],
+  kept: readonly (readonly Turn[])[],
   stats: ParseStats,
 ): Session[] {
   const sessions = new Map<
@@ -277,9 +283,14 @@ export function buildSessions(
       metaToolUseId?: string;
       /** Keys already merged: the same file can be reached from two roots (e.g. ~/.claude and
        * ~/.config/claude), so prompts, events and tool_results are deduped on merge. */
-      seen: Set<string>;
+      seen?: Set<string>;
     }
   >();
+  const promptKey = (p: UserPrompt): string => `p|${p.uuid}`;
+  const eventKey = (e: SessionEvent): string =>
+    `e|${e.kind}|${'uuid' in e ? (e.uuid ?? '') : ''}|${e.ts.getTime()}|${e.source.line}`;
+  const resultKey = (tr: ToolResult): string =>
+    `r|${tr.toolUseId}|${tr.recordUuid ?? `${tr.ts?.getTime()}`}`;
   files.forEach((f, i) => {
     const ident = sessionIdentity(f);
     let g = sessions.get(ident.id);
@@ -295,7 +306,7 @@ export function buildSessions(
         lastTs: f.lastTs ?? EPOCH,
         ccVersions: [],
       };
-      g = { s, results: [], links: new Map(), seen: new Set() };
+      g = { s, results: [], links: new Map() };
       sessions.set(ident.id, g);
     }
     const s = g.s;
@@ -305,33 +316,37 @@ export function buildSessions(
     if (f.firstTs !== undefined && (s.firstTs === EPOCH || f.firstTs < s.firstTs))
       s.firstTs = f.firstTs;
     if (f.lastTs !== undefined && f.lastTs > s.lastTs) s.lastTs = f.lastTs;
-    const seen = g.seen;
-    const fresh = (key: string): boolean => {
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    };
-    for (const p of f.prompts) if (fresh(`p|${p.uuid}`)) s.prompts.push(p);
-    for (const e of f.events)
-      if (
-        fresh(`e|${e.kind}|${'uuid' in e ? (e.uuid ?? '') : ''}|${e.ts.getTime()}|${e.source.line}`)
-      )
-        s.events.push(e);
-    for (const tr of f.toolResults)
-      if (fresh(`r|${tr.toolUseId}|${tr.recordUuid ?? `${tr.ts?.getTime()}`}`)) g.results.push(tr);
+    if (s.files.length === 1) {
+      // Common case: the session's first file, nothing to dedupe against.
+      for (const p of f.prompts) s.prompts.push(p);
+      for (const e of f.events) s.events.push(e);
+      for (const tr of f.toolResults) g.results.push(tr);
+    } else {
+      // A second file for the same session (or the same file via another root): build the key
+      // set lazily from what is already merged.
+      const seen = (g.seen ??= new Set([
+        ...s.prompts.map(promptKey),
+        ...s.events.map(eventKey),
+        ...g.results.map(resultKey),
+      ]));
+      const fresh = (key: string): boolean => {
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      };
+      for (const p of f.prompts) if (fresh(promptKey(p))) s.prompts.push(p);
+      for (const e of f.events) if (fresh(eventKey(e))) s.events.push(e);
+      for (const tr of f.toolResults) if (fresh(resultKey(tr))) g.results.push(tr);
+    }
     for (const [a, id] of f.agentLinks) g.links.set(a, id);
     g.metaToolUseId ??= f.metaToolUseId;
-    for (const r of kept[i] ?? []) {
-      s.turns.push(toTurn(r, s.id));
-      if (r.isSynthetic) stats.syntheticTurns++;
-      if (r.apiError !== undefined)
-        s.events.push({
-          kind: 'api-error',
-          ts: r.ts,
-          uuid: r.uuid,
-          detail: r.apiError,
-          source: r.source,
-        });
+    for (const t of kept[i] ?? []) {
+      t.sessionId = s.id;
+      s.turns.push(t);
+      if (t.isSynthetic) stats.syntheticTurns++;
+      const detail = f.apiErrors.get(t);
+      if (detail !== undefined)
+        s.events.push({ kind: 'api-error', ts: t.ts, uuid: t.uuid, detail, source: t.source });
     }
   });
 
@@ -347,42 +362,32 @@ export function buildSessions(
     }
     const byToolUse = new Map<string, Turn>();
     for (const t of s.turns) for (const u of t.toolUses) byToolUse.set(u.id, t);
+    // Collect per turn first, then store one exact-size array (no per-result copies).
+    const grouped = new Map<Turn, ToolResult[]>();
     for (const tr of results) {
       const t = byToolUse.get(tr.toolUseId);
       if (t === undefined) {
         inc(stats.warnings, 'tool_result without matching tool_use');
         continue;
       }
-      tr.toolName = t.toolUses.find((u) => u.id === tr.toolUseId)?.name;
-      t.toolResults.push(tr);
+      const u = t.toolUses.find((x) => x.id === tr.toolUseId)!;
+      tr.toolUseId = u.id; // share one string instead of a second copy from JSON.parse
+      tr.toolName = u.name;
+      const list = grouped.get(t);
+      if (list === undefined) grouped.set(t, [tr]);
+      else list.push(tr);
     }
+    for (const [t, list] of grouped)
+      t.toolResults =
+        t.toolResults.length === 0
+          ? list.length === 1
+            ? list
+            : list.slice()
+          : t.toolResults.concat(list);
     finalize(s);
     out.push(s);
   }
   return out;
-}
-
-function toTurn(r: PendingResponse, sessionId: string): Turn {
-  return {
-    sessionId,
-    uuid: r.uuid,
-    messageId: r.messageId,
-    requestId: r.requestId,
-    ts: r.ts,
-    gapMs: null,
-    index: 0,
-    model: r.model,
-    ccVersion: r.ccVersion,
-    isSidechain: r.isSidechain,
-    agentId: r.agentId,
-    isSynthetic: r.isSynthetic,
-    usage: r.usage,
-    stopReason: r.stopReason,
-    toolUses: r.toolUses,
-    toolResults: [],
-    blockCounts: r.blockCounts,
-    source: r.source,
-  };
 }
 
 /** Chain of a turn: the main conversation, or one sidechain (per agentId). */
@@ -396,12 +401,18 @@ export function finalize(s: Session): void {
   s.turns.sort(byTs);
   s.prompts.sort(byTs);
   s.events.sort(byTs);
+  // Exact-size copies of the per-session arrays (push leaves up to 50% spare capacity).
+  s.turns = s.turns.slice();
+  s.prompts = s.prompts.slice();
+  s.events = s.events.slice();
   const prev = new Map<string, Turn>();
   for (const t of s.turns) {
     const c = chainOf(t);
     const p = prev.get(c);
     t.index = p === undefined ? 0 : p.index + 1;
-    t.gapMs = p === undefined ? null : t.ts.getTime() - p.ts.getTime();
+    const gap = p === undefined ? null : t.ts.getTime() - p.ts.getTime();
+    // `| 0` keeps small gaps as V8 small integers instead of boxed doubles (memory, SPEC §8).
+    t.gapMs = gap !== null && Math.abs(gap) < 2 ** 30 ? gap | 0 : gap;
     prev.set(c, t);
   }
   const first = s.turns[0];

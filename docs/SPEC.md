@@ -210,6 +210,7 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 - Parse throughput ≥ **100 MB/s** of JSONL on an M-series laptop; 1 GB of logs analyzed in < 15 s; peak RSS < 300 MB (streaming, no full-file loads).
 - `npx ccxray` cold start (cached npx) < 1.5 s for 50 MB of logs.
 - Package size < 1 MB unpacked.
+- Memory regression guard: `test/memory.test.ts` checks heap retained by `loadSessions` per MB of a synthetic corpus (deterministic, unlike peak RSS). Notes on what the parser keeps: FORMAT.md "Parser implementation notes".
 - `bench/perf.ts` generates synthetic corpora (10 MB / 100 MB / 1 GB) and records the results in CI as an artifact (not gating at first).
 - **Savings benchmark** (for README claims, later): Alex's own sessions, before/after applying the fixes over comparable weeks, reporting tokens per assistant turn and the cache hit ratio. Any claim of "equal quality" needs a task-pass-rate benchmark (e.g. a small SWE-bench-lite subset with an API key) and is out of scope until then.
 

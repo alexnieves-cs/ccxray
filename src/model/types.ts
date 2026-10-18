@@ -118,7 +118,10 @@ export interface Turn {
   toolUses: ToolUse[];
   /** tool_results answering this turn's toolUses (joined by id), in log order. */
   toolResults: ToolResult[];
-  /** Number of content blocks by type, e.g. { text: 1, tool_use: 2, thinking: 1 }. */
+  /**
+   * Number of content blocks by type, e.g. { text: 1, tool_use: 2, thinking: 1 }. Read-only: the
+   * parser shares one frozen object per distinct combination (memory, SPEC §8).
+   */
   blockCounts: Record<string, number>;
   /** Pointer to the first JSONL line of this response. */
   source: SourcePointer;
