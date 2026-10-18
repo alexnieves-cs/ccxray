@@ -81,6 +81,8 @@ TOP FINDINGS
 Run `ccxray session 3fa2` for per-turn detail · `--html` for a shareable report
 ```
 
+Default command flags (M2): `--since DATE` (YYYY-MM-DD UTC or ISO date-time; default: 7 days before now), `--until DATE` (inclusive day), `--project NAME`, `--json` (stdout), `--html FILE` (writes the file and prints its path; to stderr when `--json` is also given), `--include-content`, `--root DIR` (repeatable), `--threshold.KEY=VALUE` (repeatable; unknown keys are an error), `--no-color`. Exit codes: 0 success, 1 no sessions in the window (the empty state is still printed), 2 bad arguments.
+
 `session` view: one row per assistant turn with timestamp, gap since the previous turn, model, input, cache write, cache read, output, the tool calls made in that turn, and a flag column (🔁 rebuild, 📄 dup read, 📦 big output).
 
 ## 4. Architecture
@@ -166,9 +168,16 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - Cross-session copies keep the copy whose file sessionId matches the record's envelope `sessionId`, else the earliest file; the sidechain-replay and cross-session rules themselves are from ccusage docs and not yet seen locally.
 - `prompt_snapshot` tool names come from `name` or `schema.name`; `systemPrompt[]` parts are strings or `{text}`.
 
+**Analyzer assumptions added in M2 [UNVERIFIED]** (marked `// UNVERIFIED:` in `src/analyzers/` and `src/tokens/calibrate.ts`):
+- A3 TTL: one `ephemeral_1h` write anywhere earlier in the session's main chain means the cached prefix lives 1 h.
+- A3 config-edit: a mid-session CLAUDE.md edit produces a new `instructions` attachment (Q2); a file counts as edited when its sha256 differs from the latest earlier attachment of the same path (files that only appear do not count).
+- A3 tool-set-change: a new `prompt_snapshot` is logged when the tool set changes (Q3).
+- Calibration: request *n* carries all of turn *n-1*'s output tokens and nothing unlogged besides the tool_result.
+- `scripts/validate-real.ts`: the `ccusage session --json` shape, and that ccusage reports subagent usage under the parent sessionId.
+
 ### 4.5 Token estimator
 - Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.
-- Calibration (M2): on turns where only one new tool_result was added, compare the estimate against the measured delta in `input + cache_write`, and report the median ratio in `doctor`.
+- Calibration (M2, `src/tokens/calibrate.ts`): for consecutive real turns *p → t* of one chain where *p* made exactly one tool call with one result, nothing else was logged in between (no prompt, no event), the model did not change and the result is ≥ 250 estimated tokens: `measured = ctx(t) − ctx(p) − output(p)` with `ctx = input + cache_write + cache_read`, and `ratio = estTokens / measured` (> 1 means chars/4 is high). The median ratio and sample count go into `Report.calibration` and one line of `doctor`. `cache_read` is included (the earlier draft said `input + cache_write` only) because a request's context is the sum of all three fields, and how it splits between them changes from turn to turn; only the growth of the sum is the added content.
 - No network tokenizer calls. An optional offline tokenizer can be plugged in later.
 
 ## 5. Analyzers
@@ -190,6 +199,13 @@ Each analyzer is a pure function with fixtures and snapshot tests. Thresholds ar
 
 Every finding includes evidence pointers (session, turn uuid) so a user can verify it by hand.
 
+**M2 implementation notes.**
+- A1 totals count every deduped, non-synthetic turn of every session, **subagent sessions included** (they are real API spend). They go into `Report.totals`, not findings.
+- A2 checks only main-chain (non-sidechain) turns, so subagent transcripts are never checked. *n-1* is the previous non-synthetic turn. The literal rule needs `cache_read(n-1) > 0`, so a rebuild right after a cold first turn is not detected; with `--since`, the first in-window turn has no in-window *n-1*. A2 and A3 emit **one** aggregated finding (`data.causes`, evidence capped at 50 rebuilds with the largest cache writes; counts stay exact). Severity: high at ≥ 10 rebuilds or ≥ 500k tokens, else warn.
+- A3 tool-set-change [E]: a `prompt_snapshot` whose tool names differ from the previous snapshot, else tool names used at turn *n* that no earlier turn used and no earlier snapshot listed.
+- A5 tokens are the inline estimate. A `<persisted-output>` result also qualifies when its reported full size is ≥ threshold × 4 bytes; its full size goes to `data.persistedBytes`. Bash commands are grouped by their first two words after `VAR=value`, `env` and a leading `cd <dir> &&`.
+- A6: one finding per (session, file path); different offset/limit ranges of a file are separate read keys but are reported together. A compaction resets the read history; a read whose result `is_error` does not count. Paths are relative to the session cwd, else a leading home directory is shown as `~`.
+
 ## 6. Milestones and acceptance tests
 
 | M | Scope | Acceptance (all automated unless noted) |
@@ -206,7 +222,7 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 - **Generator:** `scripts/make-fixture.ts` builds sessions from a compact DSL, so tests can declare the expected findings.
 - **Scrubber:** `scripts/scrub-fixture.ts` replaces text, paths and ids with deterministic hashes while keeping lengths and usage, so a real log can be turned into a shareable fixture.
 - **Unit tests** per analyzer; **snapshot tests** per reporter; **property tests** (fast-check) that the parser never throws.
-- **Real-log validation** (local only, never in CI): `pnpm validate:real` runs on `~/.claude` and prints parse stats, a ccusage cross-check and a finding sample.
+- **Real-log validation** (local only, never in CI): `pnpm validate:real [--root DIR] [--ccusage FILE]` runs on the default roots and prints parse stats, per-analyzer finding counts, A1 totals and, with a saved `npx ccusage@latest session --json` output, a per-session and total ±0.5% comparison. Counts only; session ids are hashed. The script never runs npx itself.
 - **No-network test** in CI (see M0).
 
 ## 8. Benchmarks and performance targets
