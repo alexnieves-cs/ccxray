@@ -1,12 +1,13 @@
 import { parseArgs } from 'node:util';
 import { doctor } from './commands/doctor.js';
+import { sessionCommand } from './commands/session.js';
 import { VERSION } from './version.js';
 
 const HELP = `ccxray ${VERSION}: explain where your Claude Code tokens go (local only, no network)
 
 Usage:
   ccxray [--since DATE] [--project NAME] [--json] [--html FILE]
-  ccxray session <id|latest>
+  ccxray session <id|prefix|latest> [--root DIR]... [--json] [--threshold.KEY=N]
   ccxray doctor [--root DIR]... [--json]
 
 Options:
@@ -34,6 +35,7 @@ export async function main(
     out(`${VERSION}\n`);
     return 0;
   }
+  if (positionals[0] === 'session' && !values.help) return sessionCommand(argv, out);
   if (positionals[0] === 'doctor' && !values.help) {
     const roots = (values.root as unknown[] | undefined)?.filter(
       (r): r is string => typeof r === 'string',
