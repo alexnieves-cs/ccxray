@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process';
+import { copyFileSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { compressBashOutput, SLIM_MARKER } from '../src/slim/compress.js';
@@ -48,6 +50,22 @@ describe('compressBashOutput', () => {
     const at = lines.indexOf(failures[0]!);
     expect(r.text).toContain(lines[at - 1]);
     expect(r.text).toContain(lines[at + 2]);
+  });
+
+  it('keeps pytest E lines, Jest ● headers, ESLint ✖ summaries and assert lines', () => {
+    const failures = [
+      'E       assert 41 == 42',
+      'E         +  where 41 = compute()',
+      '  ● Footer › renders the copyright line',
+      '✖ 3 problems (3 errors, 0 warnings)',
+      '    assert len(rows) == 3',
+    ];
+    const lines = filler(400);
+    failures.forEach((f, k) => lines.splice(60 + k * 60, 0, f));
+    const r = compressBashOutput(lines.join('\n'), T);
+    expect(r.stats.changed).toBe(true);
+    for (const f of failures) expect(r.text).toContain(f);
+    expect(r.stats.failureLines).toBe(failures.length);
   });
 
   it('keeps a long failure line whole but cuts other long lines', () => {
@@ -161,6 +179,22 @@ describe('hooks/cc-slim-posttooluse.mjs (built dist/slim.js)', () => {
     expect(run(JSON.stringify(base))).toBe('');
     expect(run(JSON.stringify({ ...base, tool_name: 'Read', tool_response: big }))).toBe('');
     expect(run('not json')).toBe('');
+  });
+
+  it('fails open when dist/slim.js cannot be loaded', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ccxray-hook-'));
+    mkdirSync(join(dir, 'hooks'));
+    const copy = join(dir, 'hooks', 'cc-slim-posttooluse.mjs');
+    copyFileSync(hook, copy);
+    const runCopy = (input: string, args: string[] = []): string =>
+      execFileSync(process.execPath, [copy, ...args], { input, encoding: 'utf8' });
+    expect(runCopy(big, ['--filter'])).toBe(big);
+    const hookInput = JSON.stringify({
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Bash',
+      tool_response: { stdout: big },
+    });
+    expect(runCopy(hookInput)).toBe('');
   });
 
   it('--filter compresses plain stdin', () => {

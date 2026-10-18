@@ -45,6 +45,10 @@ const FAILURE: RegExp[] = [
   /[✗✘❌]|^\s*×\s/,
   /\bexit(ed)?( with)?( exit)? (code|status):? *[1-9]/i,
   /\bnon-zero exit\b/i,
+  /^E\s{2,}/, // pytest assertion detail lines
+  /●/, // Jest failure headers
+  /✖/, // ESLint problem summary
+  /\bassert\b/, // Python/C/Node assert lines
 ];
 const FRAME: RegExp[] = [
   /^\s+at\s+\S/, // JS, Java, C#

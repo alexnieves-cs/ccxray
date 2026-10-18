@@ -21,7 +21,7 @@ failures, the command's first lines (what ran) and the last lines (the summary).
 
 1. Outputs at or under `threshold` chars (default 20,000) are returned **unchanged**.
 2. **Failure lines are never dropped.** Any line matching `error`, `fail`/`failed`/`failing`,
-   `fatal`, `panic`, `exception`, `Traceback`, `assertion`, `npm ERR!`, `FooError:`, `✗ ✘ ❌ ×`,
+   `fatal`, `panic`, `exception`, `Traceback`, `assertion`, `npm ERR!`, `FooError:`, `✗ ✘ ❌ ×`, Jest `●`, ESLint `✖`, pytest `E   …` lines, `assert`,
    or `exit code N` / `exited with status N` (N ≠ 0) is kept verbatim, with 2 lines of context
    on each side. Failure lines are never cut, even when very long.
 3. The first `headLines` (30) and last `tailLines` (60) lines are kept. A known non-zero exit
