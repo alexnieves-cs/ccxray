@@ -4,26 +4,31 @@
 // externalized it (`<persisted-output>`, FORMAT.md Q1) and the reported full size would have
 // been ≥ bigToolOutputTokens × 4 bytes. Tokens are always the *inline* estimate (chars / 4), the
 // part that entered the context; the full size of persisted outputs goes to data.persistedBytes.
-// Grouped by tool name, and for Bash by the normalized command (first two words). All sessions
-// count, subagents included: their context is billed too. Estimated.
+// Grouped by tool name, and for Bash by the normalized command (normalizeCommand). All sessions
+// count, subagents included: their context is billed too. Reads that A6 reports as repeats are
+// left to A6, so WHERE IT WENT never counts one result twice. Estimated.
 import type { Analyzer, Finding, Session, ToolResult, Turn } from '../model/index.js';
 import { CHARS_PER_TOKEN } from '../tokens/estimate.js';
-import { formatCompact, formatInt } from '../reporters/format.js';
-import { evidenceFor, MAX_EVIDENCE, plural, type Evidence } from './util.js';
+import { formatCompact, formatInt, shortCommand } from '../reporters/format.js';
+import { repeatedReadToolUseIds } from './repeated-read.js';
+import { displayPath, evidenceFor, maskHome, MAX_EVIDENCE, plural, type Evidence } from './util.js';
 
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+// Leading `cd <dir> &&` or `cd <dir>;` (Claude Code often prefixes one); dir may be quoted.
+const CD_PREFIX = /^\s*cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*/;
 
 /**
- * First two words of a Bash command, after leading `VAR=value` assignments and an `env` prefix,
- * and after a leading `cd <dir> &&` (Claude Code often prefixes one). Whitespace split only: this
- * is a grouping key, and reporters shorten it again (src/reporters/format.ts shortCommand).
+ * Grouping key and display form of a Bash command (CLAUDE.md rule 4, SPEC §9): leading
+ * `cd <dir> &&` / `cd <dir>;` prefixes are dropped, then shortCommand() keeps the first two words
+ * after env assignments and prefixes and shows any word containing `=` as `…`; path words are
+ * shown relative to `cwd`, and any home directory as `~`. Never holds more than that.
  */
-export function normalizeCommand(command: string): string {
-  let words = command.trim().split(/\s+/).filter(Boolean);
-  if (words[0] === 'cd' && words[2] === '&&') words = words.slice(3);
-  let i = 0;
-  while (i < words.length && (ASSIGNMENT.test(words[i]!) || words[i] === 'env')) i++;
-  return words.slice(i, i + 2).join(' ');
+export function normalizeCommand(command: string, cwd?: string): string {
+  let c = command;
+  while (CD_PREFIX.test(c)) c = c.replace(CD_PREFIX, '');
+  return shortCommand(c)
+    .split(' ')
+    .map((w) => maskHome(/[/\\]/.test(w) ? displayPath(w, cwd) : w))
+    .join(' ');
 }
 
 interface Hit {
@@ -38,7 +43,7 @@ interface Group {
   hits: Hit[];
 }
 
-function toolOf(turn: Turn, r: ToolResult): { tool: string; command?: string } {
+function toolOf(turn: Turn, r: ToolResult, cwd?: string): { tool: string; command?: string } {
   const use = turn.toolUses.find((u) => u.id === r.toolUseId);
   const tool = r.toolName ?? use?.name ?? '(unknown tool)';
   if (tool !== 'Bash') return { tool };
@@ -49,7 +54,7 @@ function toolOf(turn: Turn, r: ToolResult): { tool: string; command?: string } {
       : undefined;
   return {
     tool,
-    command: typeof cmd === 'string' ? normalizeCommand(cmd) || '(empty)' : '(unknown)',
+    command: typeof cmd === 'string' ? normalizeCommand(cmd, cwd) || '(empty)' : '(unknown)',
   };
 }
 
@@ -73,12 +78,15 @@ export const bigToolOutput: Analyzer = {
   run(sessions, ctx) {
     const min = ctx.thresholds.bigToolOutputTokens;
     const groups = new Map<string, Group>();
+    // A Read that A6 reports as a repeat is counted there only, never in both.
+    const repeats = repeatedReadToolUseIds(sessions);
     for (const session of sessions)
       for (const turn of session.turns)
         for (const result of turn.toolResults) {
           const full = result.persisted?.reportedBytes ?? 0;
           if (result.estTokens < min && full < min * CHARS_PER_TOKEN) continue;
-          const { tool, command } = toolOf(turn, result);
+          if (repeats.has(result.toolUseId)) continue;
+          const { tool, command } = toolOf(turn, result, session.cwd);
           const key = `${tool}\u0000${command ?? ''}`;
           const g = groups.get(key) ?? { tool, command, hits: [] };
           g.hits.push({ session, turn, result });
@@ -87,7 +95,7 @@ export const bigToolOutput: Analyzer = {
     const findings: Finding[] = [];
     for (const g of groups.values()) {
       const tokens = g.hits.reduce((a, h) => a + h.result.estTokens, 0);
-      const maxChars = Math.max(...g.hits.map((h) => h.result.chars));
+      const maxChars = g.hits.reduce((m, h) => Math.max(m, h.result.chars), 0);
       const persisted = g.hits.filter((h) => h.result.persisted);
       const label = g.command !== undefined ? `\`${g.command}\`` : g.tool;
       const evidence: Evidence[] = [...g.hits]
