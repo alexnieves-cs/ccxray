@@ -10,8 +10,16 @@ const n = (x: number): string => x.toLocaleString('en-US');
 const fit = (s: string): string =>
   s.length <= WIDTH ? s : `${s.slice(0, 40)}…${s.slice(s.length - (WIDTH - 41))}`;
 
+/** Keys come from the logs: show control characters as \xNN so they cannot drive the terminal. */
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g;
+const esc = (s: string): string =>
+  s.replace(CONTROL, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
+
 function table(title: string, m: Record<string, number>): string[] {
-  const rows = Object.entries(m).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  const rows = Object.entries(m)
+    .map(([k, v]): [string, number] => [esc(k), v])
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
   if (rows.length === 0) return [`${title}: none`];
   const w = Math.min(60, Math.max(...rows.map(([k]) => k.length)));
   return [`${title}:`, ...rows.map(([k, v]) => fit(`  ${k.padEnd(w)}  ${n(v).padStart(10)}`))];
@@ -34,7 +42,7 @@ export async function doctor(
   if (stats.roots.length === 0) {
     lines.push(
       'No Claude Code log directories found. Checked:',
-      ...roots.map((r) => fit(`  ${r}`)),
+      ...roots.map((r) => fit(`  ${esc(r)}`)),
     );
     out(`${lines.join('\n')}\n`);
     return 1;
@@ -49,7 +57,7 @@ export async function doctor(
   const d = stats.dedupe;
   lines.push(
     'Roots:',
-    ...stats.roots.map((r) => fit(`  ${r}`)),
+    ...stats.roots.map((r) => fit(`  ${esc(r)}`)),
     `Files: ${n(stats.files)} · ${(stats.bytes / 1e6).toFixed(1)} MB`,
     `Lines: ${n(stats.lines)} · blank ${n(stats.blankLines)} · malformed ${n(stats.malformedLines)}`,
     `Sessions: ${n(sessions.length)} (${n(subagents)} subagent) · assistant turns ${n(turns)}` +

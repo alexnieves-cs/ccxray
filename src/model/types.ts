@@ -38,9 +38,14 @@ export interface ToolUse {
   id: string;
   /** Tool name, e.g. `Bash`, `Read`, `mcp__github__create_issue`. */
   name: string;
-  /** Raw `tool_use.input`. Analyzers may read it; reporters must not print it without --include-content. */
+  /**
+   * `tool_use.input`. Raw with includeContent; otherwise slim: only primitive values of
+   * file_path/notebook_path/offset/limit (Read, Edit, Write, MultiEdit, NotebookEdit), command
+   * (Bash), pattern/path/glob/head_limit (Grep, Glob), subagent_type/model (Agent, Task), and `{}`
+   * for other tools. Reporters must not print it without --include-content.
+   */
   input: unknown;
-  /** `JSON.stringify(input).length`. */
+  /** `JSON.stringify(input).length` of the raw input (raw line length if it cannot be stringified). */
   inputChars: number;
 }
 
@@ -84,9 +89,13 @@ export interface Turn {
   requestId?: string;
   /** Timestamp of the first line of this response. */
   ts: Date;
-  /** ms since the previous turn's ts in the same session (null for the first turn). */
+  /**
+   * ms since the previous turn's ts in the same chain of this session (null for the chain's first
+   * turn). A chain is the main conversation or one sidechain (per agentId). Session-wide: not
+   * recomputed by since/until filtering.
+   */
   gapMs: number | null;
-  /** 0-based index among this session's turns, in timestamp order. */
+  /** 0-based index among the turns of the same chain, in timestamp order. Session-wide, like gapMs. */
   index: number;
   /** `message.model`. `<synthetic>` for client-side error turns. */
   model: string;

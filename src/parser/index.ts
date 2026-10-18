@@ -6,9 +6,14 @@ import { discover } from '../discover.js';
 import type { ParseStats, Session } from '../model/index.js';
 import { dedupeAcrossFiles } from './dedupe.js';
 import { counter, inc, isRec, str } from './records.js';
-import { buildSessions, FileParser, finalize, type FileData } from './session.js';
+import { buildSessions, FileParser, type FileData } from './session.js';
 import { emptyCounts, streamJsonl } from './stream.js';
 
+/**
+ * since/until keep only turns (and prompts/events) inside the window. `index`, `gapMs`,
+ * `firstTs` and `lastTs` stay as computed for the whole session, so the first in-window turn
+ * still shows its real gap (e.g. a cache rebuild right at the window start).
+ */
 export interface LoadOptions {
   /** Projects roots; defaults to `defaultRoots()`. */
   roots?: string[];
@@ -60,12 +65,11 @@ export async function loadSessions(
   stats.blankLines = counts.blankLines;
   stats.malformedLines = counts.malformedLines;
   if (counts.readErrors > 0) stats.warnings['file read error'] = counts.readErrors;
+  if (counts.oversizedLines > 0)
+    stats.warnings['line over 64 MB (skipped, counted as malformed)'] = counts.oversizedLines;
   if (counts.handlerErrors > 0) stats.warnings['internal parser error'] = counts.handlerErrors;
 
-  const kept = dedupeAcrossFiles(
-    files.map((f) => f.responses),
-    stats,
-  );
+  const kept = dedupeAcrossFiles(files, stats);
   const sessions = buildSessions(files, kept, stats);
   return { sessions: filterSessions(sessions, opts), stats };
 }
@@ -99,9 +103,6 @@ function filterSessions(sessions: Session[], opts: LoadOptions): Session[] {
       if (s.turns.length === 0) continue;
       s.prompts = s.prompts.filter((p) => inWindow(p.ts));
       s.events = s.events.filter((e) => inWindow(e.ts));
-      s.firstTs = s.turns[0]!.ts;
-      s.lastTs = s.turns[s.turns.length - 1]!.ts;
-      finalize(s);
     }
     out.push(s);
   }

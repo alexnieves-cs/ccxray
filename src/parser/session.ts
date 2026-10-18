@@ -13,7 +13,7 @@ import type {
   UserPrompt,
 } from '../model/index.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
-import { addAssistantLine, type PendingResponse } from './dedupe.js';
+import { addAssistantLine, jsonLength, type PendingResponse } from './dedupe.js';
 import {
   contentChars,
   contentText,
@@ -75,6 +75,7 @@ export class FileParser {
   readonly data: FileData;
   private readonly responses = new Map<string, PendingResponse>();
   private lastTs: Date | undefined;
+  private rawLength = 0;
 
   constructor(
     file: DiscoveredFile,
@@ -94,8 +95,9 @@ export class FileParser {
 
   private warn = (key: string): void => inc(this.stats.warnings, key);
 
-  onRecord = (r: Rec, line: number): void => {
+  onRecord = (r: Rec, line: number, rawLength = 0): void => {
     const { stats, data: d } = this;
+    this.rawLength = rawLength;
     const type = typeof r.type === 'string' ? r.type : '(missing)';
     inc(stats.recordTypes, type);
     if (!isKnownType(type)) inc(stats.unknownRecordTypes, type);
@@ -119,7 +121,11 @@ export class FileParser {
 
     if (isAssistantRecord(r)) {
       if (own === undefined) this.warn('assistant without timestamp');
-      addAssistantLine(this.responses, r, ts, source, stats, this.warn);
+      addAssistantLine(
+        this.responses,
+        { r, ownTs: own, ts, source, rawLength },
+        { stats, warn: this.warn, includeContent: this.includeContent },
+      );
     } else if (isUserRecord(r)) this.user(r, ts, source);
     else if (isAttachmentRecord(r)) this.attachment(r, ts, source);
     else if (isSystemRecord(r)) {
@@ -201,13 +207,14 @@ export class FileParser {
       }
       this.data.events.push({ kind: 'instructions', ts, files, source });
     } else if (a.type === 'prompt_snapshot' && Array.isArray(a.tools)) {
+      const fallback = this.rawLength;
       const tools = a.tools.map((t: unknown) => ({
         // UNVERIFIED: tool entries other than `{name, description, schema}` (FORMAT.md Q3).
         name:
           (isRec(t)
             ? (str(t.name) ?? (isRec(t.schema) ? str(t.schema.name) : undefined))
             : undefined) ?? '(unnamed)',
-        chars: JSON.stringify(t).length,
+        chars: jsonLength(t, fallback),
       }));
       const ev: SessionEvent = { kind: 'tools-snapshot', ts, tools, source };
       // UNVERIFIED: `systemPrompt[]` parts are strings or `{text}` objects.
@@ -263,7 +270,15 @@ export function buildSessions(
 ): Session[] {
   const sessions = new Map<
     string,
-    { s: Session; results: ToolResult[]; links: Map<string, string>; metaToolUseId?: string }
+    {
+      s: Session;
+      results: ToolResult[];
+      links: Map<string, string>;
+      metaToolUseId?: string;
+      /** Keys already merged: the same file can be reached from two roots (e.g. ~/.claude and
+       * ~/.config/claude), so prompts, events and tool_results are deduped on merge. */
+      seen: Set<string>;
+    }
   >();
   files.forEach((f, i) => {
     const ident = sessionIdentity(f);
@@ -280,7 +295,7 @@ export function buildSessions(
         lastTs: f.lastTs ?? EPOCH,
         ccVersions: [],
       };
-      g = { s, results: [], links: new Map() };
+      g = { s, results: [], links: new Map(), seen: new Set() };
       sessions.set(ident.id, g);
     }
     const s = g.s;
@@ -290,9 +305,20 @@ export function buildSessions(
     if (f.firstTs !== undefined && (s.firstTs === EPOCH || f.firstTs < s.firstTs))
       s.firstTs = f.firstTs;
     if (f.lastTs !== undefined && f.lastTs > s.lastTs) s.lastTs = f.lastTs;
-    s.prompts.push(...f.prompts);
-    s.events.push(...f.events);
-    g.results.push(...f.toolResults);
+    const seen = g.seen;
+    const fresh = (key: string): boolean => {
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    };
+    for (const p of f.prompts) if (fresh(`p|${p.uuid}`)) s.prompts.push(p);
+    for (const e of f.events)
+      if (
+        fresh(`e|${e.kind}|${'uuid' in e ? (e.uuid ?? '') : ''}|${e.ts.getTime()}|${e.source.line}`)
+      )
+        s.events.push(e);
+    for (const tr of f.toolResults)
+      if (fresh(`r|${tr.toolUseId}|${tr.recordUuid ?? `${tr.ts?.getTime()}`}`)) g.results.push(tr);
     for (const [a, id] of f.agentLinks) g.links.set(a, id);
     g.metaToolUseId ??= f.metaToolUseId;
     for (const r of kept[i] ?? []) {
@@ -359,15 +385,25 @@ function toTurn(r: PendingResponse, sessionId: string): Turn {
   };
 }
 
-/** Sort by ts (stable), set index and gapMs, and widen firstTs/lastTs to the turns. */
+/** Chain of a turn: the main conversation, or one sidechain (per agentId). */
+const chainOf = (t: Turn): string => (t.isSidechain ? `side:${t.agentId ?? ''}` : 'main');
+
+/**
+ * Sort by ts (stable); set index and gapMs per chain (main vs each sidechain agent, so sidechain
+ * turns inside a main file do not split main-chain gaps); widen firstTs/lastTs to the turns.
+ */
 export function finalize(s: Session): void {
   s.turns.sort(byTs);
   s.prompts.sort(byTs);
   s.events.sort(byTs);
-  s.turns.forEach((t, i) => {
-    t.index = i;
-    t.gapMs = i === 0 ? null : t.ts.getTime() - s.turns[i - 1]!.ts.getTime();
-  });
+  const prev = new Map<string, Turn>();
+  for (const t of s.turns) {
+    const c = chainOf(t);
+    const p = prev.get(c);
+    t.index = p === undefined ? 0 : p.index + 1;
+    t.gapMs = p === undefined ? null : t.ts.getTime() - p.ts.getTime();
+    prev.set(c, t);
+  }
   const first = s.turns[0];
   const last = s.turns[s.turns.length - 1];
   if (first !== undefined && (s.firstTs === EPOCH || first.ts < s.firstTs)) s.firstTs = first.ts;

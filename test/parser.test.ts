@@ -353,13 +353,15 @@ describe('loadSessions options', () => {
     expect(d.turns[1]!.toolResults.map((r) => r.text)).toEqual([undefined, undefined]);
   });
 
-  it('since/until filter turns, re-index, and drop empty sessions', async () => {
+  it('since/until filter turns, keep session-wide index/gapMs, and drop empty sessions', async () => {
     const since = new Date('2026-10-01T09:00:30.000Z');
     const s = only((await load('ttl-gap-rebuild', { since })).sessions);
+    // Regression (review #4): the first in-window turn keeps its real 32 s gap and index 1.
     expect(s.turns.map((t) => [t.index, t.gapMs])).toEqual([
-      [0, null],
-      [1, 362_000],
+      [1, 32_000],
+      [2, 362_000],
     ]);
+    expect(s.firstTs.toISOString()).toBe('2026-10-01T09:00:00.000Z');
     const until = new Date('2026-10-01T09:00:10.000Z');
     expect(only((await load('ttl-gap-rebuild', { until })).sessions).turns).toHaveLength(1);
     expect((await load('ttl-gap-rebuild', { since: new Date('2026-10-02') })).sessions).toEqual([]);

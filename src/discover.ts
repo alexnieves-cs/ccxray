@@ -63,13 +63,23 @@ export async function discover(roots: string[] = defaultRoots()): Promise<Discov
     if (!st?.isDirectory()) continue;
     seenRoots.add(rp);
     out.roots.push(root);
-    await walk(root, root, out, seenFiles);
+    await walk(root, root, out, seenFiles, new Set());
   }
   out.files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return out;
 }
 
-async function walk(dir: string, root: string, out: Discovery, seen: Set<string>): Promise<void> {
+/** Symlinked files and dirs are followed; `seenDirs` (realpaths) makes link loops safe. */
+async function walk(
+  dir: string,
+  root: string,
+  out: Discovery,
+  seen: Set<string>,
+  seenDirs: Set<string>,
+): Promise<void> {
+  const rdir = real(dir);
+  if (rdir === undefined || seenDirs.has(rdir)) return;
+  seenDirs.add(rdir);
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -82,8 +92,19 @@ async function walk(dir: string, root: string, out: Discovery, seen: Set<string>
   const names = new Set(entries.map((e) => e.name));
   for (const e of entries) {
     const p = join(dir, e.name);
-    if (e.isDirectory()) await walk(p, root, out, seen);
-    else if (e.isFile() && e.name.endsWith('.jsonl')) {
+    let isDir = e.isDirectory();
+    let isFile = e.isFile();
+    if (e.isSymbolicLink()) {
+      const target = await stat(p).catch(() => undefined);
+      if (target === undefined) {
+        out.errors++;
+        continue;
+      }
+      isDir = target.isDirectory();
+      isFile = target.isFile();
+    }
+    if (isDir) await walk(p, root, out, seen, seenDirs);
+    else if (isFile && e.name.endsWith('.jsonl')) {
       const rp = real(p);
       const st = await stat(p).catch(() => undefined);
       if (rp === undefined || st === undefined) {

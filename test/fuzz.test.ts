@@ -1,5 +1,6 @@
 // Property test (SPEC §6 M1, §7): randomly mutated lines never make loadSessions throw, and the
-// line counters add up. 10 runs × 100 lines = 1,000 mutated lines per test run.
+// line counters add up. 10 runs × 100 lines = 1,000 mutated lines per test run, including
+// 20k-deep nesting and ~1 MB lines.
 
 import fc from 'fast-check';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -45,7 +46,12 @@ const value = fc.oneof(
 );
 const mutation = fc.record({
   line: fc.nat(),
-  op: fc.integer({ min: 0, max: 5 }),
+  // 0-5: structural mutations; 6: 20k-deep nesting; 7: a ~1 MB line. Weighted to keep runs fast.
+  op: fc.oneof(
+    { weight: 14, arbitrary: fc.integer({ min: 0, max: 5 }) },
+    fc.constant(6),
+    fc.constant(7),
+  ),
   path: fc.array(fc.nat(), { maxLength: 6 }),
   val: value,
   cut: fc.nat(),
@@ -72,8 +78,13 @@ function locate(root: Node, path: number[]): [Node, string | number] | undefined
   return hit;
 }
 
+const DEEP = `${'['.repeat(20_000)}${']'.repeat(20_000)}`;
+
 function mutate(m: Mutation): string {
   const src = BASE[m.line % BASE.length]!;
+  // Deep nesting: JSON.parse accepts it but JSON.stringify of it throws (review #6).
+  if (m.op === 6) return src.replace(/"(input|content|usage|attachment)":/, `"$1":${DEEP},"was":`);
+  if (m.op === 7) return `${src.slice(0, -1)},"pad":"${'x'.repeat(1_000_000)}"}`;
   if (m.op === 0) return src.slice(0, m.cut % (src.length + 1));
   if (m.op === 4) return m.garbage;
   const obj = JSON.parse(src) as Record<string, unknown>;
@@ -136,7 +147,8 @@ describe('fuzz', () => {
             expect(Number.isNaN(t.ts.getTime())).toBe(false);
           }
       }),
-      { numRuns: 10 },
+      // Fixed seed so CI is reproducible; fast-check prints the seed and counterexample on failure.
+      { numRuns: 10, seed: 20261018 },
     );
   });
 });

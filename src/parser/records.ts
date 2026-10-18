@@ -123,3 +123,34 @@ export function readUsage(u: unknown): Usage | undefined {
   if (wf !== undefined) usage.webFetchRequests = wf;
   return usage;
 }
+
+const FILE_KEYS = ['file_path', 'notebook_path', 'offset', 'limit'];
+const SEARCH_KEYS = ['pattern', 'path', 'glob', 'head_limit'];
+const AGENT_KEYS = ['subagent_type', 'model'];
+const SLIM_KEYS: Record<string, readonly string[]> = Object.assign(Object.create(null), {
+  Read: FILE_KEYS,
+  Edit: FILE_KEYS,
+  Write: FILE_KEYS,
+  MultiEdit: FILE_KEYS,
+  NotebookEdit: FILE_KEYS,
+  Bash: ['command'],
+  Grep: SEARCH_KEYS,
+  Glob: SEARCH_KEYS,
+  Agent: AGENT_KEYS,
+  Task: AGENT_KEYS,
+});
+
+/**
+ * Without includeContent, tool_use input is reduced to the few primitive fields analyzers need
+ * (paths, offsets, the Bash command, search patterns, subagent type/model); everything else is
+ * dropped to bound memory. Non-object input becomes undefined.
+ */
+export function slimToolInput(name: string, input: unknown): Rec | undefined {
+  if (!isRec(input)) return undefined;
+  const out: Rec = {};
+  for (const k of SLIM_KEYS[name] ?? []) {
+    const v = input[k];
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+  }
+  return out;
+}
