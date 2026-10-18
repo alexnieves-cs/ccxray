@@ -44,11 +44,29 @@ const OUTBOUND: { name: string; re: RegExp }[] = [
   { name: 'undici', re: /undici/ },
   { name: 'WebSocket', re: /\bWebSocket\b/ },
   { name: 'import of node:https', re: /["'](?:node:)?(https|net|tls|dgram|http2|dns)["']/ },
+  { name: '.request(', re: /\.\s*request\s*\(/ },
+  { name: '.get(', re: /\.\s*get\s*\(/ },
+  { name: 'Agent', re: /\bAgent\b/ },
 ];
+
+const NET_MOD = '(?:node:)?(?:http|https|net|tls|dgram|http2|dns)';
 
 /** Problems in the capture bundle: outbound calls, other network modules, non-loopback listen. */
 export function scanCapture(src: string): string[] {
   const hits = OUTBOUND.filter((p) => p.re.test(src)).map((p) => p.name);
+  // The only network import allowed is `import { createServer } from "(node:)http"`, plus
+  // type-only imports (erased by the bundler anyway). Named, namespace, default and side-effect
+  // imports, require() and import() of a network module are all flagged.
+  const imports = new RegExp(`import\\s*([^;'"]*?)\\s*(?:from\\s*)?["'](${NET_MOD})["']`, 'g');
+  for (const m of src.matchAll(imports)) {
+    const clause = m[1]!.trim();
+    const ok =
+      clause.startsWith('type ') ||
+      (/^(?:node:)?http$/.test(m[2]!) && /^\{\s*createServer\s*\}$/.test(clause));
+    if (!ok) hits.push('network import other than { createServer }');
+  }
+  if (new RegExp(`(?:require|import)\\s*\\(\\s*["']${NET_MOD}["']`).test(src))
+    hits.push('network import other than { createServer }');
   for (const m of src.matchAll(/\.listen\(([^)]*)\)/g))
     if (!/^\s*[\w$.]+\s*,\s*["']127\.0\.0\.1["']/.test(m[1]!))
       hits.push('listen without 127.0.0.1');
@@ -104,6 +122,24 @@ describe('no-network', () => {
     expect(scanCapture(`${ok}\nserver.listen(8080)`)).toContain('listen without 127.0.0.1');
     expect(scanCapture(`${ok}\nserver.listen(p, "0.0.0.0")`)).toContain('listen without 127.0.0.1');
     expect(scanCapture(`import https from "node:https";`)).toContain('import of node:https');
+    expect(scanCapture(`import type { Server } from "node:http";\n${ok}`)).toEqual([]);
+    // Each of these scanned clean before the review fix.
+    const bad = 'network import other than { createServer }';
+    expect(scanCapture(`import { request } from "node:http";\nrequest(u);`)).toContain(bad);
+    expect(scanCapture(`import { createServer, request } from "http";`)).toContain(bad);
+    expect(scanCapture(`import * as h from "node:http";\nh.request(u);`)).toEqual(
+      expect.arrayContaining([bad, '.request(']),
+    );
+    expect(scanCapture(`import h from "http";`)).toContain(bad);
+    expect(scanCapture(`import "node:http";`)).toContain(bad);
+    expect(scanCapture(`const h = require("node:http");`)).toContain(bad);
+    expect(scanCapture(`${ok}\nh.get(u, cb)`)).toContain('.get(');
+    expect(scanCapture(`${ok}\nnew Agent({ keepAlive: true })`)).toContain('Agent');
+    // The main-bundle scanner already flags named and namespace imports.
+    expect(scanSource(`import { request } from "node:http";`)).toContain(
+      'import of a network module',
+    );
+    expect(scanSource(`import * as h from "http";`)).toContain('import of a network module');
   });
 
   it('runtime dependencies are on the allowlist', () => {
