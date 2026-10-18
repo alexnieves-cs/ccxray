@@ -81,7 +81,7 @@ TOP FINDINGS
 Run `ccxray session 3fa2` for per-turn detail · `--html` for a shareable report
 ```
 
-`session` view: one row per assistant turn with timestamp, gap since the previous turn, model, input, cache write, cache read, output, the tool calls made in that turn, and a flag column (🔁 rebuild, 📄 dup read, 📦 big output).
+`session` view: one row per assistant turn with timestamp, gap since the previous turn, model, input, cache write, cache read, output, the tool calls made in that turn, and a flag column (🔁 rebuild, 📄 dup read, 📦 big output; `R`/`D`/`B` with NO_COLOR or a non-UTF-8 locale). A `*` after the gap marks a gap longer than the cache TTL. Subagents are summarized after the table. `--json` prints the rows; thresholds: [docs/THRESHOLDS.md](THRESHOLDS.md).
 
 ## 4. Architecture
 
@@ -123,7 +123,7 @@ type Finding = {
 };
 ```
 
-**Finding.data conventions (provisional, reporters ↔ analyzers).** `Finding.data` is analyzer-specific, but reporters read three keys when present and well-formed: `causes: { cause, count, tokens?, fix? }[]` (per-cause breakdown, e.g. A2/A3; `tokens` has the finding's kind), `tool: string` (tool name; groups "where it went" by tool) and `command: string` (raw Bash command; reporters only show its first two words, never env assignments). Without `--include-content`, the JSON report keeps only those keys plus number/boolean scalars and strings of at most 80 chars. This contract may change until M4; the source of truth is the comment at the top of `src/reporters/derive.ts`.
+**Finding.data conventions (provisional, reporters ↔ analyzers).** `Finding.data` is analyzer-specific, but reporters read three keys when present and well-formed: `causes: { cause, count, tokens?, fix? }[]` (per-cause breakdown, e.g. A2/A3; `tokens` has the finding's kind), `tool: string` (tool name; groups "where it went" by tool) and `command: string` (raw Bash command; reporters only show its first two words, never env assignments). Without `--include-content`, the JSON report keeps only those keys plus number/boolean scalars and strings of at most 80 chars. This contract may change until M4; the source of truth is the comment at the top of `src/reporters/derive.ts`. A7's per-MCP-server data is a fixed contract consumed by M5 `ccxray fix mcp`: `{ server, unusedTools, usedTools, defChars? }` with full `mcp__server__tool` names (see `src/analyzers/tool-usage.ts`).
 
 ### 4.2 Transcript format: what is known
 Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusage's Claude adapter docs ([rust/adapters/claude/src/README.md](https://github.com/ccusage/ccusage/blob/main/rust/adapters/claude/src/README.md)) **[M: documented by a widely used parser]**; the Anthropic Messages API `usage` object ([docs](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching)).
@@ -166,6 +166,11 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - Cross-session copies keep the copy whose file sessionId matches the record's envelope `sessionId`, else the earliest file; the sidechain-replay and cross-session rules themselves are from ccusage docs and not yet seen locally.
 - `prompt_snapshot` tool names come from `name` or `schema.name`; `systemPrompt[]` parts are strings or `{text}`.
 
+**Analyzer assumptions added in M4 [UNVERIFIED]** (marked `// UNVERIFIED:` in `src/analyzers/`):
+- A7: a `prompt_snapshot`'s `tools[]` lists every tool sent on a cold turn (deferred tools may be missing), so a tool counts as defined only when some snapshot lists it (Q3).
+- A7: in `mcp__<server>__<tool>`, the server name ends at the first `__` after `mcp__`.
+- A8: compaction markers with no assistant turn between them belong to one compaction (Q5).
+
 ### 4.5 Token estimator
 - Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.
 - Calibration (M2): on turns where only one new tool_result was added, compare the estimate against the measured delta in `input + cache_write`, and report the median ratio in `doctor`.
@@ -183,7 +188,7 @@ Each analyzer is a pure function with fixtures and snapshot tests. Thresholds ar
 | A4 | **fixed-overhead** | First assistant turn of each session: `input + cache_write + cache_read` = baseline context. Report the median per CC version and a jump between versions ≥ 2k | measured (inferred meaning [E]) | "Your baseline grew 20k at 2.1.100" → link issue; suggest mcp-diet |
 | A5 | **big-tool-output** | `tool_result` est. tokens ≥ 5k (configurable); group by tool name + normalized command (Bash: first 2 tokens, e.g. `pnpm test`) | estimated | Bash: `| tail -n 100`, `--silent`, `--reporter=dot`; Grep: narrower glob / `head_limit`; later `cc-slim` |
 | A6 | **repeated-read** | Same `Read` file_path (with the same offset/limit) ≥ 2× in a session with no intervening Edit/Write/MultiEdit/Bash on that path | estimated (size of later reads) | "Reference the earlier read"; later the cc-slim dedupe hook |
-| A7 | **tool-usage** | Count tool_use by name across the window; list tools/MCP servers (`mcp__server__tool`) never called. The definition size of unused tools is unknown from logs **[UNVERIFIED]**, so report counts only unless capture data exists | count; tokens only with capture | `permissions.deny` / scope the MCP server to a subagent (mcp-diet, M5) |
+| A7 | **tool-usage** | Count tool_use by name across the window; list tools/MCP servers (`mcp__server__tool`) never called. Definition sizes come from `prompt_snapshot` attachments when logged (CC 2.1.302, FORMAT.md Q3); without one, report counts only | count; tokens [E] only with a snapshot or capture | `permissions.deny` / scope the MCP server to a subagent (mcp-diet, M5) |
 | A8 | **context-growth** | Per-session curve of context size (input + cache_read + cache_write); flag sessions over 150k or with ≥ 2 compactions | measured | "Start a new session / use /clear for unrelated tasks" |
 | A9 | **subagent-cost** | Sum usage of sidechain/subagent transcripts vs parent | measured | "Route exploratory subagents to a smaller model via the subagent `model:` field" |
 | A10 | **error-waste** | API error / synthetic turns, retries, tool_result `is_error` followed by an identical re-call | measured/estimated | context-specific |
