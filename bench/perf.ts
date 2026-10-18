@@ -32,7 +32,8 @@ const RSS_HOOK = pathToFileURL(join(import.meta.dirname, 'rss-hook.mjs')).href;
 export const TARGETS = {
   throughputMBps: 100,
   oneGbSeconds: 15,
-  rssMiB: 300,
+  /** SPEC §8 "300 MB": decimal, 300 × 10^6 bytes. */
+  rssBytes: 300e6,
   coldStartSeconds: 1.5,
   coldStartCorpus: '50mb',
   packageBytes: 1e6,
@@ -73,7 +74,8 @@ const median = (xs: number[]): number => {
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 };
 const mbps = (bytes: number, ms: number): number => bytes / 1e6 / (ms / 1000);
-const mib = (kib: number): number => kib / 1024;
+/** maxRSS KiB → MB (10^6 bytes), the unit of the SPEC target. */
+const rssMB = (kib: number): number => (kib * 1024) / 1e6;
 const f1 = (x: number): string => x.toFixed(1);
 const f2 = (x: number): string => x.toFixed(2);
 
@@ -143,7 +145,7 @@ function runStage(
     res.samples.push(sample);
     const work = sample.workMs !== undefined ? ` work ${f2(sample.workMs / 1000)} s` : '';
     process.stderr.write(
-      `  ${st.name} @${size} #${i + 1}: wall ${f2(sample.wallMs / 1000)} s${work}, RSS ${f1(mib(sample.maxRssKiB))} MiB\n`,
+      `  ${st.name} @${size} #${i + 1}: wall ${f2(sample.wallMs / 1000)} s${work}, RSS ${f1(rssMB(sample.maxRssKiB))} MB\n`,
     );
   }
   return res;
@@ -176,12 +178,17 @@ interface Report {
   errors: string[];
 }
 
-function summarize(r: StageResult): { wall: number; work?: number; rss: number; rate: number } {
+function summarize(r: StageResult): {
+  wall: number;
+  work?: number;
+  rssBytes: number;
+  rate: number;
+} {
   const wall = median(r.samples.map((s) => s.wallMs));
   const works = r.samples.map((s) => s.workMs).filter((x): x is number => x !== undefined);
   const work = works.length ? median(works) : undefined;
-  const rss = Math.max(...r.samples.map((s) => mib(s.maxRssKiB)));
-  return { wall, work, rss, rate: mbps(r.bytes, work ?? wall) };
+  const rssBytes = Math.max(...r.samples.map((s) => s.maxRssKiB * 1024));
+  return { wall, work, rssBytes, rate: mbps(r.bytes, work ?? wall) };
 }
 
 const verdict = (ok: boolean): string => (ok ? 'meets' : 'misses');
@@ -193,12 +200,12 @@ export function toMarkdown(rep: Report): string {
     '',
     `All numbers are **[M] measured** on: ${m.cpu} (${m.cores} cores), ${m.os}, ${m.memGiB} GiB RAM, Node ${m.node}.`,
     'SPEC §8 targets are set for an M-series laptop; on any other machine read "meets/misses" as a rough guide.',
-    `Median of ${rep.iterations} runs, each in a fresh process; peak RSS is the max over runs (process.resourceUsage().maxRSS, KiB on every platform per the Node docs, shown in MiB).`,
+    `Median of ${rep.iterations} runs, each in a fresh process; peak RSS is the max over runs (process.resourceUsage().maxRSS, KiB on every platform per the Node docs, shown in MB = 10^6 bytes).`,
     `Corpora are synthetic (bench/corpus.ts, seed ${rep.seed}, generator v${rep.generatorVersion}); the OS page cache is warm (each corpus was just written or reused). MB = 10^6 bytes.`,
     '',
     '## Throughput and memory',
     '',
-    '| corpus | stage | median wall | median in-process | MB/s | peak RSS | ≥ 100 MB/s | RSS < 300 MiB |',
+    '| corpus | stage | median wall | median in-process | MB/s | peak RSS | ≥ 100 MB/s | RSS < 300 MB |',
     '|---|---|---|---|---|---|---|---|',
   ];
   for (const r of rep.stages) {
@@ -210,7 +217,7 @@ export function toMarkdown(rep: Report): string {
     L.push(
       `| ${r.size} (${f1(r.bytes / 1e6)} MB) | ${r.stage} | ${f2(s.wall / 1000)} s [M] | ` +
         `${s.work !== undefined ? `${f2(s.work / 1000)} s [M]` : 'n/a'} | ${f1(s.rate)} [M] | ` +
-        `${f1(s.rss)} MiB [M] | ${verdict(s.rate >= TARGETS.throughputMBps)} | ${verdict(s.rss < TARGETS.rssMiB)} |`,
+        `${f1(s.rssBytes / 1e6)} MB [M] | ${verdict(s.rate >= TARGETS.throughputMBps)} | ${verdict(s.rssBytes < TARGETS.rssBytes)} |`,
     );
   }
   L.push(
@@ -241,16 +248,21 @@ export function toMarkdown(rep: Report): string {
     );
   } else L.push('| 1 GB in < 15 s | not run (`pnpm bench:full`) | n/a |');
   if (done.length) {
-    const worst = done.map((r) => ({ r, rss: summarize(r).rss })).sort((a, b) => b.rss - a.rss)[0]!;
+    const worst = done
+      .map((r) => ({ r, rss: summarize(r).rssBytes }))
+      .sort((a, b) => b.rss - a.rss)[0]!;
     L.push(
-      `| Peak RSS < 300 MB | ${f1(worst.rss)} MiB [M] (${worst.r.stage}, ${worst.r.size}) | ${verdict(worst.rss < 300)} |`,
+      `| Peak RSS < 300 MB | ${f1(worst.rss / 1e6)} MB [M] (${worst.r.stage}, ${worst.r.size}) | ${verdict(worst.rss < TARGETS.rssBytes)} |`,
     );
   }
   if (rep.coldStart) {
     const d = summarize(rep.coldStart.doctor);
     const v = median(rep.coldStart.versionMs);
+    const size = rep.coldStart.doctor.size;
+    const spec =
+      size === TARGETS.coldStartCorpus ? '' : ` (SPEC target is for ${TARGETS.coldStartCorpus})`;
     L.push(
-      `| Cold start < 1.5 s for 50 MB | ${f2(d.wall / 1000)} s [M] (\`node bin/ccxray.js doctor\`, ${f1(rep.coldStart.doctor.bytes / 1e6)} MB; not npx, report command not on this branch) | ${verdict(d.wall / 1000 < 1.5)} |`,
+      `| Cold start < ${TARGETS.coldStartSeconds} s for ${size}${spec} | ${f2(d.wall / 1000)} s [M] (\`node bin/ccxray.js doctor\`, ${f1(rep.coldStart.doctor.bytes / 1e6)} MB; not npx, report command not on this branch) | ${verdict(d.wall / 1000 < TARGETS.coldStartSeconds)} |`,
       `| (info) \`ccxray --version\` | ${Math.round(v)} ms [M] | n/a |`,
     );
   }
@@ -309,13 +321,19 @@ async function main(): Promise<number> {
   };
   rep.label = `[M] measured on ${rep.machine.cpu}, ${rep.machine.os}, Node ${rep.machine.node}`;
   const made: string[] = [];
+  const seen = new Map<string, CorpusInfo>();
   const corpus = async (size: string): Promise<CorpusInfo> => {
+    // A size used twice (e.g. --cold-start-size equal to a main size) keeps its first record,
+    // so its generation time is not overwritten by "reused".
+    const prev = seen.get(size);
+    if (prev) return prev;
     const dir = join(out, `corpus-${size}`);
     process.stderr.write(`corpus ${size}: `);
     const c = await ensureCorpus(dir, parseSize(size), seed);
     process.stderr.write(c.reused ? 'reused\n' : `generated in ${f2(c.genMs / 1000)} s\n`);
     rep.corpora[size] = { ...c.summary, genMs: c.genMs, reused: c.reused };
     made.push(dir);
+    seen.set(size, c);
     return c;
   };
   const attempt = async (what: string, fn: () => unknown): Promise<void> => {
