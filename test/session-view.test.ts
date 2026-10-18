@@ -5,7 +5,12 @@ import { session, text, toolUse } from '../scripts/make-fixture.js';
 import { buildSessionView, resolveSession, wantsAscii } from '../src/commands/session.js';
 import { main } from '../src/main.js';
 import { DEFAULT_THRESHOLDS } from '../src/model/index.js';
-import { renderSessionView, type SessionRow } from '../src/reporters/session.js';
+import {
+  formatSpan,
+  renderSessionView,
+  TOOLS_W,
+  type SessionRow,
+} from '../src/reporters/session.js';
 import { visibleWidth } from '../src/reporters/format.js';
 import { cleanup, load, tree } from './helpers/analyze.js';
 
@@ -156,5 +161,41 @@ describe('session view', () => {
     expect(wantsAscii({ NO_COLOR: '1', LANG: 'en_US.UTF-8' })).toBe(true);
     expect(wantsAscii({ LC_ALL: 'C' })).toBe(true);
     expect(wantsAscii({ TERM: 'dumb' })).toBe(true);
+  });
+
+  it('review: rows fill exactly 100 columns; header numbers are wrapped, never cut', async () => {
+    const sessions = await load(viewFixture());
+    const s = sessions.find((x) => !x.isSubagent && x.turns.length > 1)!;
+    const { view } = buildSessionView(s, sessions, DEFAULT_THRESHOLDS);
+    expect(TOOLS_W).toBe(19);
+    const long = renderSessionView(view, { ascii: false, homeDir: '/home/dev' })
+      .split('\n')
+      .find((l) => l.includes('Bash×2'))!;
+    expect(visibleWidth(long)).toBe(100);
+    expect(long.endsWith('Bash×2, mcp__githu…')).toBe(true); // 19 columns
+    const huge = {
+      ...view,
+      project: `-home-dev-${'p'.repeat(60)}`,
+      totals: {
+        input: 123_456_789,
+        cacheWrite: 987_654_321,
+        cacheRead: 1_234_567_890,
+        output: 55_555_555,
+        turns: 4,
+      },
+    };
+    const out = renderSessionView(huge, { ascii: true, homeDir: '/home/dev' });
+    for (const n of ['123,456,789', '987,654,321', '1,234,567,890', '55,555,555'])
+      expect(out).toContain(n);
+    for (const line of out.split('\n')) expect(visibleWidth(line)).toBeLessThanOrEqual(100);
+  });
+
+  it('review: the span shows the end date when the UTC day changes', () => {
+    expect(formatSpan('2026-10-01T09:00:00Z', '2026-10-01T09:05:00Z')).toBe(
+      '2026-10-01 09:00–09:05 UTC',
+    );
+    expect(formatSpan('2026-10-01T23:58:00Z', '2026-10-02T00:04:00Z')).toBe(
+      '2026-10-01 23:58 – 2026-10-02 00:04 UTC',
+    );
   });
 });

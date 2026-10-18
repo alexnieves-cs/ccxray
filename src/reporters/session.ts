@@ -15,6 +15,7 @@ import {
   shortId,
   truncate,
   visibleWidth,
+  wrapParts,
 } from './format.js';
 
 export type TurnFlag = 'rebuild' | 'dup-read' | 'big-output';
@@ -118,8 +119,9 @@ function toolsCell(tools: Record<string, number>, ascii: boolean): string {
 
 // Column layout: widths and a 1-space gap; tools get what is left of WIDTH.
 const COLS = { n: 4, time: 8, gap: 7, model: 12, input: 7, cw: 8, cr: 9, out: 7, flags: 6 };
-const TOOLS_W =
-  WIDTH - 2 - Object.values(COLS).reduce((a, b) => a + b, 0) - (Object.keys(COLS).length - 1) - 2;
+// A row is: 2-space indent, the 8 columns before flags joined by 1 space (7 gaps), 2 spaces,
+// flags, 2 spaces, tools.
+export const TOOLS_W = WIDTH - 2 - Object.values(COLS).reduce((a, b) => a + b, 0) - 7 - 2 - 2;
 
 function row(r: SessionRow, ascii: boolean): string {
   const flags = r.flags.map((f) => FLAG[f][ascii ? 1 : 0]).join('');
@@ -162,6 +164,13 @@ function header(): string {
   );
 }
 
+/** `2026-10-01 23:58–00:04 UTC`, or with the end date when the UTC day changes. */
+export function formatSpan(fromIso: string, toIso: string): string {
+  const a = formatUtc(fromIso).slice(0, 16);
+  const b = formatUtc(toIso).slice(0, 16);
+  return a.slice(0, 10) === b.slice(0, 10) ? `${a}–${b.slice(11)} UTC` : `${a} – ${b} UTC`;
+}
+
 const hitRatio = (t: UsageSum): number | null => {
   const d = t.input + t.cacheWrite + t.cacheRead;
   return d > 0 ? t.cacheRead / d : null;
@@ -171,13 +180,32 @@ export function renderSessionView(v: SessionView, opts: SessionRenderOptions): s
   const home = resolveHome(opts.homeDir);
   const { ascii } = opts;
   const t = v.totals;
-  const span = `${formatUtc(v.firstTs).slice(0, 16)}–${formatUtc(v.lastTs).slice(11)}`;
   const lines = [
-    `ccxray session ${shortId(v.id)} · ${sanitizeText(displayProject(v.project, home))}`,
-    `Claude Code ${sanitizeText(formatVersionRange(v.ccVersions))} · ${span}`,
-    `TOKENS [M]  input ${formatInt(t.input)} · cache write ${formatInt(t.cacheWrite)} · ` +
-      `cache read ${formatInt(t.cacheRead)} · output ${formatInt(t.output)} · ` +
-      `hit ratio ${formatRatio(hitRatio(t))} · ${t.turns} turns`,
+    ...wrapParts(
+      [
+        `ccxray session ${shortId(v.id)}`,
+        sanitizeText(displayProject(v.project, home)),
+        `Claude Code ${sanitizeText(formatVersionRange(v.ccVersions))}`,
+        formatSpan(v.firstTs, v.lastTs),
+      ],
+      ' · ',
+      WIDTH,
+      '  ',
+    ),
+    // Each measured number is its own part, so wrapping never cuts one.
+    ...wrapParts(
+      [
+        `TOKENS [M]  input ${formatInt(t.input)}`,
+        `cache write ${formatInt(t.cacheWrite)}`,
+        `cache read ${formatInt(t.cacheRead)}`,
+        `output ${formatInt(t.output)}`,
+        `hit ratio ${formatRatio(hitRatio(t))}`,
+        `${t.turns} turns`,
+      ],
+      ' · ',
+      WIDTH,
+      '  ',
+    ),
     '',
     header(),
   ];

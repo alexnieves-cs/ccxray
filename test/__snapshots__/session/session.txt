@@ -1,5 +1,4 @@
-ccxray session 9fa3ebf8 · ~-app
-Claude Code 2.1.302 · 2026-10-01 23:58–00:04 UTC
+ccxray session 9fa3ebf8 · ~-app · Claude Code 2.1.302 · 2026-10-01 23:58 – 2026-10-02 00:04 UTC
 TOKENS [M]  input 9 · cache write 48,300 · cache read 47,000 · output 250 · hit ratio 49% · 4 turns
 
      # time UTC gap     model          input  c.write    c.read  output  flags   tools
