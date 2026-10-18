@@ -1,5 +1,6 @@
 // Default command (SPEC §3): load sessions, run the pipeline, render terminal / JSON / HTML.
-// Exit codes: 0 success, 1 no sessions found (the empty state is still printed), 2 bad args.
+// Exit codes: 0 success, 1 no sessions found (the empty state is still printed), 2 bad args or
+// an --html file that cannot be written (with its own message).
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -17,16 +18,42 @@ export interface AnalyzeEnv {
 }
 
 const DAY_MS = 86_400_000;
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+// ISO 8601 date-time: YYYY-MM-DDTHH:MM[:SS[.sss]] with an optional Z or ±HH:MM offset.
+const DATE_TIME =
+  /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(?:\.\d{1,3})?)?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/;
 
 class UsageError extends Error {}
 
-/** `YYYY-MM-DD` (UTC; `until` is inclusive, so it means the end of that day) or ISO date-time. */
+/** true when y-m-d is a real calendar day (2026-02-30 is not). */
+function realDay(y: string, m: string, d: string): boolean {
+  const t = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  return (
+    t.getUTCFullYear() === Number(y) &&
+    t.getUTCMonth() === Number(m) - 1 &&
+    t.getUTCDate() === Number(d)
+  );
+}
+
+/**
+ * `YYYY-MM-DD` (a UTC day; `until` is inclusive, so it means the end of that day) or an ISO
+ * date-time. A date-time without an offset is taken as UTC (`Z` is appended), never local time,
+ * so results do not depend on the machine's time zone. Anything else is a usage error.
+ */
 export function parseDate(s: string, flag: string, endOfDay = false): Date {
-  const d = new Date(DATE_ONLY.test(s) ? `${s}T00:00:00.000Z` : s);
-  if (Number.isNaN(d.getTime()))
+  const bad = (): never => {
     throw new UsageError(`${flag} expects YYYY-MM-DD or an ISO date-time, got ${s}`);
-  return DATE_ONLY.test(s) && endOfDay ? new Date(d.getTime() + DAY_MS - 1) : d;
+  };
+  const day = DATE_ONLY.exec(s);
+  if (day !== null) {
+    if (!realDay(day[1]!, day[2]!, day[3]!)) bad();
+    const d = new Date(`${s}T00:00:00.000Z`);
+    return endOfDay ? new Date(d.getTime() + DAY_MS - 1) : d;
+  }
+  const dt = DATE_TIME.exec(s);
+  if (dt === null || !realDay(dt[1]!, dt[2]!, dt[3]!)) return bad();
+  const d = new Date(dt[7] === undefined ? `${s}Z` : s);
+  return Number.isNaN(d.getTime()) ? bad() : d;
 }
 
 /** Pull `--threshold.<key>=<value>` / `--threshold.<key> <value>` out of argv. */
@@ -35,7 +62,8 @@ export function splitThresholds(argv: readonly string[]): {
   overrides: Record<string, string>;
 } {
   const rest: string[] = [];
-  const overrides: Record<string, string> = {};
+  // No prototype: a `__proto__` key must arrive as an ordinary (and then unknown) key.
+  const overrides = Object.create(null) as Record<string, string>;
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i]!;
     const m = /^--threshold\.([^=]*)(?:=(.*))?$/s.exec(flag);
@@ -146,19 +174,23 @@ export async function analyze(
     includeContent: o.includeContent,
   });
   const code = sessions.length > 0 ? 0 : 1;
+  // JSON first, so a failed HTML write still leaves the JSON on stdout.
+  if (o.json) out(render(report, 'json'));
   if (o.html !== undefined) {
+    // Overwrites an existing file at that path (documented in --help).
     const path = resolve(o.html);
     try {
       writeFileSync(path, render(report, 'html'));
     } catch (x) {
-      err(`ccxray: cannot write ${path}: ${x instanceof Error ? x.message : String(x)}\n`);
+      err(
+        `ccxray: could not write the HTML report to ${path}: ` +
+          `${x instanceof Error ? x.message : String(x)}\n`,
+      );
       return 2;
     }
     // stdout stays pure JSON when --json is also given.
     (o.json ? err : out)(`wrote ${path}\n`);
-  }
-  if (o.json) out(render(report, 'json'));
-  else if (o.html === undefined) {
+  } else if (!o.json) {
     const color =
       !o.noColor && shouldUseColor(e.env ?? process.env, e.isTTY ?? process.stdout.isTTY);
     out(render(report, 'terminal', { color }));

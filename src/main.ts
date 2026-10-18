@@ -16,7 +16,7 @@ Options:
   --until DATE    last day to analyze, inclusive
   --project NAME  only projects whose dir or cwd contains NAME
   --json          print the JSON report (schema/report.v1.json) to stdout
-  --html FILE     write a self-contained HTML report to FILE
+  --html FILE     write a self-contained HTML report to FILE (overwrites it)
   --include-content  allow prompt/output snippets in reports (off by default)
   --threshold.KEY=VALUE  override an analyzer threshold (see src/model/thresholds.ts)
   --no-color      no ANSI colors
@@ -29,7 +29,7 @@ export async function main(
   argv: string[],
   out: (s: string) => void = (s) => process.stdout.write(s),
 ): Promise<number> {
-  const { values, positionals } = parseArgs({
+  const { values } = parseArgs({
     args: argv,
     options: {
       version: { type: 'boolean', short: 'v' },
@@ -44,7 +44,8 @@ export async function main(
     out(`${VERSION}\n`);
     return 0;
   }
-  if (positionals[0] === 'doctor' && !values.help) {
+  // Only argv[0] names a subcommand: in `--project doctor`, `doctor` is a flag value.
+  if (argv[0] === 'doctor' && !values.help) {
     const roots = (values.root as unknown[] | undefined)?.filter(
       (r): r is string => typeof r === 'string',
     );
