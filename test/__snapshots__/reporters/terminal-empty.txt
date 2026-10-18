@@ -1,0 +1,8 @@
+ccxray · no sessions found
+
+  Looked in:
+    ~/.claude/projects
+  Filters: since 2026-10-11, project ~ "acme"
+  Files scanned: 0 · lines: 0
+
+  Try a wider --since, set CLAUDE_CONFIG_DIR, or run `ccxray doctor`.

@@ -1,0 +1,44 @@
+ccxray · 4 sessions (2 subagent) · 368 assistant turns · Oct 11–18 2026
+  Claude Code 2.1.290–2.1.296
+
+TOKENS (measured from usage fields)
+  input (uncached)           58k   <1%
+  cache write (creation)    2.8M   17%   5m 2.8M · 1h 0
+  cache read               13.5M   82%
+  output                    133k    1%
+  cache hit ratio  82%  (read / (read + write + input))
+
+WHERE IT WENT (estimated attribution)
+  repeated-read          ~182k [E]  1 finding · Read 100%
+  big-tool-output        ~149k [E]  2 findings · Bash 89%, Grep 11%
+
+TOP FINDINGS
+ 1. CACHE REBUILD [high]  38 rebuilds cost 2.8M cache-write tokens
+      2.8M [M] · 2 evidence
+      e.g. -home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl:120
+      29 × ttl-expiry (2.2M)             → batch work; you had 29 gaps > 5 min
+      6 × config-edit (414k)             → edit CLAUDE.md between sessions
+      3 × cc-upgrade (201k)              → known: #46917 (2.1.100+)
+      → see causes above
+ 2. REPEATED READ [warn]  src/api/client.ts read 7× unchanged in session 3fa2c1d0
+      ~182k [E] · 1 evidence
+      e.g. -home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl:412
+      → reference the earlier read instead of re-reading (cc-slim dedupe, planned)
+ 3. BIG TOOL OUTPUT [warn]  `pnpm test` returned 48k chars (×11)
+      ~132k [E] · cmd `pnpm test` · 2 evidence
+      e.g. -home-dev-src-acme-api/9b07e5aa-2222-4aaa-8bbb-000000000002.jsonl:1207
+      → pipe through `| tail -50`, or use --reporter=dot
+ 4. BIG TOOL OUTPUT [info]  Grep returned 22k chars (×3)
+      ~17k [E] · 1 evidence
+      e.g. -home-dev-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl:2001
+      → narrow the glob or set head_limit
+ 5. TOOL USAGE [info]  9 MCP tools from "github" server never called in 4 sessions
+      1 evidence · e.g. session 9b07e5aa
+      → `ccxray fix mcp` (planned, M5) generates a permissions.deny diff
+
+PARSE WARNINGS  4 malformed lines skipped · 1 unknown record type (x-future ×7) · 2 field warnings
+  run `ccxray doctor` for details
+
+[M] measured: taken directly from usage fields in the logs
+[E] / ~ estimated: chars/4 heuristic or attribution guess, never exact
+Run `ccxray session 3fa2c1d0` for per-turn detail · `--html` for a shareable report
