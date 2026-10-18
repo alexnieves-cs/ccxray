@@ -95,7 +95,7 @@ src/
     stream.ts            line-streaming JSONL reader (readline), malformed-line counter
     records.ts           zod-free hand-written type guards for known record types
     dedupe.ts            message.id / requestId / sidechain dedupe (see 4.3)
-    session.ts           build Session → Turn[] graph via uuid/parentUuid
+    session.ts           build Sessions; turns in timestamp order (parentUuid only for linking where needed)
   tokens/
     estimate.ts          heuristic tokenizer (chars/4 baseline; optional pluggable tokenizer later)
   analyzers/             pure functions: (Session[], ctx) => Finding[]
@@ -160,6 +160,7 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - `isMeta: true` user lines are client-injected, not typed prompts.
 - One file = one session (its first `sessionId`). Subagent files other than the [M] `{sessionId}/subagents/agent-<id>.jsonl` layout (other nested files, flat `agent-<id>.jsonl`) are treated as subagents too (Q4). `Session.id = <parent>:agent-<id>` is a ccxray choice.
 - `<persisted-output>` sizes: `KB` = 1024, and the externalization threshold is unknown (Q1).
+- Cross-session copies keep the copy whose file sessionId matches the record's envelope `sessionId`, else the earliest file; the sidechain-replay and cross-session rules themselves are from ccusage docs and not yet seen locally.
 - `prompt_snapshot` tool names come from `name` or `schema.name`; `systemPrompt[]` parts are strings or `{text}`.
 
 ### 4.5 Token estimator
