@@ -144,7 +144,7 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 
 ### 4.4 Open questions [UNVERIFIED]. Each must be resolved in M1 against real logs
 
-> **Status (2026-10-18):** answered as far as current evidence allows in [docs/FORMAT.md](FORMAT.md#spec-44-answers). Q1–Q3 have partial [M] answers from one CC 2.1.302 transcript (notably, Q3: tool definitions *are* logged in `attachment.type = prompt_snapshot` on that version). Q4 and Q5 remain UNVERIFIED until a corpus with subagents and compaction is probed.
+> **Status (2026-10-18):** answered as far as current evidence allows in [docs/FORMAT.md](FORMAT.md#spec-44-answers). Q1–Q4 have [M] answers from one CC 2.1.302 session (notably, Q3: tool definitions *are* logged in `attachment.type = prompt_snapshot` on that version; Q1: large outputs are externalized as a `<persisted-output>` preview plus `{sessionId}/tool-results/<id>.txt`, threshold and KB unit UNVERIFIED; Q4: subagents are `{sessionId}/subagents/agent-<id>.jsonl`, linked by `agent-<id>.meta.json` `toolUseId` and the parent's `toolUseResult.agentId`). Q5 remains UNVERIFIED until a corpus with compaction is probed.
 1. Is `tool_result` content always inline in the JSONL, or truncated or externalized for big outputs? This affects tool-output sizing.
 2. Do `attachment` records carry CLAUDE.md / memory / hook output, and can they be used to detect CLAUDE.md edits? (Fallback: compare file mtime against the session timeline.)
 3. Are tool definitions logged anywhere? (Assumption: **no**. Fixed overhead is inferred from first-turn `cache_creation + input`, and optionally measured exactly via the M5 capture mode with an API key only.)
@@ -158,7 +158,8 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - String `assistant.message.content` is one text block.
 - Compaction markers: `isCompactSummary`, `system`/`compact_boundary`, `summary` (Q5). `system`/`api_error` is an API error.
 - `isMeta: true` user lines are client-injected, not typed prompts.
-- One file = one session (its first `sessionId`). Subagent files are below `{sessionId}/` or named `agent-<id>.jsonl`, reuse the parent's sessionId, and get `Session.id = <parent>:agent-<id>` (Q4).
+- One file = one session (its first `sessionId`). Subagent files other than the [M] `{sessionId}/subagents/agent-<id>.jsonl` layout (other nested files, flat `agent-<id>.jsonl`) are treated as subagents too (Q4). `Session.id = <parent>:agent-<id>` is a ccxray choice.
+- `<persisted-output>` sizes: `KB` = 1024, and the externalization threshold is unknown (Q1).
 - `prompt_snapshot` tool names come from `name` or `schema.name`; `systemPrompt[]` parts are strings or `{text}`.
 
 ### 4.5 Token estimator
