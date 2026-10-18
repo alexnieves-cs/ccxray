@@ -47,6 +47,8 @@ export interface FileData {
   toolResults: ToolResult[];
   prompts: UserPrompt[];
   events: SessionEvent[];
+  /** `parentUuid` of the first record that has the key (null when it is null). */
+  firstParentUuid?: string | null;
   /** `toolUseId` from the sibling `agent-<id>.meta.json`, when read. */
   metaToolUseId?: string;
   /** Parent side of subagent links: `toolUseResult.agentId` → the tool_result's tool_use_id. */
@@ -109,6 +111,8 @@ export class FileParser {
     d.sessionId ??= str(r.sessionId);
     d.agentId ??= str(r.agentId);
     d.cwd ??= str(r.cwd);
+    if (d.firstParentUuid === undefined && 'parentUuid' in r)
+      d.firstParentUuid = str(r.parentUuid) ?? null;
     const own = parseTs(r.timestamp);
     if (own !== undefined) {
       this.lastTs = own;
@@ -224,6 +228,17 @@ export class FileParser {
           0,
         );
       this.data.events.push(ev);
+    } else if (a.type === 'deferred_tools_record') {
+      // UNVERIFIED (FORMAT.md): only the attachment type is known; names are read from any of
+      // these arrays, as strings or `{name}` objects. Nothing else is kept.
+      const tools: string[] = [];
+      for (const key of ['tools', 'toolNames', 'names', 'deferredTools'])
+        if (Array.isArray(a[key]))
+          for (const t of a[key] as unknown[]) {
+            const name = typeof t === 'string' ? t : isRec(t) ? str(t.name) : undefined;
+            if (name !== undefined && !tools.includes(name)) tools.push(name);
+          }
+      if (tools.length > 0) this.data.events.push({ kind: 'deferred-tools', ts, tools, source });
     }
   }
 
@@ -301,6 +316,7 @@ export function buildSessions(
     const s = g.s;
     s.files.push(f.file.path);
     s.cwd ??= f.cwd;
+    if (!ident.isSubagent && typeof f.firstParentUuid === 'string') s.continued = true;
     for (const v of f.versions) if (!s.ccVersions.includes(v)) s.ccVersions.push(v);
     if (f.firstTs !== undefined && (s.firstTs === EPOCH || f.firstTs < s.firstTs))
       s.firstTs = f.firstTs;
