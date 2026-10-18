@@ -217,3 +217,68 @@ describe('review regressions', () => {
     expect(out).not.toContain('\u001b');
   });
 });
+
+describe('subagent classification (m2 repro: root one level above projects/ trees)', () => {
+  const summary = (sessions: { id: string; project: string; isSubagent: boolean }[]) =>
+    sessions.map((s) => `${s.project} ${s.id} ${s.isSubagent}`).sort();
+
+  it('a root above <fixture>/<project>/ gives the same sessions as per-fixture roots', async () => {
+    const { readdirSync } = await import('node:fs');
+    const all = await loadSessions({ roots: [FX] });
+    const each = [];
+    for (const name of readdirSync(FX))
+      each.push(...(await loadSessions({ roots: [join(FX, name)] })).sessions);
+    expect(summary(all.sessions)).toEqual(summary(each));
+    // Hand count (FORMAT.md "Fixtures"): 20 sessions, 3 of them subagents.
+    expect(all.sessions).toHaveLength(20);
+    expect(all.sessions.filter((s) => s.isSubagent)).toHaveLength(3);
+    expect(all.sessions.filter((s) => !s.isSubagent).every((s) => !s.id.includes(':'))).toBe(true);
+    expect(all.sessions.every((s) => s.project.startsWith('-home-dev-'))).toBe(true);
+  });
+
+  it('a deeper file is a main session of its parent dir unless its layout or records say subagent', async () => {
+    const root = freshRoot();
+    const sid = 'abcdef01-0000-4000-8000-000000000000';
+    const sid2 = 'abcdef02-0000-4000-8000-000000000000';
+    let k = 0;
+    const line = (o: Record<string, unknown>) => ({
+      type: 'assistant',
+      sessionId: sid,
+      uuid: `u-${++k}`,
+      timestamp: '2026-10-01T09:00:00.000Z',
+      message: {
+        id: `m-${k}`,
+        role: 'assistant',
+        content: [],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+      requestId: 'r',
+      ...o,
+    });
+    // Two levels above the project dir: a normal session.
+    writeLines(root, join('a', 'b', '-home-dev-p', `${sid}.jsonl`), [line({})]);
+    // agent-*.jsonl in a dir that is not a sessionId, not all sidechain: a normal session.
+    writeLines(root, join('-home-dev-q', 'misc', 'agent-x.jsonl'), [line({ sessionId: sid2 })]);
+    // Every line isSidechain with agentId, in an arbitrary dir: a subagent of the envelope session.
+    writeLines(root, join('-home-dev-r', 'old', 'side.jsonl'), [
+      line({ isSidechain: true, agentId: 'y' }),
+    ]);
+    // `{sessionId}/agent-<id>.jsonl` and `{sessionId}/subagents/*.jsonl` layouts.
+    writeLines(root, join('-home-dev-s', sid, 'agent-z.jsonl'), [
+      line({ agentId: 'z', isSidechain: true, cwd: '/s' }),
+    ]);
+    writeLines(root, join('-home-dev-t', sid, 'subagents', 'w.jsonl'), [line({ cwd: '/t' })]);
+    const { sessions } = await loadSessions({ roots: [root] });
+    expect(
+      sessions.map((s) => [s.project, s.id, s.isSubagent, s.parentSessionId ?? null]).sort(),
+    ).toEqual(
+      [
+        ['-home-dev-p', sid, false, null],
+        ['misc', sid2, false, null],
+        ['old', `${sid}:agent-y`, true, sid],
+        ['-home-dev-s', `${sid}:agent-z`, true, sid],
+        ['-home-dev-t', `${sid}:w`, true, sid],
+      ].sort(),
+    );
+  });
+});
