@@ -111,7 +111,7 @@ From [SPEC §5](docs/SPEC.md#5-analyzers) and [`src/analyzers/`](src/analyzers).
 
 | ID | Analyzer | What it finds | Tokens |
 |---|---|---|---|
-| A1 | totals | Deduped input, cache write (5m/1h), cache read and output per session, project, model and day; cache hit ratio = read / (read + write + input). | measured |
+| A1 | totals | Deduped input, cache write (5m/1h), cache read and output per session, project, model and day; cache hit ratio = read / (read + write + input). Built into every report as the totals, not a finding. | measured |
 | A2 | cache-rebuild | Turns where the cache was rebuilt: a large cache write while cache read dropped by half or more vs the previous turn. | measured (cache write of the turn) |
 | A3 | rebuild-cause | The likely cause of each rebuild: idle gap past the cache TTL, Claude Code upgrade, model switch, compaction, CLAUDE.md change, tool set change, or unknown. Shown inside A2 findings. | cause counts measured; per-cause token split and tool-set inference estimated |
 | A4 | fixed-overhead | Baseline context of the first turn of each session, its median per Claude Code version, and jumps between versions. | measured; size of logged tool definitions estimated |
