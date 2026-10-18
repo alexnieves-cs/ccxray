@@ -143,6 +143,8 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - Skip malformed lines and count them.
 
 ### 4.4 Open questions [UNVERIFIED]. Each must be resolved in M1 against real logs
+
+> **Status (2026-10-18):** answered as far as current evidence allows in [docs/FORMAT.md](FORMAT.md#spec-44-answers). Q1–Q3 have partial [M] answers from one CC 2.1.302 transcript (notably, Q3: tool definitions *are* logged in `attachment.type = prompt_snapshot` on that version). Q4 and Q5 remain UNVERIFIED until a corpus with subagents and compaction is probed.
 1. Is `tool_result` content always inline in the JSONL, or truncated or externalized for big outputs? This affects tool-output sizing.
 2. Do `attachment` records carry CLAUDE.md / memory / hook output, and can they be used to detect CLAUDE.md edits? (Fallback: compare file mtime against the session timeline.)
 3. Are tool definitions logged anywhere? (Assumption: **no**. Fixed overhead is inferred from first-turn `cache_creation + input`, and optionally measured exactly via the M5 capture mode with an API key only.)
