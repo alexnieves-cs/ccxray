@@ -194,11 +194,11 @@ export interface ParseStats {
   unknownRecordTypes: Record<string, number>;
   /** Count of `attachment.type` values. */
   attachmentTypes: Record<string, number>;
-  /** Lines dropped by dedupe, by rule (SPEC §4.3). */
+  /** Dropped by dedupe, by rule (SPEC §4.3): lines for the first rule, responses for the others. */
   dedupe: {
     /** Extra content-block lines of an already-seen (message.id, requestId). */
     sameResponseLines: number;
-    /** Sidechain lines replaying a message id already seen in the parent. */
+    /** Sidechain responses replaying a message.id seen in a non-sidechain record. */
     sidechainReplays: number;
     /** Responses copied into more than one session file. */
     crossSessionCopies: number;
