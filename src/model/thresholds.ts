@@ -13,6 +13,8 @@ export interface Thresholds {
   ttl1hMs: number;
   /** A4: jump in median baseline between versions worth flagging. */
   baselineJumpTokens: number;
+  /** A4: sessions a version needs before its median baseline is compared for a jump. */
+  baselineMinSessions: number;
   /** A5: estimated tokens for a tool_result to count as big. */
   bigToolOutputTokens: number;
   /** A8: context size worth flagging. */
@@ -28,6 +30,7 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   ttl5mMs: 5 * 60_000,
   ttl1hMs: 60 * 60_000,
   baselineJumpTokens: 2_000,
+  baselineMinSessions: 3,
   bigToolOutputTokens: 5_000,
   contextLargeTokens: 150_000,
   compactionsPerSession: 2,

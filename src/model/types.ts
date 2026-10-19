@@ -164,6 +164,16 @@ export type SessionEvent =
       source: SourcePointer;
     }
   | {
+      /**
+       * Tool names from a `deferred_tools_record` attachment (seen in CC 2.1.302): tools whose
+       * definitions are not sent up front. Names only. UNVERIFIED: the attachment's shape.
+       */
+      kind: 'deferred-tools';
+      ts: Date;
+      tools: string[];
+      source: SourcePointer;
+    }
+  | {
       kind: 'api-error';
       ts: Date;
       uuid?: string;
@@ -191,6 +201,12 @@ export interface Session {
    * `toolUseId`, else the parent tool_result whose `toolUseResult.agentId` matches ([M] 2.1.302).
    */
   parentToolUseId?: string;
+  /**
+   * Main sessions: true when the first envelope record of a main transcript has a non-null
+   * `parentUuid`, i.e. the conversation continues an earlier one (resume / continue).
+   * UNVERIFIED: that resumed or continued sessions start this way.
+   */
+  continued?: boolean;
   /** Deduped assistant turns, sorted by ts. */
   turns: Turn[];
   prompts: UserPrompt[];

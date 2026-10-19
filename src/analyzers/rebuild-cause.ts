@@ -1,6 +1,7 @@
 // A3 rebuild-cause (SPEC §5): why a cache rebuild (A2) happened. The first matching cause wins,
 // in SPEC order. Pure: reads only the session, the two turns, the thresholds and ChainState.
 import type { Session, SessionEvent, Thresholds, Turn } from '../model/index.js';
+import { sessionTtl } from './rules.js';
 import { displayPath, formatDuration } from './util.js';
 
 export const REBUILD_CAUSES = [
@@ -34,11 +35,7 @@ export class ChainState {
   readonly ttl: '5m' | '1h';
   private next = 0;
   constructor(private readonly s: Session) {
-    // UNVERIFIED: that a session which wrote ephemeral_1h tokens at all keeps its cached prefix
-    // for 1 h (a session could mix 1h and 5m entries; the split is measured, its meaning not).
-    // Decided per session over all its turns, before since/until filtering (Session.wrote1hCache).
-    const oneHour = s.wrote1hCache ?? s.turns.some((t) => (t.usage.cacheWrite1h ?? 0) > 0);
-    this.ttl = oneHour ? '1h' : '5m';
+    this.ttl = sessionTtl(s); // UNVERIFIED: see sessionTtl in rules.ts
   }
   /** Add tools snapshots up to `ts` (events are sorted by ts). */
   private snapshotsUntil(ts: Date): void {

@@ -3,6 +3,7 @@
 // Rule (SPEC §5 A2): turn n of a session's main (non-sidechain) chain, n > 1, is a rebuild when
 //   cacheWrite(n) ≥ max(rebuildMinCacheWrite, rebuildPrevContextFraction × context(n-1))
 //   and cacheRead(n) ≤ (1 − rebuildReadDropFraction) × cacheRead(n-1), with cacheRead(n-1) > 0
+// (isRebuild in rules.ts, the one predicate also used by the `session` view's rebuild flag)
 // where context(n-1) = input + cacheRead + cacheWrite of turn n-1. Synthetic turns are skipped
 // (they made no API call), so n-1 is the previous real turn. Subagent sessions are entirely
 // sidechain and are not checked (SPEC: non-sidechain). Consequences of the literal rule:
@@ -14,6 +15,7 @@
 import type { Analyzer, Finding, Session, Thresholds, Turn } from '../model/index.js';
 import { formatCompact, formatInt } from '../reporters/format.js';
 import { ChainState, rebuildCause, REBUILD_CAUSES, type RebuildCause } from './rebuild-cause.js';
+import { isRebuild } from './rules.js';
 import { evidenceFor, MAX_EVIDENCE, plural, realTurns, type Evidence } from './util.js';
 
 const KNOWN_ISSUE = 'https://github.com/anthropics/claude-code/issues/46917';
@@ -27,16 +29,6 @@ export interface Rebuild {
   detail: string;
   gapMs: number;
   ttl: '5m' | '1h';
-}
-
-export function isRebuild(prev: Turn, turn: Turn, th: Thresholds): boolean {
-  const prevContext = prev.usage.input + prev.usage.cacheRead + prev.usage.cacheWrite;
-  const minWrite = Math.max(th.rebuildMinCacheWrite, th.rebuildPrevContextFraction * prevContext);
-  return (
-    turn.usage.cacheWrite >= minWrite &&
-    prev.usage.cacheRead > 0 &&
-    turn.usage.cacheRead <= (1 - th.rebuildReadDropFraction) * prev.usage.cacheRead
-  );
 }
 
 export function findRebuilds(sessions: readonly Session[], th: Thresholds): Rebuild[] {

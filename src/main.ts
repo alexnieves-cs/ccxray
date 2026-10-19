@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 import { analyze } from './commands/analyze.js';
 import { doctor } from './commands/doctor.js';
+import { sessionCommand } from './commands/session.js';
 import { VERSION } from './version.js';
 
 const HELP = `ccxray ${VERSION}: explain where your Claude Code tokens go (local only, no network)
@@ -8,7 +9,7 @@ const HELP = `ccxray ${VERSION}: explain where your Claude Code tokens go (local
 Usage:
   ccxray [--since DATE] [--until DATE] [--project NAME] [--json] [--html FILE]
          [--include-content] [--threshold.KEY=VALUE]... [--no-color] [--root DIR]...
-  ccxray session <id|latest>
+  ccxray session <id|prefix|latest> [--root DIR]... [--json] [--threshold.KEY=VALUE]...
   ccxray doctor [--root DIR]... [--json]
 
 Options:
@@ -45,6 +46,7 @@ export async function main(
     return 0;
   }
   // Only argv[0] names a subcommand: in `--project doctor`, `doctor` is a flag value.
+  if (argv[0] === 'session' && !values.help) return sessionCommand(argv, out);
   if (argv[0] === 'doctor' && !values.help) {
     const roots = (values.root as unknown[] | undefined)?.filter(
       (r): r is string => typeof r === 'string',

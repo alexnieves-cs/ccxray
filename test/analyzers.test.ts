@@ -605,15 +605,17 @@ describe('pipeline', () => {
     });
     expect(report.findings.map((f) => f.analyzer)).toEqual([
       'cache-rebuild',
+      'fixed-overhead',
       'big-tool-output',
       'big-tool-output',
       'repeated-read',
+      'tool-usage',
     ]);
     expect(report.sessions).toHaveLength(3);
     expect(report.sessions.every((x) => x.totals === report.totals.bySession[x.id])).toBe(true);
     expect(report.generatedAt).toBe('2026-10-18T00:00:00.000Z');
     expect(report.calibration).toMatchObject({ samples: expect.any(Number) });
-    expect(ANALYZERS.map((a) => a.spec)).toEqual(['A2', 'A5', 'A6']);
+    expect(ANALYZERS.map((a) => a.spec)).toEqual(['A2', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10']);
   });
 
   it('displayPath is relative to the cwd for both separators', () => {
