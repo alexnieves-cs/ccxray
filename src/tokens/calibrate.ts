@@ -34,7 +34,7 @@ export function calibrationSamples(sessions: readonly Session[]): number[] {
       if (p.model !== t.model || p.toolUses.length !== 1 || p.toolResults.length !== 1) continue;
       const result = p.toolResults[0]!;
       if (result.estTokens < MIN_EST_TOKENS) continue;
-      const inGap = (d: Date): boolean => d > p.ts && d <= t.ts;
+      const inGap = (d: number): boolean => d > p.ts && d <= t.ts;
       if (s.prompts.some((x) => inGap(x.ts)) || s.events.some((x) => inGap(x.ts))) continue;
       const measured = context(t) - context(p) - p.usage.output;
       if (measured <= 0) continue;

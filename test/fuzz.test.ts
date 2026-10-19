@@ -144,7 +144,7 @@ describe('fuzz', () => {
                 t.usage.input + t.usage.output + t.usage.cacheRead + t.usage.cacheWrite,
               ),
             ).toBe(true);
-            expect(Number.isNaN(t.ts.getTime())).toBe(false);
+            expect(Number.isFinite(t.ts)).toBe(true);
           }
       }),
       // Fixed seed so CI is reproducible; fast-check prints the seed and counterexample on failure.

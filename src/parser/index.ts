@@ -86,10 +86,11 @@ async function readMetaToolUseId(path: string, stats: ParseStats): Promise<strin
 }
 
 function filterSessions(sessions: Session[], opts: LoadOptions): Session[] {
-  const { since, until } = opts;
+  const since = opts.since?.getTime();
+  const until = opts.until?.getTime();
   const needle = opts.project?.toLowerCase();
-  const inWindow = (d: Date): boolean =>
-    (since === undefined || d >= since) && (until === undefined || d <= until);
+  const inWindow = (ms: number): boolean =>
+    (since === undefined || ms >= since) && (until === undefined || ms <= until);
   const out: Session[] = [];
   for (const s of sessions) {
     // Before the window filter, so A3 sees the session's TTL even when its 1h writes are older.

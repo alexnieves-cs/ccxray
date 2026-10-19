@@ -33,7 +33,7 @@ export function resolveSession(
   if (query === 'latest') {
     const s = [...main]
       .filter((x) => x.turns.length > 0)
-      .sort((a, b) => b.lastTs.getTime() - a.lastTs.getTime() || (a.id < b.id ? -1 : 1))[0];
+      .sort((a, b) => b.lastTs - a.lastTs || (a.id < b.id ? -1 : 1))[0];
     return s ? { session: s } : { error: 'no sessions with assistant turns found' };
   }
   const exact = sessions.find((s) => s.id === query);
@@ -87,7 +87,7 @@ function rows(
       chain,
       n: i + 1,
       uuid: t.uuid,
-      ts: t.ts.toISOString(),
+      ts: new Date(t.ts).toISOString(),
       gapMs: t.gapMs,
       gapOverTtl: t.gapMs !== null && t.gapMs > ttl,
       model: t.model,
@@ -114,7 +114,7 @@ export function buildSessionView(
     ? []
     : all
         .filter((x) => x.isSubagent && x.parentSessionId === s.id)
-        .sort((a, b) => a.firstTs.getTime() - b.firstTs.getTime() || (a.id < b.id ? -1 : 1));
+        .sort((a, b) => a.firstTs - b.firstTs || (a.id < b.id ? -1 : 1));
   // The A6 rule itself, so 📄 marks exactly the reads A6 reports (subagent edits count).
   const dupReads = repeatedReadToolUseIds([s, ...subs]);
   const mainRows = rows(
@@ -143,8 +143,8 @@ export function buildSessionView(
       id: s.id,
       project: s.project,
       ccVersions: s.ccVersions,
-      firstTs: s.firstTs.toISOString(),
-      lastTs: s.lastTs.toISOString(),
+      firstTs: new Date(s.firstTs).toISOString(),
+      lastTs: new Date(s.lastTs).toISOString(),
       ttlMs: cacheTtlMs(s, th),
       bigOutputTokens: th.bigToolOutputTokens,
       totals: sumUsage(mainChain),

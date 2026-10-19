@@ -66,7 +66,7 @@ describe('fixtures', () => {
     });
     expect(t.blockCounts).toEqual({ text: 1 });
     expect(t.source.line).toBe(2);
-    expect(t.ts.toISOString()).toBe('2026-10-01T09:00:01.000Z');
+    expect(new Date(t.ts).toISOString()).toBe('2026-10-01T09:00:01.000Z');
     expect(s.prompts.map((p) => p.chars)).toEqual([6]);
     expect(s.prompts[0]!.text).toBeUndefined();
     expect(stats).toMatchObject({
@@ -158,8 +158,8 @@ describe('fixtures', () => {
     expect(s.turns.map((t) => t.index)).toEqual([0, 1, 2]);
     expect(s.turns.map((t) => t.usage.cacheRead)).toEqual([0, 20000, 0]);
     expect(totals(s)).toEqual({ input: 8, cacheWrite: 41100, cacheRead: 20000, output: 270 });
-    expect(s.firstTs.toISOString()).toBe('2026-10-01T09:00:00.000Z');
-    expect(s.lastTs.toISOString()).toBe('2026-10-01T09:06:35.000Z');
+    expect(new Date(s.firstTs).toISOString()).toBe('2026-10-01T09:00:00.000Z');
+    expect(new Date(s.lastTs).toISOString()).toBe('2026-10-01T09:06:35.000Z');
   });
 
   it('version-change-rebuild: versions per turn and per record', async () => {
@@ -301,7 +301,7 @@ describe('fixtures', () => {
     expect(stats.ccVersions).toEqual({ '2.1.302': 12 });
     expect(stats.warnings).toEqual({});
     const s = only(sessions);
-    expect(s.firstTs.toISOString()).toBe('2026-10-01T08:59:59.000Z');
+    expect(new Date(s.firstTs).toISOString()).toBe('2026-10-01T08:59:59.000Z');
     expect(s.prompts.map((p) => p.chars)).toEqual([2, 16]);
     expect(s.events.map((e) => (e.kind === 'compaction' ? e.marker : e.kind))).toEqual([
       'instructions',
@@ -361,7 +361,7 @@ describe('loadSessions options', () => {
       [1, 32_000],
       [2, 362_000],
     ]);
-    expect(s.firstTs.toISOString()).toBe('2026-10-01T09:00:00.000Z');
+    expect(new Date(s.firstTs).toISOString()).toBe('2026-10-01T09:00:00.000Z');
     const until = new Date('2026-10-01T09:00:10.000Z');
     expect(only((await load('ttl-gap-rebuild', { until })).sessions).turns).toHaveLength(1);
     expect((await load('ttl-gap-rebuild', { since: new Date('2026-10-02') })).sessions).toEqual([]);

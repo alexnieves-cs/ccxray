@@ -4,6 +4,9 @@
 // Labels: fields documented as "measured" come straight from `message.usage` (or counts of
 // records). Fields documented as "estimated" come from src/tokens/estimate.ts. See CLAUDE.md
 // hard rule 2.
+//
+// Timestamps are epoch milliseconds (UTC) as numbers, not Date objects: a Date costs ~112 B of
+// retained heap and there is one per turn, prompt, tool_result and event (SPEC §8).
 
 /** Measured token usage for one deduped API response (assistant turn). */
 export interface Usage {
@@ -63,7 +66,7 @@ export interface ToolResult {
   /** uuid of the user record that carried this tool_result. */
   recordUuid?: string;
   /** Timestamp of the user record that carried this tool_result. */
-  ts?: Date;
+  ts?: number;
   /** Raw content text, kept only when the parser was run with includeContent. */
   text?: string;
   /**
@@ -88,7 +91,7 @@ export interface Turn {
   /** Envelope `requestId` (`req_…`), when present. */
   requestId?: string;
   /** Timestamp of the first line of this response. */
-  ts: Date;
+  ts: number;
   /**
    * ms since the previous turn's ts in the same chain of this session (null for the chain's first
    * turn). A chain is the main conversation or one sidechain (per agentId). Session-wide: not
@@ -130,7 +133,7 @@ export interface Turn {
 /** A prompt the user typed (string content, or array content without tool_result blocks). */
 export interface UserPrompt {
   uuid: string;
-  ts: Date;
+  ts: number;
   chars: number;
   /** Raw prompt text, kept only when the parser was run with includeContent. */
   text?: string;
@@ -141,7 +144,7 @@ export interface UserPrompt {
 export type SessionEvent =
   | {
       kind: 'compaction';
-      ts: Date;
+      ts: number;
       uuid?: string;
       /** Which marker was seen, e.g. `isCompactSummary`, `system:compact_boundary`, `summary`. */
       marker: string;
@@ -150,14 +153,14 @@ export type SessionEvent =
   | {
       /** CLAUDE.md / memory files injected as an `attachment` of type `instructions`. */
       kind: 'instructions';
-      ts: Date;
+      ts: number;
       files: { path: string; chars: number; hash: string }[];
       source: SourcePointer;
     }
   | {
       /** Tool definitions logged by `attachment.type = prompt_snapshot` (seen in CC 2.1.302). */
       kind: 'tools-snapshot';
-      ts: Date;
+      ts: number;
       tools: { name: string; chars: number }[];
       /** Characters of the system prompt parts in the same snapshot, when present. */
       systemPromptChars?: number;
@@ -169,13 +172,13 @@ export type SessionEvent =
        * definitions are not sent up front. Names only. UNVERIFIED: the attachment's shape.
        */
       kind: 'deferred-tools';
-      ts: Date;
+      ts: number;
       tools: string[];
       source: SourcePointer;
     }
   | {
       kind: 'api-error';
-      ts: Date;
+      ts: number;
       uuid?: string;
       detail: string;
       source: SourcePointer;
@@ -211,8 +214,8 @@ export interface Session {
   turns: Turn[];
   prompts: UserPrompt[];
   events: SessionEvent[];
-  firstTs: Date;
-  lastTs: Date;
+  firstTs: number;
+  lastTs: number;
   /** Distinct Claude Code versions seen in this session, in first-seen order. */
   ccVersions: string[];
   /**

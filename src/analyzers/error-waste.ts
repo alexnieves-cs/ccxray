@@ -40,15 +40,15 @@ export function apiErrors(s: Session): ApiError[] {
       continue;
     }
     const uuid = e.uuid ?? `${e.source.file}:${e.source.line}`;
-    standalone.push({ ts: e.ts.getTime(), uuid, label: e.detail, tokens: 0, synthetic: false });
+    standalone.push({ ts: e.ts, uuid, label: e.detail, tokens: 0, synthetic: false });
   }
   const out: ApiError[] = [];
   const linked = new Set<ApiError>();
   for (const t of turns) {
     if (!t.isSynthetic) continue;
-    const at = t.ts.getTime();
-    const prevReal = turns.filter((x) => !x.isSynthetic && x.ts.getTime() <= at).pop();
-    const from = prevReal?.ts.getTime() ?? -Infinity;
+    const at = t.ts;
+    const prevReal = turns.filter((x) => !x.isSynthetic && x.ts <= at).pop();
+    const from = prevReal?.ts ?? -Infinity;
     const ev = standalone.find((e) => !linked.has(e) && e.ts <= at && e.ts >= from);
     if (ev !== undefined) linked.add(ev);
     out.push({
@@ -95,11 +95,11 @@ export const errorWaste: Analyzer = {
       if (errors.length > 0) {
         let retries = 0;
         for (const e of errors) {
-          const before = [...real].reverse().find((t) => t.ts.getTime() <= e.ts);
-          const after = real.find((t) => t.ts.getTime() > e.ts);
+          const before = [...real].reverse().find((t) => t.ts <= e.ts);
+          const after = real.find((t) => t.ts > e.ts);
           if (
             after !== undefined &&
-            after.ts.getTime() - e.ts <= RETRY_WINDOW_MS &&
+            after.ts - e.ts <= RETRY_WINDOW_MS &&
             (before === undefined || before.model === after.model)
           )
             retries++;

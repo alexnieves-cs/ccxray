@@ -33,7 +33,8 @@ import {
   type UserRecord,
 } from './records.js';
 
-const EPOCH = new Date(0);
+/** Timestamp of records before the first timestamped one (and of sessions without any). */
+const EPOCH = 0;
 
 export interface FileData {
   file: DiscoveredFile;
@@ -41,8 +42,8 @@ export interface FileData {
   agentId?: string;
   cwd?: string;
   versions: string[];
-  firstTs?: Date;
-  lastTs?: Date;
+  firstTs?: number;
+  lastTs?: number;
   /** Assistant responses of this file, merged per (message.id, requestId) (dedupe rule 1). */
   turns: Turn[];
   /** Dedupe bookkeeping from ResponseMerger (see dedupe.ts). */
@@ -84,7 +85,7 @@ export function persistedInfo(content: unknown): ToolResult['persisted'] {
 export class FileParser {
   readonly data: FileData;
   private readonly merger: ResponseMerger;
-  private lastTs: Date | undefined;
+  private lastTs: number | undefined;
   private rawLength = 0;
 
   constructor(
@@ -157,7 +158,7 @@ export class FileParser {
     else if (type === 'attachment') this.warn('attachment without attachment.type');
   };
 
-  private user(r: UserRecord, ts: Date, source: SourcePointer): void {
+  private user(r: UserRecord, ts: number, source: SourcePointer): void {
     const uuid = str(r.uuid);
     if (r.isCompactSummary === true) {
       // UNVERIFIED (FORMAT.md Q5): `isCompactSummary: true` marks the post-compaction summary.
@@ -207,7 +208,7 @@ export class FileParser {
     this.data.prompts.push(p);
   }
 
-  private attachment(r: AttachmentRecord, ts: Date, source: SourcePointer): void {
+  private attachment(r: AttachmentRecord, ts: number, source: SourcePointer): void {
     const a = r.attachment;
     inc(this.stats.attachmentTypes, a.type);
     if (a.type === 'instructions' && Array.isArray(a.files)) {
@@ -289,7 +290,7 @@ export function sessionIdentity(
   };
 }
 
-const byTs = <T extends { ts: Date }>(a: T, b: T): number => a.ts.getTime() - b.ts.getTime();
+const byTs = <T extends { ts: number }>(a: T, b: T): number => a.ts - b.ts;
 
 /** Group files into sessions, attach kept responses as turns and join tool results. */
 export function buildSessions(
@@ -304,6 +305,8 @@ export function buildSessions(
       results: ToolResult[];
       links: Map<string, string>;
       metaToolUseId?: string;
+      /** Some file had a timestamp (EPOCH is a number, so it cannot mark "unset" by identity). */
+      hasFirstTs: boolean;
       /** Keys already merged: the same file can be reached from two roots (e.g. ~/.claude and
        * ~/.config/claude), so prompts, events and tool_results are deduped on merge. */
       seen?: Set<string>;
@@ -311,9 +314,8 @@ export function buildSessions(
   >();
   const promptKey = (p: UserPrompt): string => `p|${p.uuid}`;
   const eventKey = (e: SessionEvent): string =>
-    `e|${e.kind}|${'uuid' in e ? (e.uuid ?? '') : ''}|${e.ts.getTime()}|${e.source.line}`;
-  const resultKey = (tr: ToolResult): string =>
-    `r|${tr.toolUseId}|${tr.recordUuid ?? `${tr.ts?.getTime()}`}`;
+    `e|${e.kind}|${'uuid' in e ? (e.uuid ?? '') : ''}|${e.ts}|${e.source.line}`;
+  const resultKey = (tr: ToolResult): string => `r|${tr.toolUseId}|${tr.recordUuid ?? `${tr.ts}`}`;
   files.forEach((f, i) => {
     const ident = sessionIdentity(f);
     let g = sessions.get(ident.id);
@@ -329,7 +331,7 @@ export function buildSessions(
         lastTs: f.lastTs ?? EPOCH,
         ccVersions: [],
       };
-      g = { s, results: [], links: new Map() };
+      g = { s, results: [], links: new Map(), hasFirstTs: false };
       sessions.set(ident.id, g);
     }
     const s = g.s;
@@ -337,8 +339,8 @@ export function buildSessions(
     s.cwd ??= f.cwd;
     if (!ident.isSubagent && typeof f.firstParentUuid === 'string') s.continued = true;
     for (const v of f.versions) if (!s.ccVersions.includes(v)) s.ccVersions.push(v);
-    if (f.firstTs !== undefined && (s.firstTs === EPOCH || f.firstTs < s.firstTs))
-      s.firstTs = f.firstTs;
+    if (f.firstTs !== undefined && (!g.hasFirstTs || f.firstTs < s.firstTs)) s.firstTs = f.firstTs;
+    if (f.firstTs !== undefined) g.hasFirstTs = true;
     if (f.lastTs !== undefined && f.lastTs > s.lastTs) s.lastTs = f.lastTs;
     if (s.files.length === 1) {
       // Common case: the session's first file, nothing to dedupe against.
@@ -375,7 +377,7 @@ export function buildSessions(
   });
 
   const out: Session[] = [];
-  for (const { s, results, metaToolUseId } of sessions.values()) {
+  for (const { s, results, metaToolUseId, hasFirstTs } of sessions.values()) {
     if (s.isSubagent && s.agentId !== undefined) {
       const viaParent =
         s.parentSessionId !== undefined
@@ -408,7 +410,7 @@ export function buildSessions(
             ? list
             : list.slice()
           : t.toolResults.concat(list);
-    finalize(s);
+    finalize(s, hasFirstTs);
     out.push(s);
   }
   return out;
@@ -420,8 +422,9 @@ const chainOf = (t: Turn): string => (t.isSidechain ? `side:${t.agentId ?? ''}` 
 /**
  * Sort by ts (stable); set index and gapMs per chain (main vs each sidechain agent, so sidechain
  * turns inside a main file do not split main-chain gaps); widen firstTs/lastTs to the turns.
+ * `hasFirstTs`: s.firstTs came from a record timestamp (false: it is the EPOCH placeholder).
  */
-export function finalize(s: Session): void {
+export function finalize(s: Session, hasFirstTs: boolean): void {
   s.turns.sort(byTs);
   s.prompts.sort(byTs);
   s.events.sort(byTs);
@@ -434,13 +437,13 @@ export function finalize(s: Session): void {
     const c = chainOf(t);
     const p = prev.get(c);
     t.index = p === undefined ? 0 : p.index + 1;
-    const gap = p === undefined ? null : t.ts.getTime() - p.ts.getTime();
+    const gap = p === undefined ? null : t.ts - p.ts;
     // `| 0` keeps small gaps as V8 small integers instead of boxed doubles (memory, SPEC §8).
     t.gapMs = gap !== null && Math.abs(gap) < 2 ** 30 ? gap | 0 : gap;
     prev.set(c, t);
   }
   const first = s.turns[0];
   const last = s.turns[s.turns.length - 1];
-  if (first !== undefined && (s.firstTs === EPOCH || first.ts < s.firstTs)) s.firstTs = first.ts;
+  if (first !== undefined && (!hasFirstTs || first.ts < s.firstTs)) s.firstTs = first.ts;
   if (last !== undefined && last.ts > s.lastTs) s.lastTs = last.ts;
 }

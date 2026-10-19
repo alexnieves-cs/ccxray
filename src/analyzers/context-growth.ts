@@ -28,10 +28,10 @@ export function downsample(xs: readonly number[], n = CURVE_POINTS): number[] {
  * UNVERIFIED (FORMAT.md Q5): which markers one compaction writes; no real compaction seen yet.
  */
 export function countCompactions(s: Session): number {
-  const turnTimes = realTurns(s).map((t) => t.ts.getTime());
+  const turnTimes = realTurns(s).map((t) => t.ts);
   const marks = s.events
     .filter((e) => e.kind === 'compaction')
-    .map((e) => e.ts.getTime())
+    .map((e) => e.ts)
     .sort((a, b) => a - b);
   let n = 0;
   let last: number | undefined;
