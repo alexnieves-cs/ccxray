@@ -78,7 +78,7 @@ TOP FINDINGS
  3. REPEATED READS  src/api/client.ts read 7× unchanged in session 3fa2…
       → planned cc-slim read-dedupe hook
  4. UNUSED TOOLS  9 MCP tools from "github" server never called in 42 sessions (~6.3k tokens/cold turn [E])
-      → `tknxray fix mcp` (planned, M5) generates a permissions.deny diff
+      → run `tknxray fix mcp` to preview a permissions.deny diff
 
 Run `tknxray session 3fa2` for per-turn detail · `--html` for a shareable report
 ```

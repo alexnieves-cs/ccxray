@@ -149,8 +149,8 @@ export const toolUsage: Analyzer = {
         ),
         fix: {
           summary: none
-            ? `Disable the "${server}" MCP server, or scope it to a subagent (tknxray fix mcp, M5)`
-            : `Deny the unused "${server}" tools in permissions.deny (tknxray fix mcp, M5)`,
+            ? `Disable the "${server}" MCP server, or scope it to a subagent (run \`tknxray fix mcp\` to preview the change)`
+            : `Deny the unused "${server}" tools in permissions.deny (run \`tknxray fix mcp\` to preview the change)`,
         },
       });
     }
