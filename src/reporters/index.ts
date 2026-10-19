@@ -2,6 +2,7 @@
 import type { Report } from '../model/index.js';
 import { renderHtml } from './html.js';
 import { renderJson } from './json.js';
+import type { Timeline } from './timeline.js';
 import { renderTerminal } from './terminal.js';
 
 export type ReportFormat = 'terminal' | 'json' | 'html';
@@ -13,6 +14,8 @@ export interface RenderOptions {
   width?: number;
   /** Home directory, shown as `~` in roots and project names. Defaults to os.homedir(). */
   homeDir?: string;
+  /** HTML only: per-turn data for the session replay (buildTimeline). */
+  timeline?: Timeline;
 }
 
 export function render(report: Report, format: ReportFormat, opts: RenderOptions = {}): string {
@@ -28,3 +31,4 @@ export function render(report: Report, format: ReportFormat, opts: RenderOptions
 
 export { renderHtml, renderJson, renderTerminal };
 export { shouldUseColor } from './format.js';
+export { buildTimeline } from './timeline.js';
