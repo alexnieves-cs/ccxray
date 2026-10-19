@@ -11,8 +11,20 @@ Labels: **[M]** measured in a real transcript listed under "Evidence" · **[D]**
 | C1: one Claude Code on the web session (`entrypoint: remote_projects`), the cloud session that built M1 | 2.1.302 | 1 | 202 | 1,142,960 | 2026-10-18, `pnpm probe` |
 | C1, second probe: the same session later, now 1 parent + 3 subagent JSONL files (plus `.meta.json` / `.prefix.json` siblings and one `tool-results/*.txt`) | 2.1.302 | 4 `.jsonl` | not re-counted | not re-counted | 2026-10-18, lead's read-only probe (counts and key names only) |
 | SPEC §4.2 notes from the dev box | 2.1.296 | n/a | n/a | n/a | before this doc |
+| C2: Alex's own `~/.claude/projects` (aggregate `tknxray doctor --json` only; no content left the machine) | 36 versions, 2.1.217–2.1.299 | 1,777 | ~453,800 | 3,720,779,787 | 2026-10-19, local run on Alex's Mac |
 
-C1 is a single session in one environment. The first probe had no subagents; the second has 3 (Q4) and 1 externalized tool output (Q1). It still has no compaction and no API errors, so anything about those is UNVERIFIED. Record counts below are from the first probe. **Alex's own `~/.claude` corpus has not been probed yet** (it is not reachable from the cloud build environment). Running `pnpm probe > probe.json` locally and pasting the output here is the next step; the probe prints counts only.
+C2 (Alex's logs, doctor aggregates only) [M]:
+- **Sessions:** 1,771, of which 724 are subagent sessions. Linked to a parent `tool_use`: 515.
+- **Turns:** 50,800 assistant turns, 35 of them synthetic.
+- **Lines:** 0 malformed and 0 blank lines.
+- **Dedupe:** about 52,360 same-response lines, 7 sidechain replays, 0 cross-session copies.
+- **Tool results:** 283 persisted tool outputs. 8 tool_results have no matching tool_use.
+- **Unknown record types (19, all tolerated):** `mode`, `permission-mode`, `bridge-session`, `custom-title`, `file-history-snapshot`, `file-history-delta`, `frame-link`, `worktree-state`, `relocated`, `pr-link`, `artifact-autoreact-ledger`, `agent-name`, `started`, `result`, `artifact-comment-monitor`, `dev-mods`, `fork-context-ref`, `launched`, `agent-color`.
+- **Attachment subtypes:** 44, including `compact_file_reference`.
+- **Estimator calibration:** chars/4 ÷ measured median is 0.55 over 18,064 single-tool_result turns. Read literally, chars/4 *under*estimates tool output tokens by about 1.8×. **UNVERIFIED** how much of the measured delta is text the log does not show (system reminders, framing), which would push the ratio low (see `src/tokens/calibrate.ts`). Until that is settled, treat every [E] token figure as a rough lower bound.
+- **Not yet run on C2:** the format probe, the ccusage cross-check and the false-positive review. A safety check on Alex's Mac blocked the commands that read individual turns.
+
+C1 is a single session in one environment. The first probe had no subagents; the second has 3 (Q4) and 1 externalized tool output (Q1). It still has no compaction and no API errors, so anything about those is UNVERIFIED. Record counts below are from the first probe. Alex's corpus (C2) has doctor aggregates only so far; `pnpm probe` on it is still pending.
 
 ## Layout
 
