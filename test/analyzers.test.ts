@@ -40,6 +40,8 @@ const tt = (
   turns,
   cacheHitRatio:
     input + cacheWrite + cacheRead === 0 ? null : cacheRead / (input + cacheWrite + cacheRead),
+  // $ are checked by hand in the model-switch case below and in test/cost.test.ts.
+  cost: expect.objectContaining({ total: expect.any(Number) }) as unknown,
 });
 
 const s = (name: string, o: Parameters<typeof session>[1] = {}): SessionBuilder =>
@@ -85,6 +87,11 @@ describe('A1 totals', () => {
       'claude-sonnet-4-5': tt(5, 18300, 18000, 55, 2),
       'claude-opus-4-1': tt(3, 18400, 0, 60, 1),
     });
+    // No TTL split in the fixture → 5m write rate. Sonnet 4.5: 5×3 + 18,300×3.75 + 18,000×0.30
+    // + 55×15 = 74,865 µ$; Opus 4.1: 3×15 + 18,400×18.75 + 60×75 = 349,545 µ$.
+    expect(t.byModel['claude-sonnet-4-5']!.cost!.total).toBe(0.074865);
+    expect(t.byModel['claude-opus-4-1']!.cost!.total).toBe(0.349545);
+    expect(t.all.cost!.total).toBe(0.42441);
   });
 
   it('minimal-single-turn: the 5m/1h split is summed', async () => {
@@ -114,6 +121,7 @@ describe('A1 totals', () => {
       byProject: {},
       byModel: {},
       byDay: {},
+      byRole: { main: tt(0, 0, 0, 0, 0), subagent: tt(0, 0, 0, 0, 0) },
     });
   });
 });

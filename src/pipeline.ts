@@ -2,6 +2,8 @@
 // Pure: no I/O. The CLI loads sessions and renders the report.
 import { ANALYZERS } from './analyzers/index.js';
 import { computeTotals } from './analyzers/totals.js';
+import { COST_NOTE } from './cost/cost.js';
+import { PRICES_AS_OF, PRICES_SOURCE, pricedId } from './cost/prices.js';
 import type {
   Analyzer,
   AnalyzerContext,
@@ -39,6 +41,21 @@ function summary(s: Session, totals: Report['totals']): SessionSummary {
   };
 }
 
+/** Report.pricing: the price table's date and the models it could not price. */
+export function pricingInfo(sessions: readonly Session[]): NonNullable<Report['pricing']> {
+  const unpriced = new Map<string, number>();
+  for (const s of sessions)
+    for (const t of s.turns)
+      if (!t.isSynthetic && pricedId(t.model) === undefined)
+        unpriced.set(t.model, (unpriced.get(t.model) ?? 0) + 1);
+  return {
+    asOf: PRICES_AS_OF,
+    source: PRICES_SOURCE,
+    unpricedModels: Object.fromEntries([...unpriced].sort((a, b) => (a[0] < b[0] ? -1 : 1))),
+    note: COST_NOTE,
+  };
+}
+
 export function buildReport(input: BuildReportInput): Report {
   const { sessions, stats, ctx } = input;
   const findings: Finding[] = [];
@@ -57,5 +74,6 @@ export function buildReport(input: BuildReportInput): Report {
       .map((s) => summary(s, totals)),
     findings: sortFindings(findings),
     calibration: calibrate(sessions),
+    pricing: pricingInfo(sessions),
   };
 }

@@ -282,6 +282,23 @@ export interface TokenTotals {
   /** read / (read + write + input). null when the denominator is 0. Measured. */
   cacheHitRatio: number | null;
   turns: number;
+  /**
+   * The same tokens at API list prices (src/cost), USD. Estimated [E]: a comparison unit, not a
+   * bill. Optional (additive in report v1); set by computeTotals.
+   */
+  cost?: CostTotals;
+}
+
+/** USD per token kind and their sum, at API list prices. Estimated [E]. */
+export interface CostTotals {
+  input: number;
+  write5m: number;
+  write1h: number;
+  read: number;
+  output: number;
+  total: number;
+  /** Non-synthetic turns on a model without a list price (left out of the sums). */
+  unpricedTurns: number;
 }
 
 export interface Totals {
@@ -291,6 +308,11 @@ export interface Totals {
   byModel: Record<string, TokenTotals>;
   /** Keyed by UTC day `YYYY-MM-DD`. */
   byDay: Record<string, TokenTotals>;
+  /**
+   * Main conversations vs subagents (subagent transcripts and inline sidechain turns).
+   * Optional (additive in report v1).
+   */
+  byRole?: { main: TokenTotals; subagent: TokenTotals };
 }
 
 export interface SessionSummary {
@@ -318,4 +340,12 @@ export interface Report {
   findings: Finding[];
   /** Estimator calibration (SPEC §4.5), when enough samples exist. */
   calibration?: { samples: number; medianRatio: number | null; note: string };
+  /** The bundled price table behind every $ figure (SPEC §5.1). Optional (additive in v1). */
+  pricing?: {
+    asOf: string;
+    source: string;
+    /** Models seen in the window that have no list price, with their turn counts. */
+    unpricedModels: Record<string, number>;
+    note: string;
+  };
 }

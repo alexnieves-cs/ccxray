@@ -4,6 +4,10 @@
 // INCLUDING subagent sessions and sidechain turns: subagent requests are real API spend, and
 // ccusage counts them too. Synthetic turns (`<synthetic>` model, API errors) are excluded
 // (SPEC §4.2). Dedupe across files already happened in the parser, so nothing is counted twice.
+//
+// Every bucket also carries `cost`: the same tokens at API list prices [E] (src/cost). Turns on
+// unpriced models are counted in cost.unpricedTurns and left out of the $ sums.
+import { addTurnCost, emptyCost, roundCost } from '../cost/cost.js';
 import type { Session, TokenTotals, Totals, Turn } from '../model/index.js';
 
 export function emptyTokenTotals(): TokenTotals {
@@ -16,6 +20,7 @@ export function emptyTokenTotals(): TokenTotals {
     output: 0,
     cacheHitRatio: null,
     turns: 0,
+    cost: emptyCost(),
   };
 }
 
@@ -28,12 +33,14 @@ function add(t: TokenTotals, turn: Turn): void {
   t.cacheRead += u.cacheRead;
   t.output += u.output;
   t.turns++;
+  if (t.cost !== undefined) addTurnCost(t.cost, turn);
 }
 
 /** read / (read + write + input); null when the denominator is 0. Measured. */
 export function withHitRatio(t: TokenTotals): TokenTotals {
   const denom = t.cacheRead + t.cacheWrite + t.input;
   t.cacheHitRatio = denom > 0 ? t.cacheRead / denom : null;
+  if (t.cost !== undefined) t.cost = roundCost(t.cost);
   return t;
 }
 
@@ -49,6 +56,8 @@ export function sessionTotals(s: Session): TokenTotals {
 
 export function computeTotals(sessions: readonly Session[]): Totals {
   const all = emptyTokenTotals();
+  const main = emptyTokenTotals();
+  const subagent = emptyTokenTotals();
   // Maps, not objects: a model name such as `__proto__` must stay an ordinary key.
   const maps = {
     bySession: new Map<string, TokenTotals>(),
@@ -67,6 +76,7 @@ export function computeTotals(sessions: readonly Session[]): Totals {
     for (const turn of s.turns) {
       if (turn.isSynthetic) continue;
       add(all, turn);
+      add(s.isSubagent || turn.isSidechain ? subagent : main, turn);
       add(ss, turn);
       add(bucket(maps.byProject, s.project), turn);
       add(bucket(maps.byModel, turn.model), turn);
@@ -81,5 +91,6 @@ export function computeTotals(sessions: readonly Session[]): Totals {
     byProject: obj(maps.byProject),
     byModel: obj(maps.byModel),
     byDay: obj(maps.byDay),
+    byRole: { main: withHitRatio(main), subagent: withHitRatio(subagent) },
   };
 }
