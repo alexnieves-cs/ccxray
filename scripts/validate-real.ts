@@ -31,9 +31,13 @@ const num = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 
 /**
- * UNVERIFIED: the shape of `ccusage session --json` — `{ sessions: [{ sessionId, inputTokens,
- * outputTokens, cacheCreationTokens, cacheReadTokens, … }], totals: { … } }` as remembered from
- * ccusage's docs; alternative key spellings are accepted and anything else is ignored.
+ * The shape of `ccusage session --json`. Two shapes are accepted; anything else is ignored.
+ * - Confirmed against real ccusage output on 2026-10-19 (ccusage latest): `{ session: [{ period:
+ *   <sessionId>, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, totalTokens,
+ *   totalCost, modelsUsed, modelBreakdowns, metadata: { lastActivity } }], totals: { … } }`,
+ *   with subagent transcripts folded into their parent session.
+ * - UNVERIFIED (older, as remembered from ccusage's docs): `{ sessions: [{ sessionId, … }],
+ *   totals }`. Alternative token key spellings are accepted for both.
  */
 export function parseCcusage(json: unknown): { sessions: Map<string, Counts>; totals?: Counts } {
   const counts = (o: unknown): Counts | undefined => {
@@ -48,8 +52,13 @@ export function parseCcusage(json: unknown): { sessions: Map<string, Counts>; to
   };
   const root = (typeof json === 'object' && json !== null ? json : {}) as Record<string, unknown>;
   const sessions = new Map<string, Counts>();
-  for (const s of Array.isArray(root.sessions) ? root.sessions : []) {
-    const id = (s as Record<string, unknown> | null)?.sessionId;
+  const rows = [
+    ...(Array.isArray(root.session) ? (root.session as unknown[]) : []),
+    ...(Array.isArray(root.sessions) ? (root.sessions as unknown[]) : []),
+  ];
+  for (const s of rows) {
+    const r = s as Record<string, unknown> | null;
+    const id = r?.sessionId ?? r?.period;
     const c = counts(s);
     if (typeof id === 'string' && c !== undefined) sessions.set(id, c);
   }
@@ -74,8 +83,8 @@ export function within(ours: Counts, theirs: Counts): boolean {
 }
 
 /**
- * tknxray sessions keyed for matching ccusage: subagent sessions are folded into their parent
- * (UNVERIFIED: that ccusage reports a subagent under its parent's sessionId).
+ * tknxray sessions keyed for matching ccusage: subagent sessions are rolled into their parent
+ * session id, as ccusage does (confirmed against real `ccusage session --json` on 2026-10-19).
  */
 export function oursBySession(
   sessions: readonly Session[],

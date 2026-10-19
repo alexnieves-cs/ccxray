@@ -145,7 +145,7 @@ export class FileParser {
     } else if (isUserRecord(r)) this.user(r, ts, source);
     else if (isAttachmentRecord(r)) this.attachment(r, ts, source);
     else if (isSystemRecord(r)) {
-      // UNVERIFIED (FORMAT.md Q5): compaction marker from community reports; 0 seen in C1.
+      // Compaction boundary: [M] CC 2.1.302–2.1.303 (FORMAT.md Q5, 3 of 3 compactions in C3).
       if (r.subtype === 'compact_boundary')
         d.events.push({ kind: 'compaction', ts, uuid, marker: 'system:compact_boundary', source });
       // UNVERIFIED: `system` records with subtype `api_error`; not seen in C1.
@@ -161,7 +161,8 @@ export class FileParser {
   private user(r: UserRecord, ts: number, source: SourcePointer): void {
     const uuid = str(r.uuid);
     if (r.isCompactSummary === true) {
-      // UNVERIFIED (FORMAT.md Q5): `isCompactSummary: true` marks the post-compaction summary.
+      // `isCompactSummary: true` marks the post-compaction summary: [M] CC 2.1.302–2.1.303
+      // (FORMAT.md Q5), written 4–5 lines after the compact_boundary record.
       this.data.events.push({ kind: 'compaction', ts, uuid, marker: 'isCompactSummary', source });
       return;
     }

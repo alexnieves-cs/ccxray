@@ -126,4 +126,16 @@ describe('A10 error-waste', () => {
       });
     expect(await run(errorWaste, [s])).toEqual([]);
   });
+
+  it('names a subagent by its agent id, not by the parent session id', async () => {
+    const p = session('a10/sub', { id: 'face0000-1111-2222-3333-444444444444' })
+      .prompt('go')
+      .assistant({ usage: { cacheWrite: 1_000 } });
+    const a = p.agent('a7777777abcdef').prompt('explore');
+    a.assistant({ usage: { cacheWrite: 1_000 } });
+    synthetic(a);
+    const [f, ...rest] = apiFindings(await run(errorWaste, [p, a]));
+    expect(rest).toEqual([]);
+    expect(f!.title).toMatch(/^1 API error in subagent a7777777,/);
+  });
 });

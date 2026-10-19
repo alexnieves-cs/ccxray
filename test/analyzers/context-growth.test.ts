@@ -2,11 +2,11 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { session, type SessionBuilder } from '../../scripts/make-fixture.js';
 import { contextGrowth, downsample } from '../../src/analyzers/context-growth.js';
-import { cleanup, run } from '../helpers/analyze.js';
+import { cleanup, observedCompaction, run } from '../helpers/analyze.js';
 
 afterAll(cleanup);
 
-/** One compaction as Claude Code is reported to log it: a boundary plus a summary line. */
+/** One compaction, minimal form: a boundary plus a summary line. */
 const compact = (s: SessionBuilder) =>
   s
     .record('system', { subtype: 'compact_boundary' })
@@ -86,5 +86,105 @@ describe('A8 context-growth', () => {
     expect(rest).toEqual([]);
     expect(f!.data).toMatchObject({ max: 160_000, turns: 2 });
     expect(f!.title).toMatch(/^Subagent /);
+  });
+
+  it('aggregates subagents: one finding per session tree, evidence per agent id', async () => {
+    const p = session('a8/agg', { id: 'cafe0000-1111-2222-3333-444444444444' })
+      .prompt('go')
+      .assistant({ usage: { cacheWrite: 100_000 } })
+      .assistant({ usage: { cacheWrite: 60_000, cacheRead: 100_000 } });
+    const big = (id: string, peak: number, turns: number) => {
+      const a = p.agent(id).prompt('explore');
+      for (let i = 1; i <= turns; i++)
+        a.assistant({ usage: { cacheWrite: Math.round((peak * i) / turns) } });
+      return a;
+    };
+    const subs = [
+      big('a1111111deadbeef', 200_000, 3),
+      big('a2222222deadbeef', 380_000, 4),
+      big('a3333333deadbeef', 160_000, 2),
+      big('a4444444small', 20_000, 2), // under the threshold: not listed
+    ];
+    const fs = await run(contextGrowth, [p, ...subs]);
+    expect(fs).toHaveLength(2);
+    const main = fs.find((f) => f.title.startsWith('Session '))!;
+    expect(main.title).toBe('Session cafe0000 peaked at 160,000 tokens over 2 turns');
+    expect(main.data?.curve).toEqual([100_000, 160_000]);
+    expect(main.fix.summary).toContain('/clear');
+    const sub = fs.find((f) => f !== main)!;
+    expect(sub.title).toBe(
+      '3 subagents of session cafe0000 grew large; largest peaked at 380,000 tokens ' +
+        '(subagent a2222222, 4 turns)',
+    );
+    expect(sub.tokens).toEqual({ value: 380_000, kind: 'measured' });
+    expect(sub.data).toEqual({
+      subagents: 3,
+      max: 380_000,
+      turns: 4,
+      totalTurns: 9,
+      compactions: 0,
+    });
+    expect(sub.data).not.toHaveProperty('curve');
+    expect(sub.evidence.map((e) => e.detail)).toEqual([
+      'subagent a2222222: peaked at 380,000 tokens over 4 turns (peak 380,000 at turn 4)',
+      'subagent a1111111: peaked at 200,000 tokens over 3 turns (peak 200,000 at turn 3)',
+      'subagent a3333333: peaked at 160,000 tokens over 2 turns (peak 160,000 at turn 2)',
+    ]);
+    expect(sub.evidence.every((e) => e.source !== undefined)).toBe(true);
+    expect(sub.fix.summary).not.toContain('/clear between');
+    expect(sub.fix.summary).toMatch(/narrower task/);
+    expect(sub.fix.summary).toMatch(/summary/);
+  });
+
+  it('a single flagged subagent is named by its agent id, not the parent session id', async () => {
+    const p = session('a8/one', { id: 'beef0000-1111-2222-3333-444444444444' })
+      .prompt('go')
+      .assistant({ usage: { cacheWrite: 1_000 } });
+    const a = p.agent('a9999999feedface').prompt('explore');
+    a.assistant({ usage: { cacheWrite: 155_000 } });
+    const [f, ...rest] = await run(contextGrowth, [p, a]);
+    expect(rest).toEqual([]);
+    expect(f!.title).toBe(
+      'Subagent a9999999 of session beef0000 peaked at 155,000 tokens over 1 turn',
+    );
+  });
+
+  it('subagent titles say "compacted" only for subagents that hit the compaction threshold', async () => {
+    const p = session('a8/cmp', { id: 'abcd0000-1111-2222-3333-444444444444' })
+      .prompt('go')
+      .assistant({ usage: { cacheWrite: 1_000 } });
+    const once = p.agent('a1000000once').prompt('explore');
+    once.assistant({ usage: { cacheWrite: 200_000 } });
+    compact(once).assistant({ usage: { cacheWrite: 30_000 } });
+    const twice = p.agent('a2000000twice').prompt('explore');
+    twice.assistant({ usage: { cacheWrite: 1_000 } });
+    compact(twice).assistant({ usage: { cacheWrite: 1_100 } });
+    compact(twice).assistant({ usage: { cacheWrite: 1_200 } });
+    const [f, ...rest] = await run(contextGrowth, [p, once]);
+    expect(rest).toEqual([]);
+    expect(f!.title).toBe(
+      'Subagent a1000000 of session abcd0000 peaked at 200,000 tokens over 2 turns',
+    );
+    expect(f!.data?.compactions).toBe(1);
+    const [g] = await run(contextGrowth, [p, once, twice]);
+    expect(g!.title).toBe(
+      '2 subagents of session abcd0000 grew large or compacted repeatedly; ' +
+        'largest peaked at 200,000 tokens (subagent a1000000, 2 turns)',
+    );
+    expect(g!.evidence.map((e) => e.detail)).toEqual([
+      'subagent a1000000: peaked at 200,000 tokens over 2 turns (peak 200,000 at turn 1)',
+      'subagent a2000000: compacted 2× over 3 turns (peak 1,200 at turn 3)',
+    ]);
+  });
+
+  it('the observed CC 2.1.302 marker pair (summary stamped before the boundary) counts once', async () => {
+    const s = session('a8/observed')
+      .prompt('go')
+      .assistant({ usage: { cacheWrite: 1_000 } });
+    observedCompaction(s).assistant({ usage: { cacheWrite: 1_100 } });
+    observedCompaction(s).assistant({ usage: { cacheWrite: 1_200 } });
+    const [f, ...rest] = await run(contextGrowth, [s]);
+    expect(rest).toEqual([]);
+    expect(f!.data).toMatchObject({ compactions: 2, turns: 3 });
   });
 });

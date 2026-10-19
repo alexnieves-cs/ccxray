@@ -90,7 +90,8 @@ export function rebuildCause(
   const inGap = s.events.filter((e) => between(e, prev, turn));
 
   // (d) Compaction marker between the two turns.
-  // UNVERIFIED: the compaction markers themselves (FORMAT.md Q5; none seen in a real log yet).
+  // Markers: [M] compact_boundary / isCompactSummary in CC 2.1.302–2.1.303 (FORMAT.md Q5);
+  // `summary` records UNVERIFIED. The observed post-compaction turns do not meet the A2 rule.
   const compaction = inGap.find((e): e is Ev<'compaction'> => e.kind === 'compaction');
   if (compaction) return r('compaction', `compaction (${compaction.marker}) before this turn`);
 
