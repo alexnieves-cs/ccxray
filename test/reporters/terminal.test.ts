@@ -42,6 +42,17 @@ describe('terminal reporter', () => {
       /BY PROJECT[^\n]*\n {2}~-big +\$4\.00 +\d+% +█+ +9 turns[^\n]*\n {2}~-small/,
     );
     expect(maxWidth(out)).toBeLessThanOrEqual(100);
+    // Large turn counts and narrow terminals: the measured turns and hit ratio are never cut.
+    r.totals.byProject = {
+      '-home-dev-another-very-long-project-name': { ...all, turns: 123_456, cost: cost(4) },
+      '-home-dev-small': { ...all, turns: 12_345, cost: cost(1) },
+    };
+    for (const width of [60, 80, 100]) {
+      const o = stripAnsi(renderTerminal(r, { color: false, width, homeDir: '/home/dev' }));
+      expect(o).toMatch(/123,456 turns · hit \d/);
+      expect(o).toMatch(/12,345 turns · hit \d/);
+      expect(maxWidth(o), `width ${width}`).toBeLessThanOrEqual(width);
+    }
   });
 
   it('shows COST under TOKENS and WHAT TO CHANGE FIRST, with the $ legend', () => {
