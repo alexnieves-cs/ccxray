@@ -123,6 +123,8 @@ type Finding = {
 };
 ```
 
+**Finding.data conventions (provisional, reporters ↔ analyzers).** `Finding.data` is analyzer-specific, but reporters read three keys when present and well-formed: `causes: { cause, count, tokens?, fix? }[]` (per-cause breakdown, e.g. A2/A3; `tokens` has the finding's kind), `tool: string` (tool name; groups "where it went" by tool) and `command: string` (raw Bash command; reporters only show its first two words, never env assignments). Without `--include-content`, the JSON report keeps only those keys plus number/boolean scalars and strings of at most 80 chars. This contract may change until M4; the source of truth is the comment at the top of `src/reporters/derive.ts`.
+
 ### 4.2 Transcript format: what is known
 Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusage's Claude adapter docs ([rust/adapters/claude/src/README.md](https://github.com/ccusage/ccusage/blob/main/rust/adapters/claude/src/README.md)) **[M: documented by a widely used parser]**; the Anthropic Messages API `usage` object ([docs](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching)).
 
@@ -151,6 +153,7 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 4. How subagent (Task/Agent) transcripts link to the parent tool_use.
 5. Is compaction marked by a distinct record (e.g. a summary type or `isCompactSummary`)?
 6. How field names drift across CC versions (keep a version → quirks table in `parser/quirks.ts`).
+7. Which cwd characters Claude Code replaces with `-` in project dir names. Reporters collapse the encoded home prefix to `~` and try both `/ \ :` only and every non-alphanumeric character.
 
 **Parser assumptions added in M1 [UNVERIFIED]** (details in [FORMAT.md](FORMAT.md#parser-implementation-notes-m1)):
 - Lines without `requestId` are deduped by `message.id` within one file only.
