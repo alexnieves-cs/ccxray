@@ -108,6 +108,9 @@ function measure(s: Side): Map<string, number | null> {
   const { report, main } = s;
   const all = report.totals.all;
   const cost = all.cost?.total ?? 0;
+  // Turns on a model without a list price are left out of cost.total, so $ rates divide by
+  // priced turns only, and per-session $ is shown only when every turn is priced.
+  const priced = all.cost === undefined ? 0 : all.turns - all.cost.unpricedTurns;
   const rebuilds = report.findings
     .filter((f) => f.analyzer === 'cache-rebuild')
     .reduce((a, f) => a + (typeof f.data?.rebuilds === 'number' ? f.data.rebuilds : 0), 0);
@@ -116,16 +119,17 @@ function measure(s: Side): Map<string, number | null> {
   return new Map<string, number | null>([
     ['sessions', main.length],
     ['turns', all.turns],
-    ['costPerTurn', div(cost, all.turns)],
-    ['costPerSession', div(cost, main.length)],
+    ['unpriced', all.turns - priced],
+    ['costPerTurn', div(cost, priced)],
+    ['costPerSession', priced === all.turns ? div(cost, main.length) : null],
     ['hitRatio', all.cacheHitRatio],
     ['writePerTurn', div(all.cacheWrite, all.turns)],
     ['outputPerTurn', div(all.output, all.turns)],
     ['peakContext', median(main.map((m) => m.peak))],
     ['compactionsPerSession', div(compactions, main.length)],
     ['rebuildsPer100', all.turns > 0 ? (rebuilds / all.turns) * 100 : null],
-    ['subagentShare', cost > 0 ? (sub / cost) * 100 : null],
-    ['addressable', report.actionPlan?.combinedSharePct ?? (cost > 0 ? 0 : null)],
+    ['subagentShare', priced > 0 && cost > 0 ? (sub / cost) * 100 : null],
+    ['addressable', priced > 0 && cost > 0 ? (report.actionPlan?.combinedSharePct ?? 0) : null],
   ]);
 }
 
@@ -254,7 +258,19 @@ export function compare(before: Side, after: Side): Comparison {
       ? `the ${name} window has ${plural(m.get('sessions') ?? 0, 'main session')} and ` +
         `${plural(m.get('turns') ?? 0, 'turn')}`
       : undefined;
-  const thin = [thinSide('before', b), thinSide('after', a)].filter(Boolean).join('; ');
+  const unpricedSide = (name: string, m: Map<string, number | null>): string | undefined =>
+    (m.get('unpriced') ?? 0) > 0
+      ? `the ${name} window has ${plural(m.get('unpriced') ?? 0, 'turn')} on a model with no ` +
+        `list price, left out of the $ rates`
+      : undefined;
+  const thin = [
+    thinSide('before', b),
+    thinSide('after', a),
+    unpricedSide('before', b),
+    unpricedSide('after', a),
+  ]
+    .filter(Boolean)
+    .join('; ');
   return {
     before: before.report.window,
     after: after.report.window,
