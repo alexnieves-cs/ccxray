@@ -53,9 +53,9 @@ describe('A7 tool-usage', () => {
       defChars: 100,
     });
     expect(lin!.tokens.value).toBe(25);
-    expect(lin!.fix.summary).toContain('Disable the "linear" MCP server');
+    expect(lin!.fix.summary).toContain('Turn the "linear" MCP server off (/mcp');
     expect(gh!.fix.summary).toBe(
-      'Deny the unused "github" tools in permissions.deny (run `tknxray fix mcp` to preview the change)',
+      'Set "alwaysLoad": false on the "github" server so its tools load on demand, or deny the unused ones (`tknxray fix mcp`)',
     );
     // No internal milestone labels (M4, M5…) in user-visible text.
     for (const f of fs) expect(`${f.title} ${f.fix.summary}`).not.toMatch(/\bM\d\b/);

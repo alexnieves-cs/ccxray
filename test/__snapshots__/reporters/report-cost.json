@@ -590,7 +590,7 @@
       },
       {
         "category": "context",
-        "change": "Add to CLAUDE.md:\n- Run `pnpm test` as `pnpm test … 2>&1 | tail -n 100`.\n- Narrow Grep with a glob or path, or set head_limit.",
+        "change": "Add to CLAUDE.md:\n- Run `pnpm test` as `pnpm test … 2>&1 | tail -n 100`.\n- Narrow Grep with a glob or path, or set head_limit.\nOr cap tool output in settings.json (suggested values):\n  \"env\": { \"BASH_MAX_OUTPUT_LENGTH\": \"20000\" }",
         "confidence": "estimated",
         "findings": [
           2,

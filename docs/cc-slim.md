@@ -54,13 +54,14 @@ dropped and lines omitted. Counts only, never content.
 - Exit code 0 means success; stdout may hold a JSON response. Exit code 2 is a blocking error
   (stderr is fed back to Claude). Other codes are non-blocking errors.
 - PostToolUse JSON output can carry `decision: "block"` + `reason`, and
-  `hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext, updatedMCPToolOutput }`.
-- **[UNVERIFIED]** The Bash `tool_response` shape `{ stdout, stderr, interrupted, isImage }`.
-- **[UNVERIFIED, important]** `updatedMCPToolOutput` is documented for **MCP** tools. I don't
-  know of a documented PostToolUse field that replaces the output of the built-in Bash tool.
-  If there is none, the PostToolUse prototype has **no effect** on Bash: `additionalContext`
-  would only add tokens, and `decision: "block"` does not remove the output already produced.
-  Step 0 of the measurement plan (§6) settles this before anything else.
+  `hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext, updatedToolOutput }`.
+- **Documented** (code.claude.com/docs/en/hooks, read 2026-10-19): `updatedToolOutput`
+  "replaces the tool's output with the provided value before it is sent to Claude" and works for
+  all tools; `updatedMCPToolOutput` is the older, MCP-only field. A built-in tool's replacement
+  must match that tool's output schema or it is ignored, and the tool has already run.
+- **[UNVERIFIED]** The Bash `tool_response` shape `{ stdout, stderr, interrupted, isImage }`, and
+  so whether the prototype's replacement (that object with shorter `stdout`/`stderr`) matches
+  the schema. Step 0 of the measurement plan (§6) checks it before anything else.
 
 ### 3.2 The prototype hook
 
@@ -70,7 +71,7 @@ dropped and lines omitted. Counts only, never content.
 - compresses `stdout` and `stderr` separately when either is over the threshold
   (`CC_SLIM_THRESHOLD`, default 20,000 chars);
 - if something changed, prints
-  `{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedMCPToolOutput":{…tool_response, stdout, stderr}}}`;
+  `{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{…tool_response, stdout, stderr}}}`;
   otherwise prints nothing;
 - **fails open**: on malformed input or any error it prints nothing and exits 0, so Claude
   Code keeps the original output. It never blocks a tool.

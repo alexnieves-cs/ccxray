@@ -164,7 +164,7 @@ describe('hooks/cc-slim-posttooluse.mjs (built dist/slim.js)', () => {
     );
     const res = JSON.parse(out);
     expect(res.hookSpecificOutput.hookEventName).toBe('PostToolUse');
-    const updated = res.hookSpecificOutput.updatedMCPToolOutput;
+    const updated = res.hookSpecificOutput.updatedToolOutput;
     expect(updated.stdout.startsWith(SLIM_MARKER)).toBe(true);
     expect(updated.stdout).toContain('Error: boom');
     expect(updated).toMatchObject({ stderr: '', interrupted: false });
