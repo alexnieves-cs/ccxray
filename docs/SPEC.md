@@ -75,7 +75,9 @@ better / worse / same for metrics with a direction (moves under 5% relative coun
 Below the metrics, "waste by kind" sums each analyzer's priced savings (§5.2) as a % of that
 window's $ (`≤` marks upper bounds). Rates are normalized because workloads differ; the verdict
 says what moved, never why. A window with fewer than 3 main sessions or 100 turns is flagged as
-thin. Exit 1 when either window has no sessions. `--json` prints the comparison object
+thin. Turns on a model with no list price are left out of the $ rows: $ per turn divides by
+priced turns only, $ per main session is blank unless every turn is priced, and the window is
+flagged. The two windows may not share an instant. Exit 1 when either window has no sessions. `--json` prints the comparison object
 (`src/compare.ts` `Comparison`); it is not part of report.v1.
 
 Config dir discovery: `CLAUDE_CONFIG_DIR` (comma-separated allowed), `~/.config/claude/projects`, `~/.claude/projects` (same rules as ccusage **[M: ccusage docs]**).
