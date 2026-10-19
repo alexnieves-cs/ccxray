@@ -3,6 +3,7 @@
 import { ANALYZERS } from './analyzers/index.js';
 import { computeTotals } from './analyzers/totals.js';
 import { COST_NOTE } from './cost/cost.js';
+import { buildActionPlan } from './cost/plan.js';
 import { PRICES_AS_OF, PRICES_SOURCE, pricedId } from './cost/prices.js';
 import type {
   Analyzer,
@@ -61,7 +62,7 @@ export function buildReport(input: BuildReportInput): Report {
   const findings: Finding[] = [];
   for (const a of input.analyzers ?? ANALYZERS) findings.push(...a.run(sessions, ctx));
   const totals = computeTotals(sessions);
-  return {
+  const report: Report = {
     schemaVersion: 1,
     tool: { name: 'tknxray', version: VERSION },
     generatedAt: ctx.now.toISOString(),
@@ -76,4 +77,6 @@ export function buildReport(input: BuildReportInput): Report {
     calibration: calibrate(sessions),
     pricing: pricingInfo(sessions),
   };
+  report.actionPlan = buildActionPlan(report);
+  return report;
 }

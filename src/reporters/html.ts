@@ -1,7 +1,9 @@
 // HTML reporter (`--html FILE`): one self-contained file. Inline CSS and JS only; nothing is
 // loaded from the network (a CSP meta tag enforces it). Every dynamic string is escaped, and
 // the replay's data is embedded as escaped JSON (scriptJson) that the page parses.
-import type { Finding, Report, TokenKind, TokenTotals } from '../model/index.js';
+import { changesPhrase } from '../cost/plan.js';
+import { COST_NOTE } from '../cost/cost.js';
+import type { CostTotals, Finding, Report, TokenKind, TokenTotals } from '../model/index.js';
 import { reportClient } from './client.js';
 import {
   allVersions,
@@ -24,6 +26,7 @@ import {
   formatPct,
   formatRatio,
   formatTokens,
+  formatUsd,
   formatUtc,
   formatVersionRange,
   kindTag,
@@ -188,6 +191,17 @@ details summary{cursor:pointer;color:var(--accent);margin-top:8px}
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--grid);padding:6px;text-align:left;vertical-align:top}
 th{color:var(--fg2);font-weight:600}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .go{font-size:11px;padding:1px 8px;white-space:nowrap;color:var(--accent)}
+#plan .cards{counter-reset:none}.plan .hd{align-items:center}
+.plan .tt{font-size:16px;margin:0}.plan .save{font-size:20px;font-weight:650;white-space:nowrap;font-variant-numeric:tabular-nums}
+.plan .share{color:var(--fg2);font-size:13px;font-weight:500;margin-left:6px}
+.plan .sbar{height:8px;margin:10px 0 8px}.s-save{background:var(--good)}
+.plan .why{margin:0 0 8px;color:var(--fg2)}.plan .from{font-size:12px;color:var(--mut);margin:6px 0 0}
+.plan pre{margin:0}.combined{margin:12px 0 0;font-weight:600}
+.comps{display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;margin-top:14px}.comps .comp{margin-top:0}
+.comps h3{font-size:13px;font-weight:600;color:var(--fg2);margin:0 0 6px}
+.card .sv{font-size:12px;color:var(--fg2);text-align:right;font-variant-numeric:tabular-nums}
+.card .basis{margin:4px 0 0;font-size:12px;color:var(--mut)}
+@media (max-width:640px){.comps{grid-template-columns:1fr}}
 footer{margin-top:40px;color:var(--mut);font-size:12px;border-top:1px solid var(--grid);padding-top:10px}
 @media (max-width:640px){.hero{grid-template-columns:1fr 1fr}.tile{padding:12px}.tile .v{font-size:22px}#rp-log .w{min-width:0;display:block}}
 `;
@@ -202,27 +216,52 @@ function tile(label: string, value: string, kind: TokenKind, detail = '', cls = 
 }
 
 function composition(t: TokenTotals): string {
-  const parts: [string, string, number][] = [
-    ['read', 'cache read', t.cacheRead],
-    ['write', 'cache write', t.cacheWrite],
-    ['input', 'uncached input', t.input],
-    ['output', 'output', t.output],
-  ];
+  return compositionBar(
+    [
+      ['read', 'cache read', t.cacheRead],
+      ['write', 'cache write', t.cacheWrite],
+      ['input', 'uncached input', t.input],
+      ['output', 'output', t.output],
+    ],
+    formatCompact,
+    'token breakdown',
+  );
+}
+
+/** The same four kinds weighted by list price [E]: what each kind cost, not how many tokens. */
+function costComposition(c: CostTotals): string {
+  return compositionBar(
+    [
+      ['read', 'cache read', c.read],
+      ['write', 'cache write', c.write5m + c.write1h],
+      ['input', 'uncached input', c.input],
+      ['output', 'output', c.output],
+    ],
+    formatUsd,
+    'cost breakdown at API list prices',
+  );
+}
+
+function compositionBar(
+  parts: [string, string, number][],
+  fmtValue: (n: number) => string,
+  aria: string,
+): string {
   const sum = parts.reduce((a, [, , n]) => a + n, 0);
   const bar = parts
     .filter(([, , n]) => n > 0 && sum > 0)
     .map(
       ([k, label, n]) =>
-        `<span class="s-${k}" style="width:${((n / sum) * 100).toFixed(3)}%" title="${e(label)}: ${formatInt(n)}"></span>`,
+        `<span class="s-${k}" style="width:${((n / sum) * 100).toFixed(3)}%" title="${e(label)}: ${e(fmtValue === formatCompact ? formatInt(n) : fmtValue(n))}"></span>`,
     )
     .join('');
   const keys = parts
     .map(
       ([k, label, n]) =>
-        `<span><span class="sw s-${k}"></span>${e(label)} <b class="num">${e(formatCompact(n))}</b> <span class="mut">${e(formatPct(n, sum))}</span></span>`,
+        `<span><span class="sw s-${k}"></span>${e(label)} <b class="num">${e(fmtValue(n))}</b> <span class="mut">${e(formatPct(n, sum))}</span></span>`,
     )
     .join('');
-  return `<div class="comp"><div class="sbar" role="img" aria-label="token breakdown">${bar}</div><div class="keys">${keys}</div></div>`;
+  return `<div class="comp"><div class="sbar" role="img" aria-label="${e(aria)}">${bar}</div><div class="keys">${keys}</div></div>`;
 }
 
 function hero(report: Report): string {
@@ -258,6 +297,18 @@ function hero(report: Report): string {
       'measured',
       `${e(formatPct(t.output, sumTotals(t)))} of all tokens`,
     ),
+    ...(t.cost !== undefined && t.cost.total > 0
+      ? [
+          tile(
+            'at API list prices',
+            formatUsd(t.cost.total),
+            'estimated',
+            report.totals.byRole !== undefined && report.totals.byRole.subagent.cost !== undefined
+              ? `main ${e(formatUsd(report.totals.byRole.main.cost?.total ?? 0))} · subagents ${e(formatUsd(report.totals.byRole.subagent.cost.total))}`
+              : 'what these tokens would cost via the API',
+          ),
+        ]
+      : []),
   ];
   return `<h2 class="sr">Summary (measured)</h2><div class="hero">${tiles.join('')}</div>`;
 }
@@ -301,6 +352,32 @@ function replaySection(tl: Timeline): string {
     `<p id="rp-status" class="sr" aria-live="polite"></p>` +
     `</div></section>` +
     `<script type="application/json" id="tl-data">${scriptJson(tl)}</script>`
+  );
+}
+
+/** What to change first: one card per action, savings bars on one shared scale (window cost). */
+function planSection(report: Report): string {
+  const plan = report.actionPlan;
+  if (plan === undefined || plan.actions.length === 0 || !(plan.windowCostUsd > 0)) return '';
+  const cards = plan.actions
+    .map((a, i) => {
+      const w = Math.max(0, Math.min(100, (a.savingsUsd / plan.windowCostUsd) * 100));
+      const refs = a.findings.map((n) => `<a href="#f${n}">#${n}</a>`).join(', ');
+      return (
+        `<article class="card plan"><div class="hd"><div class="tt">${i + 1}. ${e(a.title)}</div>` +
+        `<div class="save">~${e(formatUsd(a.savingsUsd))}${badge('estimated')}<span class="share">${e(formatPct(a.savingsUsd, plan.windowCostUsd))} of cost</span></div></div>` +
+        `<div class="sbar" role="img" aria-label="${e(formatPct(a.savingsUsd, plan.windowCostUsd))} of the window's cost"><span class="s-save" style="width:${w.toFixed(3)}%"></span></div>` +
+        `<p class="why">${e(a.why)}</p><pre><code>${e(a.change)}</code></pre>` +
+        `<p class="from">${a.confidence === 'measured-tokens' ? 'tokens measured, $ estimated' : 'estimated'} · from finding${a.findings.length === 1 ? '' : 's'} ${refs}</p></article>`
+      );
+    })
+    .join('');
+  return (
+    `<section id="plan"><h2>What to change first</h2>` +
+    `<p class="sub">Savings in this window at API list prices [E], largest first. Bars share one scale: the window's cost (${e(formatUsd(plan.windowCostUsd))}).</p>` +
+    `<div class="cards">${cards}</div>` +
+    `<p class="combined">${changesPhrase(plan.actions.length)} would have cut about ${e(formatPct(plan.combinedSavingsUsd, plan.windowCostUsd))} of this window's cost${badge('estimated')} ` +
+    `<span class="mut">(~${e(formatUsd(plan.combinedSavingsUsd))} of ${e(formatUsd(plan.windowCostUsd))}; overlapping savings are not double-counted)</span></p></section>`
   );
 }
 
@@ -387,10 +464,17 @@ function findingCard(
     : '';
   const fix =
     `<p class="fix">→ ${e(f.fix.summary)}${f.fix.docsUrl ? docsLink(f.fix.docsUrl) : ''}</p>` +
-    (f.fix.diff ? `<pre><code>${e(f.fix.diff)}</code></pre>` : '');
+    (f.fix.diff ? `<pre><code>${e(f.fix.diff)}</code></pre>` : '') +
+    (f.impact !== undefined && f.impact.costUsd > 0
+      ? `<p class="basis">$ [E]: ${e(f.impact.basis)}</p>`
+      : '');
+  const sv =
+    f.impact !== undefined && f.impact.costUsd > 0
+      ? `<div class="sv">${f.impact.savingsUsd > 0 ? `saves ~${e(formatUsd(f.impact.savingsUsd))} of ${e(formatUsd(f.impact.costUsd))}` : `costs ${e(formatUsd(f.impact.costUsd))}`}${badge('estimated')}</div>`
+      : '';
   return (
     `<article class="card" id="f${n}"><div class="hd"><div><span class="sev sev-${e(f.severity)}">${SEV_ICON[f.severity] ?? ''} ${e(f.severity)}</span> ` +
-    `<span class="an">${n}. ${e(analyzerHeading(f.analyzer))}</span></div><div class="tk">${tokens}</div></div>` +
+    `<span class="an">${n}. ${e(analyzerHeading(f.analyzer))}</span></div><div><div class="tk">${tokens}</div>${sv}</div></div>` +
     `<div class="tt">${e(f.title)}${cmd ? ` <code>${e(cmd)}</code>` : ''}</div>` +
     (causes ? `<ul class="causes">${causes}</ul>` : '') +
     fix +
@@ -474,9 +558,13 @@ export function renderHtml(report: Report, opts: HtmlOptions = {}): string {
       `<div class="pills"><span class="pill">local only · nothing loaded from the network</span>` +
       `<span class="pill">prompt and file contents: ${report.includeContent ? 'included (--include-content)' : 'not included'}</span>` +
       `<button type="button" id="theme" class="pill">theme: auto</button></div></header>`,
+    planSection(report),
     hero(report),
-    `<h2 class="sr">Token breakdown (measured)</h2>`,
-    composition(t),
+    `<h2 class="sr">Token breakdown (measured) and cost (estimated)</h2>`,
+    t.cost !== undefined && t.cost.total > 0
+      ? `<div class="comps"><div><h3>Tokens${badge('measured')}</h3>${composition(t)}</div>` +
+        `<div><h3>Cost at API list prices${badge('estimated')}</h3>${costComposition(t.cost)}</div></div>`
+      : composition(t),
     tl ? replaySection(tl) : '',
     attr.length
       ? `<h2>Where it went (estimated)</h2><p class="sub">Tokens the analyzers attribute to a cause. Estimates overlap and are not savings.</p>` +
@@ -492,7 +580,7 @@ export function renderHtml(report: Report, opts: HtmlOptions = {}): string {
       : '',
     `<h2>Findings</h2>`,
     findings.length
-      ? `<p class="sub">Most severe first. Each one points at the session and log line it came from` +
+      ? `<p class="sub">Largest savings first, then the rest by severity. Each one points at the session and log line it came from` +
         `${tl ? '; ▶ replay jumps to that turn' : ''}. <button id="toggle" type="button">expand / collapse all evidence</button></p>` +
         `<div class="cards">${findings.map((f, i) => findingCard(f, i + 1, report.stats.roots, home, tl)).join('')}</div>`
       : '<p class="mut">No findings in this window.</p>',
@@ -501,7 +589,9 @@ export function renderHtml(report: Report, opts: HtmlOptions = {}): string {
     report.sessions.length ? sessionsTable(report, home) : '<p class="mut">No sessions found.</p>',
     `<h2>Parse stats</h2>`,
     parseStatsSection(report, home),
-    `<h2>Legend</h2><p>${badge('measured')} ${e(LEGEND_MEASURED)}<br>${badge('estimated')} ${e(LEGEND_ESTIMATED)}</p>`,
+    `<h2>Legend</h2><p>${badge('measured')} ${e(LEGEND_MEASURED)}<br>${badge('estimated')} ${e(LEGEND_ESTIMATED)}<br>${e(COST_NOTE)}` +
+      (report.pricing ? ` (prices of ${e(report.pricing.asOf)})` : '') +
+      `</p>`,
     `<footer>Local-only report generated by tknxray ${e(report.tool.version)}. ` +
       `It was built from files on this machine and loads nothing from the network.</footer>`,
   ].join('\n');

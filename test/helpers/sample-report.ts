@@ -1,7 +1,11 @@
 // Synthetic sample Report for reporter tests. ALL NUMBERS, IDS AND PATHS ARE MADE UP: nothing
 // here was taken from a real transcript (CLAUDE.md hard rule 4). It exercises several analyzers,
 // measured and estimated tokens, subagent sessions and parse warnings.
-import type { Report, TokenTotals } from '../../src/model/index.js';
+import { COST_NOTE, costOf } from '../../src/cost/cost.js';
+import { buildActionPlan } from '../../src/cost/plan.js';
+import { priceFor, PRICES_AS_OF, PRICES_SOURCE } from '../../src/cost/prices.js';
+import { sortFindings } from '../../src/reporters/derive.js';
+import type { CostTotals, Finding, Impact, Report, TokenTotals } from '../../src/model/index.js';
 
 export const SAMPLE_HOME = '/home/dev';
 const ROOT = '/home/dev/.claude/projects';
@@ -276,4 +280,108 @@ export function emptyReport(): Report {
     sessions: [],
     findings: [],
   };
+}
+
+// ---- M7: the same sample with $ (cost, impact, action plan) -------------------------------
+
+function priced(t: TokenTotals, model: string): CostTotals {
+  const u = { ...t, cacheWrite1h: 0 };
+  return { ...costOf(u, priceFor(model)!), unpricedTurns: 0 };
+}
+
+function addCost(a: CostTotals, b: CostTotals): CostTotals {
+  return {
+    input: a.input + b.input,
+    write5m: a.write5m + b.write5m,
+    write1h: a.write1h + b.write1h,
+    read: a.read + b.read,
+    output: a.output + b.output,
+    total: a.total + b.total,
+    unpricedTurns: a.unpricedTurns + b.unpricedTurns,
+  };
+}
+
+const imp = (
+  costUsd: number,
+  savingsUsd: number,
+  savingsSubagentUsd: number,
+  confidence: Impact['confidence'],
+  basis: string,
+): Impact => ({
+  costUsd,
+  savingsUsd,
+  basis,
+  confidence,
+  savingsMainUsd: savingsUsd - savingsSubagentUsd,
+  savingsSubagentUsd,
+});
+
+/** sampleReport() as the M7 pipeline returns it: totals.cost, byRole, impacts and the plan. */
+export function costedSampleReport(): Report {
+  const r = sampleReport();
+  const c1 = priced(t1, 'claude-opus-4-5');
+  const c2 = priced(t2, 'claude-opus-4-5');
+  const c3 = priced(t3, 'claude-haiku-4-5');
+  const c4 = priced(t4, 'claude-haiku-4-5');
+  const all = { ...r.totals.all, cost: [c2, c3, c4].reduce(addCost, c1) };
+  r.totals = {
+    ...r.totals,
+    all,
+    byModel: {
+      'claude-opus-4-5': { ...r.totals.byModel['claude-opus-4-5']!, cost: addCost(c1, c2) },
+      'claude-haiku-4-5': { ...r.totals.byModel['claude-haiku-4-5']!, cost: addCost(c3, c4) },
+    },
+    byRole: {
+      main: { ...sum(t1, t2), cost: addCost(c1, c2) },
+      subagent: { ...sum(t3, t4), cost: addCost(c3, c4) },
+    },
+  };
+  const by = (a: string, title: string): Finding =>
+    r.findings.find((f) => f.analyzer === a && f.title.startsWith(title))!;
+  const rebuild = by('cache-rebuild', '38');
+  // write 6.25, read 0.50 $/MTok (Opus 4.5): cost = tokens × 6.25, savings = tokens × 5.75.
+  const causes = (rebuild.data!.causes as Record<string, unknown>[]).map((c) => ({
+    ...c,
+    costUsd: ((c.tokens as number) * 6.25) / 1e6,
+    savingsUsd: ((c.tokens as number) * 5.75) / 1e6,
+  }));
+  rebuild.data = { causes };
+  rebuild.impact = imp(
+    (2_818_900 * 6.25) / 1e6,
+    (2_818_900 * 5.75) / 1e6,
+    0,
+    'measured-tokens',
+    '38 rebuilds wrote 2.8M tokens at the cache-write price; as cache reads they would have cost 8% of that',
+  );
+  const pnpm = by('big-tool-output', '`pnpm');
+  pnpm.data = { ...pnpm.data, turnsCarriedMax: 140 };
+  pnpm.impact = imp(
+    2.1,
+    1.62,
+    0.42,
+    'estimated',
+    '11 outputs stayed in context for up to 140 turns',
+  );
+  const grep = by('big-tool-output', 'Grep');
+  grep.data = { ...grep.data, turnsCarriedMax: 30 };
+  grep.impact = imp(0.31, 0.12, 0, 'estimated', '3 outputs stayed in context for up to 30 turns');
+  const reread = by('repeated-read', 'src/api');
+  reread.data = { ...reread.data, rereads: 6 };
+  reread.impact = imp(0.95, 0.81, 0, 'estimated', '6 extra copies carried until the session ended');
+  const mcp = by('tool-usage', '9 MCP');
+  mcp.data = {
+    ...mcp.data,
+    unusedTools: Array.from({ length: 9 }, (_, i) => `mcp__github__tool_${i + 1}`),
+    usedTools: [],
+  };
+  mcp.impact = imp(0.4, 0.4, 0, 'estimated', '9 definitions sent with 309 main-session requests');
+  r.findings = sortFindings(r.findings);
+  r.pricing = {
+    asOf: PRICES_AS_OF,
+    source: PRICES_SOURCE,
+    unpricedModels: {},
+    note: COST_NOTE,
+  };
+  r.actionPlan = buildActionPlan(r);
+  return r;
 }

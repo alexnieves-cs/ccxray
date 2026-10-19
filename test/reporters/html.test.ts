@@ -2,13 +2,41 @@ import { describe, expect, it } from 'vitest';
 import { renderHtml } from '../../src/reporters/html.js';
 import { render } from '../../src/reporters/index.js';
 import { remoteLoads } from '../helpers/remote-loads.js';
-import { emptyReport, sampleReport, SAMPLE_HOME } from '../helpers/sample-report.js';
+import {
+  costedSampleReport,
+  emptyReport,
+  sampleReport,
+  SAMPLE_HOME,
+} from '../helpers/sample-report.js';
 
 describe('html reporter', () => {
   it('matches the snapshot', async () => {
     await expect(renderHtml(sampleReport(), { homeDir: SAMPLE_HOME })).toMatchFileSnapshot(
       '../__snapshots__/reporters/report.html',
     );
+  });
+
+  it('matches the snapshot with cost and the action plan (M7)', async () => {
+    await expect(renderHtml(costedSampleReport(), { homeDir: SAMPLE_HOME })).toMatchFileSnapshot(
+      '../__snapshots__/reporters/report-cost.html',
+    );
+  });
+
+  it('shows action-plan cards on one scale and a cost bar next to the token bar', () => {
+    const html = renderHtml(costedSampleReport());
+    const plan = costedSampleReport().actionPlan!;
+    expect(html).toContain('What to change first');
+    expect(html.match(/<article class="card plan"/g)?.length).toBe(plan.actions.length);
+    expect(html).toContain('Cost at API list prices');
+    expect(html).toContain('what these tokens would cost at API list prices');
+    expect(remoteLoads(html)).toEqual([]);
+    expect(html).toContain("default-src 'none'");
+    expect(html.match(/<script/g)?.length).toBe(
+      renderHtml(sampleReport()).match(/<script/g)?.length,
+    );
+    // Shared scale: bar widths are each action's share of the window cost.
+    for (const a of plan.actions)
+      expect(html).toContain(`width:${((a.savingsUsd / plan.windowCostUsd) * 100).toFixed(3)}%`);
   });
 
   it('the remote-load detector catches what it should (self-test)', () => {

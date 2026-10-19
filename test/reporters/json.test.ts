@@ -5,7 +5,7 @@ import * as formatsModule from 'ajv-formats';
 import { describe, expect, it } from 'vitest';
 import { REPORT_SCHEMA_VERSION } from '../../src/model/index.js';
 import { renderJson } from '../../src/reporters/json.js';
-import { sampleReport, SAMPLE_HOME } from '../helpers/sample-report.js';
+import { costedSampleReport, sampleReport, SAMPLE_HOME } from '../helpers/sample-report.js';
 
 const SCHEMA_PATH = join(
   import.meta.dirname,
@@ -74,6 +74,16 @@ describe('json reporter', () => {
     const ok = validate(JSON.parse(renderJson(sampleReport())));
     expect(validate.errors ?? []).toEqual([]);
     expect(ok).toBe(true);
+  });
+
+  it('carries cost, impact and actionPlan, and they validate (M7)', async () => {
+    const out = renderJson(costedSampleReport(), { homeDir: SAMPLE_HOME });
+    await expect(out).toMatchFileSnapshot('../__snapshots__/reporters/report-cost.json');
+    const validate = validator();
+    const parsed = JSON.parse(out) as Record<string, unknown>;
+    expect(validate(parsed)).toBe(true);
+    expect(validate.errors ?? []).toEqual([]);
+    expect(Object.keys(parsed)).toContain('actionPlan');
   });
 
   it('rejects a report missing a required field', () => {

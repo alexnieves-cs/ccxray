@@ -1,0 +1,644 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "tknxray",
+    "version": "0.0.0-test"
+  },
+  "generatedAt": "2026-10-18T09:30:00.000Z",
+  "window": {
+    "project": null,
+    "since": "2026-10-11",
+    "until": null
+  },
+  "includeContent": false,
+  "stats": {
+    "attachmentTypes": {
+      "instructions": 31
+    },
+    "blankLines": 3,
+    "bytes": 48211904,
+    "ccVersions": {
+      "2.1.290": 6100,
+      "2.1.296": 13600
+    },
+    "dedupe": {
+      "crossSessionCopies": 2,
+      "sameResponseLines": 1950,
+      "sidechainReplays": 12
+    },
+    "files": 6,
+    "lines": 21877,
+    "malformedLines": 4,
+    "recordTypes": {
+      "assistant": 9812,
+      "attachment": 1203,
+      "queue-operation": 88,
+      "user": 8640,
+      "x-future": 7
+    },
+    "roots": [
+      "~/.claude/projects"
+    ],
+    "syntheticTurns": 3,
+    "unknownRecordTypes": {
+      "x-future": 7
+    },
+    "warnings": {
+      "assistant without message.usage": 2
+    }
+  },
+  "totals": {
+    "all": {
+      "cacheHitRatio": 0.8240732531299203,
+      "cacheRead": 13477100,
+      "cacheWrite": 2818900,
+      "cacheWrite1h": 0,
+      "cacheWrite5m": 2818900,
+      "cost": {
+        "input": 0.27464999999999995,
+        "output": 3.05835,
+        "read": 6.3217099999999995,
+        "total": 25.730835,
+        "unpricedTurns": 0,
+        "write1h": 0,
+        "write5m": 16.076125
+      },
+      "input": 58250,
+      "output": 133470,
+      "turns": 368
+    },
+    "byDay": {
+      "2026-10-11": {
+        "cacheHitRatio": 0.8221792521533864,
+        "cacheRead": 9822000,
+        "cacheWrite": 2080000,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 2080000,
+        "input": 44300,
+        "output": 98100,
+        "turns": 253
+      },
+      "2026-10-14": {
+        "cacheHitRatio": 0.8218842001962708,
+        "cacheRead": 3015000,
+        "cacheWrite": 640500,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 640500,
+        "input": 12900,
+        "output": 31250,
+        "turns": 97
+      },
+      "2026-10-18": {
+        "cacheHitRatio": 0.8655263335812319,
+        "cacheRead": 640100,
+        "cacheWrite": 98400,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 98400,
+        "input": 1050,
+        "output": 4120,
+        "turns": 18
+      }
+    },
+    "byModel": {
+      "claude-haiku-4-5": {
+        "cacheHitRatio": 0.7692761968036024,
+        "cacheRead": 1042100,
+        "cacheWrite": 308400,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 308400,
+        "cost": {
+          "input": 0.00415,
+          "output": 0.0696,
+          "read": 0.10421,
+          "total": 0.5634600000000001,
+          "unpricedTurns": 0,
+          "write1h": 0,
+          "write5m": 0.3855
+        },
+        "input": 4150,
+        "output": 13920,
+        "turns": 59
+      },
+      "claude-opus-4-5": {
+        "cacheHitRatio": 0.8290221072561935,
+        "cacheRead": 12435000,
+        "cacheWrite": 2510500,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 2510500,
+        "cost": {
+          "input": 0.27049999999999996,
+          "output": 2.98875,
+          "read": 6.2175,
+          "total": 25.167375,
+          "unpricedTurns": 0,
+          "write1h": 0,
+          "write5m": 15.690625
+        },
+        "input": 54100,
+        "output": 119550,
+        "turns": 309
+      }
+    },
+    "byProject": {
+      "~-src-acme-api": {
+        "cacheHitRatio": 0.8240732531299203,
+        "cacheRead": 13477100,
+        "cacheWrite": 2818900,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 2818900,
+        "input": 58250,
+        "output": 133470,
+        "turns": 368
+      }
+    },
+    "byRole": {
+      "main": {
+        "cacheHitRatio": 0.8290221072561935,
+        "cacheRead": 12435000,
+        "cacheWrite": 2510500,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 2510500,
+        "cost": {
+          "input": 0.27049999999999996,
+          "output": 2.98875,
+          "read": 6.2175,
+          "total": 25.167375,
+          "unpricedTurns": 0,
+          "write1h": 0,
+          "write5m": 15.690625
+        },
+        "input": 54100,
+        "output": 119550,
+        "turns": 309
+      },
+      "subagent": {
+        "cacheHitRatio": 0.7692761968036024,
+        "cacheRead": 1042100,
+        "cacheWrite": 308400,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 308400,
+        "cost": {
+          "input": 0.00415,
+          "output": 0.0696,
+          "read": 0.10421,
+          "total": 0.5634600000000001,
+          "unpricedTurns": 0,
+          "write1h": 0,
+          "write5m": 0.3855
+        },
+        "input": 4150,
+        "output": 13920,
+        "turns": 59
+      }
+    },
+    "bySession": {
+      "3fa2c1d0-1111-4aaa-8bbb-000000000001": {
+        "cacheHitRatio": 0.8221792521533864,
+        "cacheRead": 9822000,
+        "cacheWrite": 2080000,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 2080000,
+        "input": 44300,
+        "output": 98100,
+        "turns": 253
+      },
+      "9b07e5aa-2222-4aaa-8bbb-000000000002": {
+        "cacheHitRatio": 0.8218842001962708,
+        "cacheRead": 3015000,
+        "cacheWrite": 640500,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 640500,
+        "input": 12900,
+        "output": 31250,
+        "turns": 97
+      },
+      "c41d0f9e-4444-4aaa-8bbb-000000000004": {
+        "cacheHitRatio": 0.8655263335812319,
+        "cacheRead": 640100,
+        "cacheWrite": 98400,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 98400,
+        "input": 1050,
+        "output": 4120,
+        "turns": 18
+      }
+    }
+  },
+  "sessions": [
+    {
+      "ccVersions": [
+        "2.1.290"
+      ],
+      "firstTs": "2026-10-11T14:02:11.000Z",
+      "id": "3fa2c1d0-1111-4aaa-8bbb-000000000001",
+      "isSubagent": false,
+      "lastTs": "2026-10-11T18:40:09.000Z",
+      "models": [
+        "claude-opus-4-5"
+      ],
+      "project": "~-src-acme-api",
+      "totals": {
+        "cacheHitRatio": 0.8313329567918667,
+        "cacheRead": 9420000,
+        "cacheWrite": 1870000,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 1870000,
+        "input": 41200,
+        "output": 88300,
+        "turns": 212
+      },
+      "turns": 212
+    },
+    {
+      "ccVersions": [
+        "2.1.290",
+        "2.1.296"
+      ],
+      "firstTs": "2026-10-14T08:15:00.000Z",
+      "id": "9b07e5aa-2222-4aaa-8bbb-000000000002",
+      "isSubagent": false,
+      "lastTs": "2026-10-14T10:01:30.000Z",
+      "models": [
+        "claude-opus-4-5"
+      ],
+      "project": "~-src-acme-api",
+      "totals": {
+        "cacheHitRatio": 0.8218842001962708,
+        "cacheRead": 3015000,
+        "cacheWrite": 640500,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 640500,
+        "input": 12900,
+        "output": 31250,
+        "turns": 97
+      },
+      "turns": 97
+    },
+    {
+      "ccVersions": [
+        "2.1.290"
+      ],
+      "firstTs": "2026-10-11T15:00:00.000Z",
+      "id": "3fa2c1d0-1111-4aaa-8bbb-000000000001",
+      "isSubagent": true,
+      "lastTs": "2026-10-11T15:12:44.000Z",
+      "models": [
+        "claude-haiku-4-5"
+      ],
+      "project": "~-src-acme-api",
+      "totals": {
+        "cacheHitRatio": 0.6535522679239149,
+        "cacheRead": 402000,
+        "cacheWrite": 210000,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 210000,
+        "input": 3100,
+        "output": 9800,
+        "turns": 41
+      },
+      "turns": 41
+    },
+    {
+      "ccVersions": [
+        "2.1.296"
+      ],
+      "firstTs": "2026-10-18T07:59:00.000Z",
+      "id": "c41d0f9e-4444-4aaa-8bbb-000000000004",
+      "isSubagent": true,
+      "lastTs": "2026-10-18T08:05:10.000Z",
+      "models": [
+        "claude-haiku-4-5"
+      ],
+      "project": "~-src-acme-api",
+      "totals": {
+        "cacheHitRatio": 0.8655263335812319,
+        "cacheRead": 640100,
+        "cacheWrite": 98400,
+        "cacheWrite1h": 0,
+        "cacheWrite5m": 98400,
+        "input": 1050,
+        "output": 4120,
+        "turns": 18
+      },
+      "turns": 18
+    }
+  ],
+  "findings": [
+    {
+      "analyzer": "cache-rebuild",
+      "data": {
+        "causes": [
+          {
+            "cause": "cc-upgrade",
+            "costUsd": 1.25625,
+            "count": 3,
+            "fix": "known: #46917 (2.1.100+)",
+            "savingsUsd": 1.15575,
+            "tokens": 201000
+          },
+          {
+            "cause": "ttl-expiry",
+            "costUsd": 13.775,
+            "count": 29,
+            "fix": "batch work; you had 29 gaps > 5 min",
+            "savingsUsd": 12.673,
+            "tokens": 2204000
+          },
+          {
+            "cause": "config-edit",
+            "costUsd": 2.586875,
+            "count": 6,
+            "fix": "edit CLAUDE.md between sessions",
+            "savingsUsd": 2.379925,
+            "tokens": 413900
+          }
+        ]
+      },
+      "evidence": [
+        {
+          "detail": "gap 12m, cache_read 81k → 0",
+          "sessionId": "3fa2c1d0-1111-4aaa-8bbb-000000000001",
+          "source": {
+            "file": "~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl",
+            "line": 120
+          },
+          "turnUuid": "a1000000-0000-4000-8000-000000000012"
+        },
+        {
+          "detail": "version 2.1.290 → 2.1.296",
+          "sessionId": "9b07e5aa-2222-4aaa-8bbb-000000000002",
+          "source": {
+            "file": "~-src-acme-api/9b07e5aa-2222-4aaa-8bbb-000000000002.jsonl",
+            "line": 655
+          },
+          "turnUuid": "b2000000-0000-4000-8000-000000000020"
+        }
+      ],
+      "fix": {
+        "docsUrl": "https://github.com/anthropics/claude-code/issues/46917",
+        "summary": "see causes above"
+      },
+      "impact": {
+        "basis": "38 rebuilds wrote 2.8M tokens at the cache-write price; as cache reads they would have cost 8% of that",
+        "confidence": "measured-tokens",
+        "costUsd": 17.618125,
+        "savingsMainUsd": 16.208675,
+        "savingsSubagentUsd": 0,
+        "savingsUsd": 16.208675
+      },
+      "severity": "high",
+      "title": "38 rebuilds cost 2.8M cache-write tokens",
+      "tokens": {
+        "kind": "measured",
+        "value": 2818900
+      }
+    },
+    {
+      "analyzer": "big-tool-output",
+      "data": {
+        "command": "pnpm test",
+        "count": 11,
+        "maxChars": 48100,
+        "tool": "Bash",
+        "turnsCarriedMax": 140
+      },
+      "evidence": [
+        {
+          "detail": "Bash result 48,100 chars",
+          "sessionId": "9b07e5aa-2222-4aaa-8bbb-000000000002",
+          "source": {
+            "file": "~-src-acme-api/9b07e5aa-2222-4aaa-8bbb-000000000002.jsonl",
+            "line": 1207
+          },
+          "turnUuid": "b2000000-0000-4000-8000-000000000044"
+        },
+        {
+          "detail": "Bash result 31,020 chars",
+          "sessionId": "3fa2c1d0-1111-4aaa-8bbb-000000000001",
+          "source": {
+            "file": "~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001/subagents/agent-7f3e.jsonl",
+            "line": 88
+          },
+          "turnUuid": "c3000000-0000-4000-8000-000000000007"
+        }
+      ],
+      "fix": {
+        "summary": "pipe through `| tail -50`, or use --reporter=dot"
+      },
+      "impact": {
+        "basis": "11 outputs stayed in context for up to 140 turns",
+        "confidence": "estimated",
+        "costUsd": 2.1,
+        "savingsMainUsd": 1.2000000000000002,
+        "savingsSubagentUsd": 0.42,
+        "savingsUsd": 1.62
+      },
+      "severity": "warn",
+      "title": "`pnpm test` returned 48k chars (×11)",
+      "tokens": {
+        "kind": "estimated",
+        "value": 132000
+      }
+    },
+    {
+      "analyzer": "repeated-read",
+      "data": {
+        "path": "src/api/client.ts",
+        "reads": 7,
+        "rereads": 6,
+        "tool": "Read"
+      },
+      "evidence": [
+        {
+          "detail": "read #2 of src/api/client.ts, no edit since read #1",
+          "sessionId": "3fa2c1d0-1111-4aaa-8bbb-000000000001",
+          "source": {
+            "file": "~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl",
+            "line": 412
+          },
+          "turnUuid": "a1000000-0000-4000-8000-000000000031"
+        }
+      ],
+      "fix": {
+        "summary": "reference the earlier read instead of re-reading (cc-slim dedupe, planned)"
+      },
+      "impact": {
+        "basis": "6 extra copies carried until the session ended",
+        "confidence": "estimated",
+        "costUsd": 0.95,
+        "savingsMainUsd": 0.81,
+        "savingsSubagentUsd": 0,
+        "savingsUsd": 0.81
+      },
+      "severity": "warn",
+      "title": "src/api/client.ts read 7× unchanged in session 3fa2c1d0",
+      "tokens": {
+        "kind": "estimated",
+        "value": 182400
+      }
+    },
+    {
+      "analyzer": "tool-usage",
+      "data": {
+        "server": "github",
+        "unused": 9
+      },
+      "evidence": [
+        {
+          "detail": "tool list at first turn",
+          "sessionId": "9b07e5aa-2222-4aaa-8bbb-000000000002",
+          "turnUuid": "b2000000-0000-4000-8000-000000000001"
+        }
+      ],
+      "fix": {
+        "summary": "run `tknxray fix mcp` to preview a permissions.deny diff"
+      },
+      "impact": {
+        "basis": "9 definitions sent with 309 main-session requests",
+        "confidence": "estimated",
+        "costUsd": 0.4,
+        "savingsMainUsd": 0.4,
+        "savingsSubagentUsd": 0,
+        "savingsUsd": 0.4
+      },
+      "severity": "info",
+      "title": "9 MCP tools from \"github\" server never called in 4 sessions",
+      "tokens": {
+        "kind": "measured",
+        "value": 0
+      }
+    },
+    {
+      "analyzer": "big-tool-output",
+      "data": {
+        "count": 3,
+        "tool": "Grep",
+        "turnsCarriedMax": 30
+      },
+      "evidence": [
+        {
+          "detail": "Grep result 22,000 chars",
+          "sessionId": "3fa2c1d0-1111-4aaa-8bbb-000000000001",
+          "source": {
+            "file": "~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl",
+            "line": 2001
+          },
+          "turnUuid": "a1000000-0000-4000-8000-000000000090"
+        }
+      ],
+      "fix": {
+        "summary": "narrow the glob or set head_limit"
+      },
+      "impact": {
+        "basis": "3 outputs stayed in context for up to 30 turns",
+        "confidence": "estimated",
+        "costUsd": 0.31,
+        "savingsMainUsd": 0.12,
+        "savingsSubagentUsd": 0,
+        "savingsUsd": 0.12
+      },
+      "severity": "info",
+      "title": "Grep returned 22k chars (×3)",
+      "tokens": {
+        "kind": "estimated",
+        "value": 16500
+      }
+    }
+  ],
+  "calibration": {
+    "medianRatio": 1.08,
+    "note": "synthetic",
+    "samples": 14
+  },
+  "pricing": {
+    "asOf": "2026-10-19",
+    "note": "$ = what these tokens would cost at API list prices; subscription limits are not published, use it to compare, not as a bill",
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing.md",
+    "unpricedModels": {}
+  },
+  "actionPlan": {
+    "actions": [
+      {
+        "category": "rebuild",
+        "change": "Send related prompts in one sitting so idle gaps stay under the cache TTL; after a longer break, start a new session (or /clear) instead of resuming a large context.",
+        "confidence": "measured-tokens",
+        "findings": [
+          1
+        ],
+        "id": "cache-breaks",
+        "savingsMainUsd": 12.673,
+        "savingsSubagentUsd": 0,
+        "savingsUsd": 12.673,
+        "sharePct": 49.3,
+        "title": "Batch prompts so breaks stay under the cache TTL",
+        "why": "29 breaks longer than the cache TTL made Claude Code write 2.2M tokens of cache again ($13.78 at the write price; $1.10 as cache reads)."
+      },
+      {
+        "category": "rebuild",
+        "change": "Batch CLAUDE.md edits and make them between sessions, not during one.",
+        "confidence": "measured-tokens",
+        "findings": [
+          1
+        ],
+        "id": "config-edit",
+        "savingsMainUsd": 2.379925,
+        "savingsSubagentUsd": 0,
+        "savingsUsd": 2.379925,
+        "sharePct": 9.2,
+        "title": "Edit CLAUDE.md between sessions",
+        "why": "6 CLAUDE.md edits mid-session made Claude Code write 414k tokens of cache again ($2.59 at the write price; $0.21 as cache reads)."
+      },
+      {
+        "category": "context",
+        "change": "Add to CLAUDE.md:\n- Run `pnpm test` as `pnpm test … 2>&1 | tail -n 100`.\n- Narrow Grep with a glob or path, or set head_limit.",
+        "confidence": "estimated",
+        "findings": [
+          2,
+          5
+        ],
+        "id": "trim-output",
+        "savingsMainUsd": 1.32,
+        "savingsSubagentUsd": 0.42,
+        "savingsUsd": 1.74,
+        "sharePct": 6.8,
+        "title": "Trim big tool outputs (`pnpm test`, Grep)",
+        "why": "14 big outputs stayed in context for up to 140 turns and cost $2.41 to carry; savings assume each is cut to ~1k tokens (about 100 lines)."
+      },
+      {
+        "category": "rebuild",
+        "change": "Finish or restart sessions after a Claude Code upgrade (see anthropics/claude-code#46917).",
+        "confidence": "measured-tokens",
+        "findings": [
+          1
+        ],
+        "id": "cc-upgrade",
+        "savingsMainUsd": 1.15575,
+        "savingsSubagentUsd": 0,
+        "savingsUsd": 1.15575,
+        "sharePct": 4.5,
+        "title": "Restart long sessions after upgrading Claude Code",
+        "why": "3 upgrades mid-session made Claude Code write 201k tokens of cache again ($1.26 at the write price; $0.10 as cache reads)."
+      },
+      {
+        "category": "context",
+        "change": "Add to CLAUDE.md:\n- Do not Read a file again unless it changed; refer to the earlier read.",
+        "confidence": "estimated",
+        "findings": [
+          3
+        ],
+        "id": "repeated-reads",
+        "savingsMainUsd": 0.81,
+        "savingsSubagentUsd": 0,
+        "savingsUsd": 0.81,
+        "sharePct": 3.1,
+        "title": "Stop re-reading files that did not change",
+        "why": "6 re-reads of unchanged files (src/api/client.ts) were carried as extra copies."
+      }
+    ],
+    "combinedSavingsUsd": 17.38688,
+    "combinedSharePct": 67.6,
+    "method": "conservative union: per scope (main, subagents), overlapping context levers count their max and the other levers combine as independent fractions of that scope’s cost",
+    "note": "$ = what these tokens would cost at API list prices; subscription limits are not published, use it to compare, not as a bill",
+    "windowCostUsd": 25.730835
+  }
+}
