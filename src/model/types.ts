@@ -199,6 +199,11 @@ export interface Session {
   lastTs: Date;
   /** Distinct Claude Code versions seen in this session, in first-seen order. */
   ccVersions: string[];
+  /**
+   * true when any turn of the whole session wrote `ephemeral_1h` cache tokens, decided before
+   * since/until filtering (A3 picks the cache TTL from it). Optional; set by the parser.
+   */
+  wrote1hCache?: boolean;
 }
 
 /** Parse statistics, shown by `ccxray doctor` and embedded in reports. All counts are measured. */

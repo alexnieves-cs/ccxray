@@ -92,6 +92,8 @@ function filterSessions(sessions: Session[], opts: LoadOptions): Session[] {
     (since === undefined || d >= since) && (until === undefined || d <= until);
   const out: Session[] = [];
   for (const s of sessions) {
+    // Before the window filter, so A3 sees the session's TTL even when its 1h writes are older.
+    s.wrote1hCache = s.turns.some((t) => (t.usage.cacheWrite1h ?? 0) > 0);
     if (
       needle !== undefined &&
       !s.project.toLowerCase().includes(needle) &&

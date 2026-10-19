@@ -189,7 +189,12 @@ function findingLines(
   }
   out.push(...wrapParts(facts, ' · ', width - 6).map((l) => '      ' + p.dim(l)));
   for (const c of causeRows(f).slice(0, 5)) {
-    const tok = c.tokens !== undefined ? ` (${formatTokens(c.tokens, f.tokens.kind)})` : '';
+    const tok =
+      c.tokens === undefined
+        ? ''
+        : c.tokensKind === undefined
+          ? ` (${formatTokens(c.tokens, f.tokens.kind)})`
+          : ` (${formatTokens(c.tokens, c.tokensKind)} ${kindTag(c.tokensKind)})`;
     const left = padEnd(`${formatInt(c.count)} × ${c.cause}${tok}`, 34);
     out.push(`      ${left}${c.fix ? ` → ${c.fix}` : ''}`);
   }
