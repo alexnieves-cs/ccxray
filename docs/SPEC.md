@@ -95,7 +95,7 @@ src/
     stream.ts            line-streaming JSONL reader (readline), malformed-line counter
     records.ts           zod-free hand-written type guards for known record types
     dedupe.ts            message.id / requestId / sidechain dedupe (see 4.3)
-    session.ts           build Session → Turn[] graph via uuid/parentUuid
+    session.ts           build Sessions; turns in timestamp order (parentUuid only for linking where needed)
   tokens/
     estimate.ts          heuristic tokenizer (chars/4 baseline; optional pluggable tokenizer later)
   analyzers/             pure functions: (Session[], ctx) => Finding[]
@@ -143,12 +143,25 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - Skip malformed lines and count them.
 
 ### 4.4 Open questions [UNVERIFIED]. Each must be resolved in M1 against real logs
+
+> **Status (2026-10-18):** answered as far as current evidence allows in [docs/FORMAT.md](FORMAT.md#spec-44-answers). Q1–Q4 have [M] answers from one CC 2.1.302 session (notably, Q3: tool definitions *are* logged in `attachment.type = prompt_snapshot` on that version; Q1: large outputs are externalized as a `<persisted-output>` preview plus `{sessionId}/tool-results/<id>.txt`, threshold and KB unit UNVERIFIED; Q4: subagents are `{sessionId}/subagents/agent-<id>.jsonl`, linked by `agent-<id>.meta.json` `toolUseId` and the parent's `toolUseResult.agentId`). Q5 remains UNVERIFIED until a corpus with compaction is probed.
 1. Is `tool_result` content always inline in the JSONL, or truncated or externalized for big outputs? This affects tool-output sizing.
 2. Do `attachment` records carry CLAUDE.md / memory / hook output, and can they be used to detect CLAUDE.md edits? (Fallback: compare file mtime against the session timeline.)
 3. Are tool definitions logged anywhere? (Assumption: **no**. Fixed overhead is inferred from first-turn `cache_creation + input`, and optionally measured exactly via the M5 capture mode with an API key only.)
 4. How subagent (Task/Agent) transcripts link to the parent tool_use.
 5. Is compaction marked by a distinct record (e.g. a summary type or `isCompactSummary`)?
 6. How field names drift across CC versions (keep a version → quirks table in `parser/quirks.ts`).
+
+**Parser assumptions added in M1 [UNVERIFIED]** (details in [FORMAT.md](FORMAT.md#parser-implementation-notes-m1)):
+- Lines without `requestId` are deduped by `message.id` within one file only.
+- Older versions may write partial `output_tokens` on earlier block lines; the largest is kept.
+- String `assistant.message.content` is one text block.
+- Compaction markers: `isCompactSummary`, `system`/`compact_boundary`, `summary` (Q5). `system`/`api_error` is an API error.
+- `isMeta: true` user lines are client-injected, not typed prompts.
+- One file = one session (its first `sessionId`). Besides the [M] `{sessionId}/subagents/agent-<id>.jsonl` layout, `{sessionId}/agent-<id>.jsonl` (UUID-shaped `{sessionId}` dir) and files whose every user/assistant record is `isSidechain` with an `agentId` (e.g. flat `agent-<id>.jsonl`) are treated as subagents (Q4); any other file, at any depth, is a main session whose project is its immediate parent dir. `Session.id = <parent>:agent-<id>` is a ccxray choice.
+- `<persisted-output>` sizes: `KB` = 1024, and the externalization threshold is unknown (Q1).
+- Cross-session copies keep the copy whose file sessionId matches the record's envelope `sessionId`, else the earliest file; the sidechain-replay and cross-session rules themselves are from ccusage docs and not yet seen locally.
+- `prompt_snapshot` tool names come from `name` or `schema.name`; `systemPrompt[]` parts are strings or `{text}`.
 
 ### 4.5 Token estimator
 - Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.
@@ -186,7 +199,7 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 | **M5 Fix modules (preview)** | `ccxray fix mcp` (mcp-diet: emit a settings `permissions.deny` diff for never-used MCP tools; never writes without `--apply`); `cc-slim` design doc + prototype PostToolUse hook for Bash output; optional `ccxray capture` (API-key only, local echo server, measures tool-definition bytes, never forwards subscription OAuth) | the diff is valid JSON and merges into the existing settings in tests; the cc-slim prototype has a unit test for "keep failure lines, head/tail, dedupe stack frames"; a benchmark script exists. **No savings claim in the README until the benchmark (§8) shows it.** |
 
 ## 7. Test plan
-- **Fixtures** (`test/fixtures/*.jsonl`, all synthetic or scrubbed): `minimal-single-turn`, `multi-block-same-msgid` (dedupe), `sidechain-replay`, `cross-session-copy`, `synthetic-error-turn` (like the real 2.1.296 not-logged-in case), `ttl-gap-rebuild`, `version-change-rebuild`, `model-switch`, `big-bash-output`, `repeated-read-unchanged`, `repeated-read-after-edit` (negative), `malformed-lines`, `nested-subagents-dir`, `unknown-record-types`, `string-vs-array-content`.
+- **Fixtures** (`test/fixtures/projects/<name>/`, each a fake `projects/` tree; all synthetic or scrubbed): `minimal-single-turn`, `multi-block-same-msgid` (dedupe), `sidechain-replay`, `cross-session-copy`, `synthetic-error-turn` (like the real 2.1.296 not-logged-in case), `ttl-gap-rebuild`, `version-change-rebuild`, `model-switch`, `big-bash-output`, `repeated-read-unchanged`, `repeated-read-after-edit` (negative), `malformed-lines`, `nested-subagents-dir`, `unknown-record-types`, `string-vs-array-content`.
 - **Generator:** `scripts/make-fixture.ts` builds sessions from a compact DSL, so tests can declare the expected findings.
 - **Scrubber:** `scripts/scrub-fixture.ts` replaces text, paths and ids with deterministic hashes while keeping lengths and usage, so a real log can be turned into a shareable fixture.
 - **Unit tests** per analyzer; **snapshot tests** per reporter; **property tests** (fast-check) that the parser never throws.
@@ -197,6 +210,7 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 - Parse throughput ≥ **100 MB/s** of JSONL on an M-series laptop; 1 GB of logs analyzed in < 15 s; peak RSS < 300 MB (streaming, no full-file loads).
 - `npx ccxray` cold start (cached npx) < 1.5 s for 50 MB of logs.
 - Package size < 1 MB unpacked.
+- Memory regression guard: `test/memory.test.ts` checks heap retained by `loadSessions` per MB of a synthetic corpus (deterministic, unlike peak RSS). Notes on what the parser keeps: FORMAT.md "Parser implementation notes".
 - `bench/perf.ts` generates synthetic corpora (10 MB / 100 MB / 1 GB) and records the results in CI as an artifact (not gating at first).
 - **Savings benchmark** (for README claims, later): Alex's own sessions, before/after applying the fixes over comparable weeks, reporting tokens per assistant turn and the cache hit ratio. Any claim of "equal quality" needs a task-pass-rate benchmark (e.g. a small SWE-bench-lite subset with an API key) and is out of scope until then.
 

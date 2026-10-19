@@ -25,15 +25,19 @@
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "test": "pnpm build && vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "scrub": "tsx scripts/scrub-fixture.ts",
+    "probe": "tsx scripts/probe-format.ts",
+    "fixtures": "tsx scripts/make-fixture.ts"
   },
-  "dependencies": {},
   "devDependencies": {
     "@eslint/js": "9.39.5",
     "@types/node": "20.19.43",
     "eslint": "9.39.5",
+    "fast-check": "3.23.2",
     "prettier": "3.9.10",
     "tsup": "8.5.1",
+    "tsx": "^4.23.15",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.2",
     "vitest": "3.2.7"
