@@ -1,6 +1,8 @@
 import { parseArgs } from 'node:util';
 import { analyze } from './commands/analyze.js';
+import { captureCommand } from './commands/capture.js';
 import { doctor } from './commands/doctor.js';
+import { fixCommand } from './commands/fix-mcp.js';
 import { sessionCommand } from './commands/session.js';
 import { VERSION } from './version.js';
 
@@ -11,6 +13,8 @@ Usage:
          [--include-content] [--threshold.KEY=VALUE]... [--no-color] [--root DIR]...
   ccxray session <id|prefix|latest> [--root DIR]... [--json] [--threshold.KEY=VALUE]...
   ccxray doctor [--root DIR]... [--json]
+  ccxray fix mcp [--settings FILE] [--apply]   (preview; see ccxray fix mcp --help)
+  ccxray capture --i-understand-this-is-api-key-only   (opt-in; see docs/capture.md)
 
 Options:
   --since DATE    first day to analyze, YYYY-MM-DD UTC (default: 7 days ago)
@@ -53,6 +57,8 @@ export async function main(
     );
     return doctor({ roots, json: values.json === true }, out);
   }
+  if (argv[0] === 'fix') return fixCommand(argv, out);
+  if (argv[0] === 'capture') return captureCommand(argv, out);
   if (!values.help) return analyze(argv, out);
   out(HELP);
   return 0;

@@ -183,6 +183,12 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - A7: `deferred_tools_record` attachments name tools whose definitions are not sent up front; names are read from `tools` / `toolNames` / `names` / `deferredTools` arrays (strings or `{name}`), and those tools cost 0 tokens per cold turn.
 - A10: a `system`/`api_error` record followed by a synthetic turn, with no real turn between them, is one error.
 
+**Fix-module assumptions added in M5 [UNVERIFIED]** (details in [cc-slim.md](cc-slim.md) and [capture.md](capture.md)):
+- `ccxray fix mcp`: permission rule syntax `mcp__<server>__<tool>` and server-wide `mcp__<server>` / `mcp__<server>__*` is taken from Claude Code's permission docs, not re-checked against a running version. Whether a deny rule also removes the tool's definition from the request (saving tokens), rather than only blocking calls, is unknown and must be measured.
+- *(Resolved at integration, no longer an assumption.)* `ccxray fix mcp` gets its `tool-usage` (A7) findings from the real pipeline, `loadSessions` then `buildReport` (`src/pipeline.ts`), the way the default command does (default thresholds, no content, `--since` default 7 days); the A7 data contract `{ server, unusedTools, usedTools, defChars? }` is in §4.1 and covered by `test/analyzers/tool-usage.test.ts` and an end-to-end `fix mcp` test on the built CLI.
+- cc-slim hook: PostToolUse stdin fields (`hook_event_name`, `tool_name`, `tool_input`, `tool_response`), the Bash `tool_response` shape `{ stdout, stderr, interrupted, isImage }`, and whether `hookSpecificOutput.updatedMCPToolOutput` (documented for MCP tools) has any effect on Bash. If it has none, only the PreToolUse command-wrap design in cc-slim.md §3.3 can work.
+- capture: Claude Code with `ANTHROPIC_API_KEY` sends `x-api-key`, and an OAuth login sends `Authorization: Bearer` (OAuth tokens start with `sk-ant-oat`, refused in either header). Requests go to `POST /v1/messages` (optionally with a query string). Claude Code may send requests without tools first, so capture skips bodies without a `tools` array and measures the first one that has it.
+
 ### 4.5 Token estimator
 - Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.
 - Calibration (M2, `src/tokens/calibrate.ts`): for consecutive real turns *p → t* of one chain where *p* made exactly one tool call with one result, nothing else was logged in between (no prompt, no event), the model did not change and the result is ≥ 250 estimated tokens: `measured = ctx(t) − ctx(p) − output(p)` with `ctx = input + cache_write + cache_read`, and `ratio = estTokens / measured` (> 1 means chars/4 is high). The median ratio and sample count go into `Report.calibration` and one line of `doctor`. `cache_read` is included (the earlier draft said `input + cache_write` only) because a request's context is the sum of all three fields, and how it splits between them changes from turn to turn; only the growth of the sum is the added content.
@@ -243,7 +249,7 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 - **Savings benchmark** (for README claims, later): Alex's own sessions, before/after applying the fixes over comparable weeks, reporting tokens per assistant turn and the cache hit ratio. Any claim of "equal quality" needs a task-pass-rate benchmark (e.g. a small SWE-bench-lite subset with an API key) and is out of scope until then.
 
 ## 9. Privacy and ToS
-- Reads files only. No network calls, no telemetry, no account. Enforced in CI.
+- Reads files only. No network calls, no telemetry, no account. Enforced in CI. The single exception is the opt-in `ccxray capture` bundle (`dist/capture.js`), which only *listens* on 127.0.0.1 and never connects out; CI checks that too ([capture.md](capture.md)).
 - Reports contain token counts, tool names, file paths (relative) and commands (first tokens only) by default. Prompt and output text appears only with `--include-content`.
 - HTML reports are self-contained and load nothing remote.
 - No features for multi-account rotation, limit evasion, subscription-OAuth reuse in other harnesses, or cache keep-alive pings. `capture` mode is API-key only and opt-in.

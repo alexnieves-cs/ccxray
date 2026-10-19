@@ -23,7 +23,11 @@ const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DATE_TIME =
   /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(?:\.\d{1,3})?)?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/;
 
-class UsageError extends Error {}
+/** A bad flag or value: the command prints the message and exits 2. */
+export class UsageError extends Error {}
+
+/** Default `--since`: 7 days before `now`. */
+export const defaultSince = (now: Date): Date => new Date(now.getTime() - 7 * DAY_MS);
 
 /** true when y-m-d is a real calendar day (2026-02-30 is not). */
 function realDay(y: string, m: string, d: string): boolean {
@@ -119,10 +123,7 @@ function parse(argv: readonly string[], now: Date): Options {
   } catch (e) {
     throw new UsageError(e instanceof Error ? e.message : String(e));
   }
-  const since =
-    values.since !== undefined
-      ? parseDate(values.since, '--since')
-      : new Date(now.getTime() - 7 * DAY_MS);
+  const since = values.since !== undefined ? parseDate(values.since, '--since') : defaultSince(now);
   const until = values.until !== undefined ? parseDate(values.until, '--until', true) : undefined;
   if (until !== undefined && until < since) throw new UsageError('--until is before --since');
   if (values.html === '') throw new UsageError('--html needs a file path');

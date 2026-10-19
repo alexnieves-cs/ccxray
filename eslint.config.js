@@ -52,4 +52,11 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // `ccxray capture` (opt-in, docs/capture.md) is the one module allowed node:http. It is built
+    // into dist/capture.js, which test/no-network.test.ts checks binds 127.0.0.1 and never
+    // connects out. Its test talks to it over loopback.
+    files: ['src/capture/index.ts', 'test/capture.test.ts'],
+    rules: { 'no-restricted-imports': 'off' },
+  },
 );
