@@ -1,7 +1,15 @@
 // A8 context-growth (SPEC §5): per-session curve of context size (input + cache read + cache
 // write per turn) [M]; flags sessions that got large or were compacted repeatedly.
 
-import type { Analyzer, Finding, Session, Turn } from '../model/index.js';
+//
+// Impact (SPEC §5.2): the cost of carrying context above contextLargeTokens, Σ over the chain's
+// turns of max(0, context − contextLargeTokens) × that turn's cache-read price. Savings = that
+// cost, framed as "starting fresh / /clear between tasks avoids most of this" [E]: an upper
+// bound, since some of that context was needed.
+import { unitPrices } from '../cost/cost.js';
+import { impact } from '../cost/impact.js';
+import type { Analyzer, Finding, Impact, Session, Turn } from '../model/index.js';
+import { formatUsd } from '../reporters/format.js';
 import { chain, contextTokens, fmt, short } from './rules.js';
 import { MAX_EVIDENCE, plural, shortAgent } from './util.js';
 
@@ -49,6 +57,9 @@ export function countCompactions(s: Session): number {
 
 interface Grown {
   s: Session;
+  /** $ of re-reading the context above the threshold, and the turns over it. */
+  overUsd: number;
+  overTurns: number;
   turns: number;
   max: number;
   peak: Turn;
@@ -70,6 +81,26 @@ const why = (g: Grown): string[] =>
     g.compacted ? `compacted ${g.compactions}×` : '',
   ].filter(Boolean);
 
+function overImpact(gs: readonly Grown[], limit: number, sub: boolean): { impact?: Impact } {
+  const usd = gs.reduce((a, g) => a + g.overUsd, 0);
+  const turns = gs.reduce((a, g) => a + g.overTurns, 0);
+  if (!(usd > 0)) return {};
+  return {
+    impact: impact({
+      costUsd: usd,
+      savingsUsd: usd,
+      savingsSubagentUsd: sub ? usd : 0,
+      basis:
+        `context above ${fmt(limit)} tokens was re-read on ${plural(turns, 'turn')}: ` +
+        `${formatUsd(usd)} at cache-read prices; ` +
+        (sub
+          ? 'narrower subagent tasks would avoid most of it'
+          : 'starting fresh or /clear between tasks would avoid most of it'),
+      confidence: 'estimated',
+    }),
+  };
+}
+
 export const contextGrowth: Analyzer = {
   id: 'context-growth',
   spec: 'A8',
@@ -87,8 +118,18 @@ export const contextGrowth: Analyzer = {
       const large = max >= contextLargeTokens;
       const compacted = compactions >= compactionsPerSession;
       if (!large && !compacted) continue;
+      let overUsd = 0;
+      let overTurns = 0;
+      turns.forEach((t, i) => {
+        const over = sizes[i]! - contextLargeTokens;
+        if (over <= 0) return;
+        overTurns++;
+        overUsd += over * (unitPrices(t)?.read ?? 0);
+      });
       const g: Grown = {
         s,
+        overUsd,
+        overTurns,
         turns: turns.length,
         max,
         peak: turns[sizes.indexOf(max)]!,
@@ -126,6 +167,7 @@ export const contextGrowth: Analyzer = {
             },
           ],
           fix: { summary: MAIN_FIX },
+          ...overImpact([main], contextLargeTokens, false),
         });
       if (subs.length === 0) continue;
       // One finding for every flagged subagent of the tree; evidence names each agent.
@@ -164,6 +206,7 @@ export const contextGrowth: Analyzer = {
           source: g.peak.source,
         })),
         fix: { summary: SUBAGENT_FIX },
+        ...overImpact(subs, contextLargeTokens, true),
       });
     }
     return findings;

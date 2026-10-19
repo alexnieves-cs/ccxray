@@ -8,10 +8,18 @@
 // big outputs goes to data.persistedBytes. Fix advice depends on the command family (bashAdvice).
 // Grouped by tool name, and for Bash by the normalized command (normalizeCommand). All sessions
 // count, subagents included: their context is billed too. Reads that A6 reports as repeats are
-// left to A6, so WHERE IT WENT never counts one result twice. Estimated.
+// left to A6, and reads A11 reports as cross-agent copies to A11, so WHERE IT WENT never counts
+// one result twice. Estimated.
+//
+// Impact (SPEC §5.2): the CARRY cost of each output (src/cost/carry.ts): written to the cache
+// once, then re-read on every later turn of its chain until a compaction or the chain's end.
+// Savings assume the fix cuts each output to TRIMMED_OUTPUT_TOKENS (about 100 lines) [E].
+import { carryIndex } from '../cost/carry.js';
+import { impact } from '../cost/impact.js';
 import type { Analyzer, Finding, Session, ToolResult, Turn } from '../model/index.js';
 import { CHARS_PER_TOKEN } from '../tokens/estimate.js';
-import { formatCompact, formatInt, shortCommand } from '../reporters/format.js';
+import { formatCompact, formatInt, formatUsd, shortCommand } from '../reporters/format.js';
+import { crossAgentReadToolUseIds } from './cross-agent-read.js';
 import { repeatedReadToolUseIds } from './repeated-read.js';
 import { displayPath, evidenceFor, maskHome, MAX_EVIDENCE, plural, type Evidence } from './util.js';
 
@@ -72,10 +80,16 @@ export function normalizeCommand(command: string, cwd?: string): string {
   return inner !== undefined ? `${label} (in a loop)` : label;
 }
 
+/** What a trimmed output keeps (~100 lines × ~40 chars / 4), for A5 savings. Estimated. */
+export const TRIMMED_OUTPUT_TOKENS = 1_000;
+
 interface Hit {
   session: Session;
   turn: Turn;
   result: ToolResult;
+  carryUsd: number;
+  savingsUsd: number;
+  turnsCarried: number;
 }
 
 interface Group {
@@ -149,6 +163,9 @@ export const bigToolOutput: Analyzer = {
     const groups = new Map<string, Group>();
     // A Read that A6 reports as a repeat is counted there only, never in both.
     const repeats = repeatedReadToolUseIds(sessions);
+    // So is a Read that A11 reports as one agent's copy of a file several agents read.
+    for (const id of crossAgentReadToolUseIds(sessions, ctx.thresholds)) repeats.add(id);
+    const carry = carryIndex(sessions, ctx.thresholds);
     // Outputs Claude Code externalized whose inline preview is under the threshold: already
     // handled, so not big outputs; counted per group as data.persistedByClaudeCode only.
     const handled = new Map<string, number>();
@@ -166,7 +183,17 @@ export const bigToolOutput: Analyzer = {
             continue;
           }
           const g = groups.get(key) ?? { tool, command, hits: [] };
-          g.hits.push({ session, turn, result });
+          const c = carry.carry(turn, result.estTokens);
+          const kept = Math.min(result.estTokens, TRIMMED_OUTPUT_TOKENS);
+          g.hits.push({
+            session,
+            turn,
+            result,
+            carryUsd: c.usd,
+            savingsUsd:
+              result.estTokens > 0 ? (c.usd * (result.estTokens - kept)) / result.estTokens : 0,
+            turnsCarried: c.turnsCarried,
+          });
           groups.set(key, g);
         }
     const findings: Finding[] = [];
@@ -185,9 +212,18 @@ export const bigToolOutput: Analyzer = {
               (h.result.persisted
                 ? `, persisted by Claude Code (full ${h.result.persisted.reportedBytes === null ? 'size unknown' : `${formatInt(h.result.persisted.reportedBytes)} bytes`})`
                 : '') +
-              (h.result.isError ? ', is_error' : ''),
+              (h.result.isError ? ', is_error' : '') +
+              (h.turnsCarried > 0
+                ? `; stayed in context for ${plural(h.turnsCarried, 'turn')}, ~${formatUsd(h.carryUsd)} [E]`
+                : ''),
           ),
         );
+      const costUsd = g.hits.reduce((a, h) => a + h.carryUsd, 0);
+      const savingsUsd = g.hits.reduce((a, h) => a + h.savingsUsd, 0);
+      const subUsd = g.hits
+        .filter((h) => h.session.isSubagent || h.turn.isSidechain)
+        .reduce((a, h) => a + h.savingsUsd, 0);
+      const longest = g.hits.reduce((m, h) => Math.max(m, h.turnsCarried), 0);
       findings.push({
         analyzer: 'big-tool-output',
         // Persisted-only groups cost little context: info. 50k+ estimated tokens: warn.
@@ -210,9 +246,25 @@ export const bigToolOutput: Analyzer = {
           ),
           errors: g.hits.filter((h) => h.result.isError).length,
           persistedByClaudeCode: handled.get(key) ?? 0,
+          turnsCarriedMax: longest,
         },
         evidence,
         fix: { summary: fixFor(g) },
+        ...(costUsd > 0
+          ? {
+              impact: impact({
+                costUsd,
+                savingsUsd,
+                savingsSubagentUsd: subUsd,
+                basis:
+                  `each output was written to the cache once and re-read on every later turn ` +
+                  `until a compaction or the end of its session (the longest stayed in context ` +
+                  `for ${plural(longest, 'turn')}); savings assume each is cut to ~` +
+                  `${formatCompact(TRIMMED_OUTPUT_TOKENS)} tokens (about 100 lines)`,
+                confidence: 'estimated',
+              }),
+            }
+          : {}),
       });
     }
     return findings;

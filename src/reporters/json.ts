@@ -26,15 +26,16 @@ const TOP_LEVEL_ORDER: (keyof Report)[] = [
 export const MAX_DATA_STRING = 80;
 
 /**
- * Finding.data as shared without --include-content: the keys reporters know (`causes`, `tool`,
+ * Finding.data as shared without --include-content: the keys reporters know (`causes`,
+ * `subagentTypes` (A9: agent type names, counts and $), `tool`,
  * `command`, see derive.ts) in their known shapes, `command` cut to two words, plus number and
  * boolean scalars and strings up to MAX_DATA_STRING chars. Everything else is dropped.
  */
 export function shareableData(data: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(data)) {
-    if (k === 'causes' && Array.isArray(v)) {
-      out.causes = v
+    if ((k === 'causes' || k === 'subagentTypes') && Array.isArray(v)) {
+      out[k] = v
         .filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null)
         .map((c) => shareableData(c));
     } else if (k === 'command' && typeof v === 'string') out.command = shortCommand(v);

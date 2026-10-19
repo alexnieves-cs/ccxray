@@ -36,6 +36,7 @@ describe('analyzer registry', () => {
       'tool-usage',
       'subagent-cost',
       'error-waste',
+      'cross-agent-read',
     ])
       expect(a).toContain(`"analyzer":"${id}"`);
   });

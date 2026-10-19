@@ -53,6 +53,7 @@ describe('bench/my-sessions (aggregate only)', () => {
       for (const t of s.turns) forbidden.add(t.uuid);
     }
     for (const f of forbidden) if (f.length >= 4) expect(md, f).not.toContain(f);
-    expect(md).not.toMatch(/msg_|req_|toolu_|\bagent-/);
+    // `agent-<id>` file names; `(?<![\w-])` so the analyzer id `cross-agent-read` is not one.
+    expect(md).not.toMatch(/msg_|req_|toolu_|(?<![\w-])agent-/);
   });
 });

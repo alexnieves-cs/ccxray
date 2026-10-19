@@ -2,6 +2,7 @@ import type { Analyzer } from '../model/index.js';
 import { bigToolOutput } from './big-tool-output.js';
 import { cacheRebuild } from './cache-rebuild.js';
 import { contextGrowth } from './context-growth.js';
+import { crossAgentRead } from './cross-agent-read.js';
 import { errorWaste } from './error-waste.js';
 import { fixedOverhead } from './fixed-overhead.js';
 import { repeatedRead } from './repeated-read.js';
@@ -21,4 +22,5 @@ export const ANALYZERS: Analyzer[] = [
   contextGrowth, // A8
   subagentCost, // A9
   errorWaste, // A10
+  crossAgentRead, // A11
 ];

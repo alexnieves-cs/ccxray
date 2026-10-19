@@ -30,6 +30,8 @@ describe('A9 subagent-cost', () => {
         model: 'claude-sonnet-4-5',
         turns: 2,
         tokens: 8_340,
+        // Sonnet 4.5 (5m writes): 5×3 + 4,300×3.75 + 4,000×0.30 + 35×15 = 17,865 µ$.
+        costUsd: 0.017865,
         parentToolUseId: 'toolu_agent_n1',
       },
       {
@@ -37,7 +39,29 @@ describe('A9 subagent-cost', () => {
         model: 'claude-sonnet-4-5',
         turns: 1,
         tokens: 4_115,
+        // 3×3 + 4,100×3.75 + 12×15 = 15,564 µ$.
+        costUsd: 0.015564,
         parentToolUseId: 'toolu_agent_n2',
+      },
+    ]);
+    // One tier down (Haiku 5.5, short prompts): n1 595.5 µ$ + n2 518.8 µ$ = 1,114.3 µ$.
+    expect(f.impact).toMatchObject({
+      costUsd: 0.033429,
+      savingsUsd: 0.032315,
+      savingsSubagentUsd: 0.032315,
+      savingsMainUsd: 0,
+      confidence: 'estimated',
+    });
+    expect(f.impact!.basis).toContain('may do worse');
+    expect(f.data?.subagentTypes).toEqual([
+      {
+        type: '(unknown)',
+        agents: 2,
+        model: 'claude-sonnet-4-5',
+        cheaperModel: 'claude-haiku-5-5',
+        costUsd: 0.033429,
+        savingsUsd: 0.032315,
+        explicitModel: 0,
       },
     ]);
     expect(f.fix.summary).toContain('subagent `model:` field');

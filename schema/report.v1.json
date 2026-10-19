@@ -252,6 +252,19 @@
             }
           }
         },
+        "impact": {
+          "type": "object",
+          "description": "What the finding cost and what its fix would plausibly have saved in this window, at API list prices. Estimated $.",
+          "required": ["costUsd", "savingsUsd", "basis", "confidence"],
+          "properties": {
+            "costUsd": { "$ref": "#/$defs/usd" },
+            "savingsUsd": { "$ref": "#/$defs/usd" },
+            "basis": { "type": "string" },
+            "confidence": { "enum": ["measured-tokens", "estimated"] },
+            "savingsMainUsd": { "$ref": "#/$defs/usd" },
+            "savingsSubagentUsd": { "$ref": "#/$defs/usd" }
+          }
+        },
         "fix": {
           "type": "object",
           "required": ["summary"],

@@ -4,7 +4,9 @@
 // when Claude Code logs them ([M] CC 2.1.302, FORMAT.md Q3).
 
 import type { Analyzer, Finding, Session, SessionEvent, SourcePointer } from '../model/index.js';
+import { carryIndex } from '../cost/carry.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
+import { definitionsImpact } from './tool-usage.js';
 import {
   chain,
   compareVersions,
@@ -150,7 +152,22 @@ export const fixedOverhead: Analyzer = {
       }
     }
     const snap = latestSnapshot(sessions);
-    if (snap !== undefined && snap.ev.tools.length > 0) findings.push(toolDefinitions(snap));
+    if (snap !== undefined && snap.ev.tools.length > 0) {
+      const f = toolDefinitions(snap);
+      // Cost of every definition over the main sessions that logged a snapshot [E]; no savings
+      // here: A7 prices the unused ones that can be removed (no double count).
+      const withSnap = sessions.filter(
+        (s) => !s.isSubagent && s.events.some((e) => e.kind === 'tools-snapshot'),
+      );
+      const imp = definitionsImpact(
+        carryIndex(sessions, ctx.thresholds),
+        withSnap,
+        f.tokens.value,
+        false,
+        '; savings are counted on the unused-tool findings, not here',
+      );
+      findings.push(imp === undefined ? f : { ...f, impact: imp });
+    }
     return findings;
   },
 };
