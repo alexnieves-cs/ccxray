@@ -1,4 +1,4 @@
-// Sizes of one Messages API request body, for `ccxray capture`. Pure. Returns sizes and tool
+// Sizes of one Messages API request body, for `tknxray capture`. Pure. Returns sizes and tool
 // names only: no prompt, system or message content leaves this function.
 import { estimateTokensFromChars } from '../tokens/estimate.js';
 
@@ -52,7 +52,7 @@ export function formatMeasurement(m: CaptureMeasurement): string {
   const row = (label: string, chars: number): string =>
     `  ${label.padEnd(18)} ${n(chars).padStart(9)} chars [M]  ${tok(chars)}`;
   const lines = [
-    'ccxray capture: first /v1/messages request (sizes only; no content was stored or printed)',
+    'tknxray capture: first /v1/messages request (sizes only; no content was stored or printed)',
     `  ${'request body'.padEnd(18)} ${n(m.bodyBytes).padStart(9)} bytes [M]`,
     row(`tools (${m.tools.length})`, m.toolsChars),
     row('system prompt', m.systemChars),

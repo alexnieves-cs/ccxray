@@ -225,7 +225,7 @@ export interface Session {
   wrote1hCache?: boolean;
 }
 
-/** Parse statistics, shown by `ccxray doctor` and embedded in reports. All counts are measured. */
+/** Parse statistics, shown by `tknxray doctor` and embedded in reports. All counts are measured. */
 export interface ParseStats {
   roots: string[];
   files: number;
@@ -308,7 +308,7 @@ export interface SessionSummary {
 /** The machine-readable report. `--json` prints this; schema/report.v1.json describes it. */
 export interface Report {
   schemaVersion: 1;
-  tool: { name: 'ccxray'; version: string };
+  tool: { name: 'tknxray'; version: string };
   generatedAt: string;
   window: { since: string | null; until: string | null; project: string | null };
   includeContent: boolean;

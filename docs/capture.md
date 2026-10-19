@@ -1,6 +1,6 @@
-# `ccxray capture`: measure one request's tool, system and message sizes (opt-in, API key only)
+# `tknxray capture`: measure one request's tool, system and message sizes (opt-in, API key only)
 
-Status: **preview, opt-in.** It is the only part of ccxray that opens a socket, and it only
+Status: **preview, opt-in.** It is the only part of tknxray that opens a socket, and it only
 **listens** on `127.0.0.1`. It never connects anywhere.
 
 ## Why
@@ -12,12 +12,12 @@ real request from your Claude Code setup, so you can see the per-tool definition
 ## How to use it
 
 ```sh
-ccxray capture --i-understand-this-is-api-key-only           # prints the port
+tknxray capture --i-understand-this-is-api-key-only           # prints the port
 # in another terminal, with ANTHROPIC_API_KEY set (an API key, not a subscription login):
 ANTHROPIC_BASE_URL=http://127.0.0.1:<port> claude -p "say hi"
 ```
 
-Claude Code shows an API error; that is expected. ccxray prints the sizes and exits.
+Claude Code shows an API error; that is expected. tknxray prints the sizes and exits.
 
 Options: `--port N` (default: a free port), `--timeout SECONDS` (default 300).
 

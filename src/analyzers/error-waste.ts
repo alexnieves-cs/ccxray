@@ -126,7 +126,7 @@ export const errorWaste: Analyzer = {
           })),
           fix: {
             summary:
-              'Check `ccxray doctor` and your login/network; errors themselves usually bill nothing',
+              'Check `tknxray doctor` and your login/network; errors themselves usually bill nothing',
           },
         });
       }

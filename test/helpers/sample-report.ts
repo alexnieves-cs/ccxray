@@ -55,7 +55,7 @@ export function sampleReport(): Report {
   const all = sum(t1, t2, t3, t4);
   return {
     schemaVersion: 1,
-    tool: { name: 'ccxray', version: '0.0.0-test' },
+    tool: { name: 'tknxray', version: '0.0.0-test' },
     generatedAt: '2026-10-18T09:30:00.000Z',
     window: { since: '2026-10-11', until: null, project: null },
     includeContent: false,
@@ -165,7 +165,7 @@ export function sampleReport(): Report {
             detail: 'tool list at first turn',
           },
         ],
-        fix: { summary: '`ccxray fix mcp` (planned, M5) generates a permissions.deny diff' },
+        fix: { summary: '`tknxray fix mcp` (planned, M5) generates a permissions.deny diff' },
       },
       {
         analyzer: 'big-tool-output',

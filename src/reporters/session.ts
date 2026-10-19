@@ -1,4 +1,4 @@
-// `ccxray session` renderer (SPEC §3): one row per assistant turn. Pure; ≤ 100 columns.
+// `tknxray session` renderer (SPEC §3): one row per assistant turn. Pure; ≤ 100 columns.
 // Every token number here is measured (usage fields); the big-output flag compares an
 // estimate [E]. No prompt, file or command content is shown: tool names only.
 import {
@@ -183,7 +183,7 @@ export function renderSessionView(v: SessionView, opts: SessionRenderOptions): s
   const lines = [
     ...wrapParts(
       [
-        `ccxray session ${shortId(v.id)}`,
+        `tknxray session ${shortId(v.id)}`,
         sanitizeText(displayProject(v.project, home)),
         `Claude Code ${sanitizeText(formatVersionRange(v.ccVersions))}`,
         formatSpan(v.firstTs, v.lastTs),

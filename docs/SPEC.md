@@ -1,4 +1,6 @@
-# ccxray: specification
+# tknxray: specification
+
+The tool was called ccxray until 2026-10-19; it was renamed because `ccxray` is taken on npm (§10). The repo is still `alexnieves-cs/ccxray`.
 
 Version 0.1 (draft), 2026-10-18. Owner: Alex Nieves (@alexnieves-cs). Status: **in development, no code yet.**
 
@@ -25,7 +27,7 @@ Claude Code users, Max subscribers especially, regularly hit usage limits and ca
 
 **[M] Fixed overhead measurement** (Claude Code 2.1.296, the first request of `claude -p "say hi"` captured with a local `ANTHROPIC_BASE_URL` server that forwarded nothing): 81,057-byte request body. Of that, **23 tool definitions = 66,689 chars (~82%)**, system prompt 6,109 chars, messages 9,491 chars. That works out to roughly 20k tokens of fixed overhead per fresh context **[E: chars/4, not tokenized]**, before CLAUDE.md or any MCP server is added.
 
-The cache issues above were diagnosed by hand, by users reading `cache_creation_input_tokens` in JSONL. ccxray automates that forensic work.
+The cache issues above were diagnosed by hand, by users reading `cache_creation_input_tokens` in JSONL. tknxray automates that forensic work.
 
 ## 2. Users
 1. **Max/Pro subscriber hitting limits.** Wants "why did I burn 40% in a day?" answered in one command, plus fixes.
@@ -38,21 +40,21 @@ Non-goals: live proxying of subscription traffic, multi-account management, prom
 ## 3. CLI UX
 
 ```
-npx ccxray                       # analyze all sessions in the last 7 days (default)
-npx ccxray --since 2026-10-01    # date range
-npx ccxray --project myrepo      # filter by project dir (substring)
-npx ccxray session <id|latest>   # per-turn drill-down for one session
-npx ccxray --html report.html    # self-contained HTML report (no external assets)
-npx ccxray --json > report.json  # machine-readable output (schema-versioned)
-npx ccxray --include-content     # allow snippets of prompts/outputs in reports (off by default)
-npx ccxray doctor                # show discovered log dirs, CC versions, parse stats, unknown record types
+npx tknxray                       # analyze all sessions in the last 7 days (default)
+npx tknxray --since 2026-10-01    # date range
+npx tknxray --project myrepo      # filter by project dir (substring)
+npx tknxray session <id|latest>   # per-turn drill-down for one session
+npx tknxray --html report.html    # self-contained HTML report (no external assets)
+npx tknxray --json > report.json  # machine-readable output (schema-versioned)
+npx tknxray --include-content     # allow snippets of prompts/outputs in reports (off by default)
+npx tknxray doctor                # show discovered log dirs, CC versions, parse stats, unknown record types
 ```
 
 Config dir discovery: `CLAUDE_CONFIG_DIR` (comma-separated allowed), `~/.config/claude/projects`, `~/.claude/projects` (same rules as ccusage **[M: ccusage docs]**).
 
 ### Example output (illustrative only; these numbers are made up)
 ```
-ccxray · 42 sessions · 1,318 assistant turns · Oct 11–18 2026 · Claude Code 2.1.290–2.1.296
+tknxray · 42 sessions · 1,318 assistant turns · Oct 11–18 2026 · Claude Code 2.1.290–2.1.296
 
 TOKENS (measured from usage fields)
   input (uncached)        1.2M    3%
@@ -76,9 +78,9 @@ TOP FINDINGS
  3. REPEATED READS  src/api/client.ts read 7× unchanged in session 3fa2…
       → planned cc-slim read-dedupe hook
  4. UNUSED TOOLS  9 MCP tools from "github" server never called in 42 sessions (~6.3k tokens/cold turn [E])
-      → `ccxray fix mcp` (planned, M5) generates a permissions.deny diff
+      → `tknxray fix mcp` (planned, M5) generates a permissions.deny diff
 
-Run `ccxray session 3fa2` for per-turn detail · `--html` for a shareable report
+Run `tknxray session 3fa2` for per-turn detail · `--html` for a shareable report
 ```
 
 Default command flags (M2): `--since DATE` (default: 7 days before now), `--until DATE` (a date-only value is inclusive: the end of that UTC day), `--project NAME`, `--json` (stdout), `--html FILE` (writes the file, **overwriting** it, and prints its path; with `--json` the JSON is printed first and the path goes to stderr), `--include-content`, `--root DIR` (repeatable), `--threshold.KEY=VALUE` (repeatable; unknown or non-own keys, empty or non-numeric values, `…Fraction` values outside [0, 1] and negative values are errors), `--no-color`. Dates are `YYYY-MM-DD` (a real calendar day; `2026-02-30` is rejected) or ISO 8601 `YYYY-MM-DDTHH:MM[:SS[.sss]]` with an optional `Z`/`±HH:MM` offset; **a date-time without an offset is UTC**, never local time. Anything else is an error. A subcommand (`doctor`, `session`) is recognized only as the first argument, so in `--project doctor` the word is the flag's value. Exit codes: 0 success, 1 no sessions in the window (the empty state is still printed), 2 bad arguments or an `--html` file that cannot be written (with its own message).
@@ -87,7 +89,7 @@ Default command flags (M2): `--since DATE` (default: 7 days before now), `--unti
 
 ## 4. Architecture
 
-TypeScript (strict), Node ≥ 20, ESM, single package, bin `ccxray`. Runtime dependencies kept minimal (a small arg parser, a color library; no HTTP client).
+TypeScript (strict), Node ≥ 20, ESM, single package, bin `tknxray`. Runtime dependencies kept minimal (a small arg parser, a color library; no HTTP client).
 
 ```
 src/
@@ -127,7 +129,7 @@ type Finding = {
 
 Every timestamp in the model (`Turn.ts`, `ToolResult.ts`, `UserPrompt.ts`, `SessionEvent.ts`, `Session.firstTs`/`lastTs`) is epoch milliseconds (UTC) as a `number`, not a `Date`: a Date object costs ~112 B of retained heap each (§8). Reports keep emitting ISO-8601 strings (`new Date(ms).toISOString()`).
 
-**Finding.data conventions (provisional, reporters ↔ analyzers).** `Finding.data` is analyzer-specific, but reporters read three keys when present and well-formed: `causes: { cause, count, tokens?, tokensKind?, fix? }[]` (per-cause breakdown, e.g. A2/A3; `tokens` has `tokensKind` when given, else the finding's kind; A3 sets `estimated` because assigning a cause is a guess), `tool: string` (tool name; groups "where it went" by tool) and `command: string` (raw Bash command; reporters only show its first two words, never env assignments). Without `--include-content`, the JSON report keeps only those keys plus number/boolean scalars and strings of at most 80 chars. This contract may change until M4; the source of truth is the comment at the top of `src/reporters/derive.ts`. A7's per-MCP-server data is a fixed contract consumed by M5 `ccxray fix mcp`: `{ server, unusedTools, usedTools, defChars? }` with full `mcp__server__tool` names (see `src/analyzers/tool-usage.ts`).
+**Finding.data conventions (provisional, reporters ↔ analyzers).** `Finding.data` is analyzer-specific, but reporters read three keys when present and well-formed: `causes: { cause, count, tokens?, tokensKind?, fix? }[]` (per-cause breakdown, e.g. A2/A3; `tokens` has `tokensKind` when given, else the finding's kind; A3 sets `estimated` because assigning a cause is a guess), `tool: string` (tool name; groups "where it went" by tool) and `command: string` (raw Bash command; reporters only show its first two words, never env assignments). Without `--include-content`, the JSON report keeps only those keys plus number/boolean scalars and strings of at most 80 chars. This contract may change until M4; the source of truth is the comment at the top of `src/reporters/derive.ts`. A7's per-MCP-server data is a fixed contract consumed by M5 `tknxray fix mcp`: `{ server, unusedTools, usedTools, defChars? }` with full `mcp__server__tool` names (see `src/analyzers/tool-usage.ts`).
 
 ### 4.2 Transcript format: what is known
 Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusage's Claude adapter docs ([rust/adapters/claude/src/README.md](https://github.com/ccusage/ccusage/blob/main/rust/adapters/claude/src/README.md)) **[M: documented by a widely used parser]**; the Anthropic Messages API `usage` object ([docs](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching)).
@@ -165,7 +167,7 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - String `assistant.message.content` is one text block.
 - Compaction markers: `isCompactSummary`, `system`/`compact_boundary`, `summary` (Q5). `system`/`api_error` is an API error.
 - `isMeta: true` user lines are client-injected, not typed prompts.
-- One file = one session (its first `sessionId`). Besides the [M] `{sessionId}/subagents/agent-<id>.jsonl` layout, `{sessionId}/agent-<id>.jsonl` (UUID-shaped `{sessionId}` dir) and files whose every user/assistant record is `isSidechain` with an `agentId` (e.g. flat `agent-<id>.jsonl`) are treated as subagents (Q4); any other file, at any depth, is a main session whose project is its immediate parent dir. `Session.id = <parent>:agent-<id>` is a ccxray choice.
+- One file = one session (its first `sessionId`). Besides the [M] `{sessionId}/subagents/agent-<id>.jsonl` layout, `{sessionId}/agent-<id>.jsonl` (UUID-shaped `{sessionId}` dir) and files whose every user/assistant record is `isSidechain` with an `agentId` (e.g. flat `agent-<id>.jsonl`) are treated as subagents (Q4); any other file, at any depth, is a main session whose project is its immediate parent dir. `Session.id = <parent>:agent-<id>` is a tknxray choice.
 - `<persisted-output>` sizes: `KB` = 1024, and the externalization threshold is unknown (Q1).
 - Cross-session copies keep the copy whose file sessionId matches the record's envelope `sessionId`, else the earliest file; the sidechain-replay and cross-session rules themselves are from ccusage docs and not yet seen locally.
 - `prompt_snapshot` tool names come from `name` or `schema.name`; `systemPrompt[]` parts are strings or `{text}`.
@@ -186,8 +188,8 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - A10: a `system`/`api_error` record followed by a synthetic turn, with no real turn between them, is one error.
 
 **Fix-module assumptions added in M5 [UNVERIFIED]** (details in [cc-slim.md](cc-slim.md) and [capture.md](capture.md)):
-- `ccxray fix mcp`: permission rule syntax `mcp__<server>__<tool>` and server-wide `mcp__<server>` / `mcp__<server>__*` is taken from Claude Code's permission docs, not re-checked against a running version. Whether a deny rule also removes the tool's definition from the request (saving tokens), rather than only blocking calls, is unknown and must be measured.
-- *(Resolved at integration, no longer an assumption.)* `ccxray fix mcp` gets its `tool-usage` (A7) findings from the real pipeline, `loadSessions` then `buildReport` (`src/pipeline.ts`), the way the default command does (default thresholds, no content, `--since` default 7 days); the A7 data contract `{ server, unusedTools, usedTools, defChars? }` is in §4.1 and covered by `test/analyzers/tool-usage.test.ts` and an end-to-end `fix mcp` test on the built CLI.
+- `tknxray fix mcp`: permission rule syntax `mcp__<server>__<tool>` and server-wide `mcp__<server>` / `mcp__<server>__*` is taken from Claude Code's permission docs, not re-checked against a running version. Whether a deny rule also removes the tool's definition from the request (saving tokens), rather than only blocking calls, is unknown and must be measured.
+- *(Resolved at integration, no longer an assumption.)* `tknxray fix mcp` gets its `tool-usage` (A7) findings from the real pipeline, `loadSessions` then `buildReport` (`src/pipeline.ts`), the way the default command does (default thresholds, no content, `--since` default 7 days); the A7 data contract `{ server, unusedTools, usedTools, defChars? }` is in §4.1 and covered by `test/analyzers/tool-usage.test.ts` and an end-to-end `fix mcp` test on the built CLI.
 - cc-slim hook: PostToolUse stdin fields (`hook_event_name`, `tool_name`, `tool_input`, `tool_response`), the Bash `tool_response` shape `{ stdout, stderr, interrupted, isImage }`, and whether `hookSpecificOutput.updatedMCPToolOutput` (documented for MCP tools) has any effect on Bash. If it has none, only the PreToolUse command-wrap design in cc-slim.md §3.3 can work.
 - capture: Claude Code with `ANTHROPIC_API_KEY` sends `x-api-key`, and an OAuth login sends `Authorization: Bearer` (OAuth tokens start with `sk-ant-oat`, refused in either header). Requests go to `POST /v1/messages` (optionally with a query string). Claude Code may send requests without tools first, so capture skips bodies without a `tools` array and measures the first one that has it.
 
@@ -227,12 +229,12 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 
 | M | Scope | Acceptance (all automated unless noted) |
 |---|---|---|
-| **M0 Scaffold** | pnpm, tsup, vitest, eslint/prettier, CI on GitHub Actions (Node 20 & 22, ubuntu + macOS + windows), `bin/ccxray`, no-network test | `pnpm i && pnpm build && node dist/cli.js --version` works in CI on all 3 OSes; `no-network.test.ts` fails if any `http`/`https`/`net`/`fetch`/`undici` use appears in `dist/`; CI green on the draft PR |
+| **M0 Scaffold** | pnpm, tsup, vitest, eslint/prettier, CI on GitHub Actions (Node 20 & 22, ubuntu + macOS + windows), `bin/tknxray`, no-network test | `pnpm i && pnpm build && node dist/cli.js --version` works in CI on all 3 OSes; `no-network.test.ts` fails if any `http`/`https`/`net`/`fetch`/`undici` use appears in `dist/`; CI green on the draft PR |
 | **M1 Parser** | discover, stream, records, dedupe, session graph, `doctor` | ≥ 12 fixtures pass (see §7); dedupe matches the hand-computed totals exactly; 0 crashes on a fuzzed corpus (1k random mutated lines); `doctor` on real logs lists unknown types; §4.4 questions answered in the SPEC (manual, by Alex's local run) |
 | **M2 Core analyzers** | A1, A2, A3, A5, A6 + estimator calibration | each analyzer has ≥ 3 positive and ≥ 2 negative fixtures; A1 totals within ±0.5% of `npx ccusage session --json` on the same real logs (manual, documented in the PR); estimator median ratio reported |
 | **M3 Reporters** | terminal, JSON (schema v1 + JSON Schema file), HTML (single file, inline CSS/JS, no CDN) | snapshot tests for all 3; HTML passes a test that it contains no `http(s)://` resource loads; `--json` validates against the schema; output fits 100 columns |
 | **M4 Remaining analyzers + session view** | A4, A7, A8, A9, A10, `session` command, thresholds config | fixtures as in M2; on Alex's real logs ≥ 1 true positive per analyzer type, or documented as "none present" (manual); a false-positive review of 20 random findings shows ≤ 2 wrong (manual, recorded in `bench/REVIEW.md`) |
-| **M5 Fix modules (preview)** | `ccxray fix mcp` (mcp-diet: emit a settings `permissions.deny` diff for never-used MCP tools; never writes without `--apply`); `cc-slim` design doc + prototype PostToolUse hook for Bash output; optional `ccxray capture` (API-key only, local echo server, measures tool-definition bytes, never forwards subscription OAuth) | the diff is valid JSON and merges into the existing settings in tests; the cc-slim prototype has a unit test for "keep failure lines, head/tail, dedupe stack frames"; a benchmark script exists. **No savings claim in the README until the benchmark (§8) shows it.** |
+| **M5 Fix modules (preview)** | `tknxray fix mcp` (mcp-diet: emit a settings `permissions.deny` diff for never-used MCP tools; never writes without `--apply`); `cc-slim` design doc + prototype PostToolUse hook for Bash output; optional `tknxray capture` (API-key only, local echo server, measures tool-definition bytes, never forwards subscription OAuth) | the diff is valid JSON and merges into the existing settings in tests; the cc-slim prototype has a unit test for "keep failure lines, head/tail, dedupe stack frames"; a benchmark script exists. **No savings claim in the README until the benchmark (§8) shows it.** |
 
 ## 7. Test plan
 - **Fixtures** (`test/fixtures/projects/<name>/`, each a fake `projects/` tree; all synthetic or scrubbed): `minimal-single-turn`, `multi-block-same-msgid` (dedupe), `sidechain-replay`, `cross-session-copy`, `synthetic-error-turn` (like the real 2.1.296 not-logged-in case), `ttl-gap-rebuild`, `version-change-rebuild`, `model-switch`, `big-bash-output`, `repeated-read-unchanged`, `repeated-read-after-edit` (negative), `malformed-lines`, `nested-subagents-dir`, `unknown-record-types`, `string-vs-array-content`.
@@ -244,23 +246,23 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 
 ## 8. Benchmarks and performance targets
 - Parse throughput ≥ **100 MB/s** of JSONL on an M-series laptop; 1 GB of logs analyzed in < 15 s; peak RSS < 300 MB (streaming, no full-file loads).
-- `npx ccxray` cold start (cached npx) < 1.5 s for 50 MB of logs.
+- `npx tknxray` cold start (cached npx) < 1.5 s for 50 MB of logs.
 - Package size < 1 MB unpacked.
 - Memory regression guard: `test/memory.test.ts` checks heap retained by `loadSessions` per MB of a synthetic corpus (deterministic, unlike peak RSS). Notes on what the parser keeps: FORMAT.md "Parser implementation notes".
 - `bench/perf.ts` generates synthetic corpora (10 MB / 100 MB / 1 GB). CI (`.github/workflows/bench.yml`) runs the 10 MB and 100 MB sizes and records the results as an artifact (informational, never gating); the 1 GB run is manual via `pnpm bench:full`, because generating and parsing it three times per PR costs minutes of runner time and ~1 GB of disk.
 - **Savings benchmark** (for README claims, later): Alex's own sessions, before/after applying the fixes over comparable weeks, reporting tokens per assistant turn and the cache hit ratio. Any claim of "equal quality" needs a task-pass-rate benchmark (e.g. a small SWE-bench-lite subset with an API key) and is out of scope until then.
 
 ## 9. Privacy and ToS
-- Reads files only. No network calls, no telemetry, no account. Enforced in CI. The single exception is the opt-in `ccxray capture` bundle (`dist/capture.js`), which only *listens* on 127.0.0.1 and never connects out; CI checks that too ([capture.md](capture.md)).
+- Reads files only. No network calls, no telemetry, no account. Enforced in CI. The single exception is the opt-in `tknxray capture` bundle (`dist/capture.js`), which only *listens* on 127.0.0.1 and never connects out; CI checks that too ([capture.md](capture.md)).
 - Reports contain token counts, tool names, file paths (relative) and commands (first tokens only) by default. Prompt and output text appears only with `--include-content`.
 - HTML reports are self-contained and load nothing remote.
 - No features for multi-account rotation, limit evasion, subscription-OAuth reuse in other harnesses, or cache keep-alive pings. `capture` mode is API-key only and opt-in.
 - Not affiliated with Anthropic. Mention this in the README.
 
 ## 10. Distribution
-- npm package with the `ccxray` bin and `npx` usage. **Name status (checked 2026-10-18): `ccxray` is TAKEN on npm** (v2.3.1, "X-ray vision for AI agent sessions — a transparent HTTP proxy and dashboard for Claude Code"). That is a different approach (a proxy), but the same name and a similar pitch. Options:
-  - publish as **`tokenxray`** (free on 2026-10-18) or **`cclens`** (free), or a scoped name `@alexnieves-cs/ccxray`;
-  - consider renaming the project to avoid confusion with the existing package. **Decision needed from Alex before M3/publish.** (`cc-xray` is also free but confusingly close to the taken name.)
+- npm package **`tknxray`** with the `tknxray` bin and `npx tknxray` usage. Not published yet: `package.json` stays `"private": true` until Alex approves a release.
+- **Name decision (2026-10-19): Alex picked `tknxray`.** `cctknxray` was the alternative; both were free on npm when checked on 2026-10-19. The project was called ccxray, but **`ccxray` is taken on npm** (checked 2026-10-18: v2.3.1, "X-ray vision for AI agent sessions — a transparent HTTP proxy and dashboard for Claude Code", an unrelated project with a different approach and a similar pitch). Earlier candidates were `tokenxray`, `cclens`, `cc-xray` (confusingly close to the taken name) and a scoped `@alexnieves-cs/ccxray`.
+- The rename covers the package, the bin and every user-visible string (CLI output, report titles, the JSON report's `tool.name` value, docs). The GitHub repo stays `alexnieves-cs/ccxray` for now, and internal identifiers (temp-dir prefixes, the schema `$id` `urn:ccxray:schema:report:v1`) keep the old name. JSON report field names are unchanged.
 - Provenance-signed releases via GitHub Actions (`npm publish --provenance`) — **manual approval by Alex**.
 - Later: Homebrew tap, Claude Code plugin wrapper for the slim/diet modules.
 
@@ -269,6 +271,7 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 2. README with a demo GIF (vhs/asciinema), a screenshot of the HTML report, and a privacy section up top.
 3. Show HN, r/ClaudeAI, r/ClaudeCode, X replies in usage-limit threads, a helpful comment on #16157/#46917 with a JSON report, and a PR to [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code).
 4. Respond to issues fast in week 1; add support for format changes as they appear.
+5. Launch drafts live in `docs/launch/` and name the tool **tknxray** (`npx tknxray` once published). They link the repo, which is still `alexnieves-cs/ccxray`, so each post should say once that the tool was renamed because `ccxray` is taken on npm (the HN draft does).
 
 ## 12. Risks
 - Anthropic ships a native breakdown. Mitigation: ship fast, keep the forensic depth (rebuild causes, version regressions), and support other agents later.

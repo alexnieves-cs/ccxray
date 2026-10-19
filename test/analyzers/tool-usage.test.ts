@@ -37,7 +37,7 @@ describe('A7 tool-usage', () => {
       { name: 'mcp__github__list_prs', count: 1 },
     ]);
     const [gh, lin] = servers(fs);
-    // The M5 `ccxray fix mcp` contract: exactly these keys.
+    // The M5 `tknxray fix mcp` contract: exactly these keys.
     expect(gh!.data).toEqual({
       server: 'github',
       unusedTools: ['mcp__github__create_issue', 'mcp__github__get_file'],

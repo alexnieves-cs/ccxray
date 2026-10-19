@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:ccxray:schema:report:v1",
-  "title": "ccxray report v1",
-  "description": "Output of `ccxray --json`. Mirrors the Report type in src/model/types.ts. Token fields in totals and sessions are measured from usage fields; a finding says whether its tokens are measured or estimated. Unknown properties are allowed so that additive changes stay compatible within v1.",
+  "title": "tknxray report v1",
+  "description": "Output of `tknxray --json`. Mirrors the Report type in src/model/types.ts. Token fields in totals and sessions are measured from usage fields; a finding says whether its tokens are measured or estimated. Unknown properties are allowed so that additive changes stay compatible within v1.",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -21,7 +21,7 @@
       "type": "object",
       "required": ["name", "version"],
       "properties": {
-        "name": { "const": "ccxray" },
+        "name": { "const": "tknxray" },
         "version": { "type": "string" }
       }
     },

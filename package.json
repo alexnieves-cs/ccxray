@@ -1,13 +1,27 @@
 {
-  "name": "ccxray-dev",
-  "private": true,
-  "version": "0.0.0",
+  "name": "tknxray",
+  "version": "0.1.0",
   "description": "Local-only CLI that explains where Claude Code tokens go. Reads your transcripts; no network calls.",
   "license": "MIT",
   "author": "Alex Nieves",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexnieves-cs/ccxray.git"
+  },
+  "homepage": "https://github.com/alexnieves-cs/ccxray#readme",
+  "bugs": {
+    "url": "https://github.com/alexnieves-cs/ccxray/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "tokens",
+    "cache",
+    "cli",
+    "local-first"
+  ],
   "type": "module",
   "bin": {
-    "ccxray": "bin/ccxray.js"
+    "tknxray": "bin/tknxray.js"
   },
   "files": [
     "bin",
@@ -33,6 +47,7 @@
     "bench": "pnpm build && tsx bench/perf.ts --sizes 10mb,100mb",
     "bench:full": "pnpm build && tsx bench/perf.ts --sizes 10mb,100mb,1gb --clean",
     "bench:slim": "tsx bench/slim.ts",
+    "my-sessions": "tsx bench/my-sessions.ts",
     "validate:real": "pnpm build && tsx scripts/validate-real.ts"
   },
   "devDependencies": {

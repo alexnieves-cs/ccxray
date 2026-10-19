@@ -1,4 +1,4 @@
-// `ccxray session`: resolution, flags, JSON rows and a snapshot of the rendered view.
+// `tknxray session`: resolution, flags, JSON rows and a snapshot of the rendered view.
 // The fixture is DSL-built and synthetic; expected flags are worked out by hand below.
 import { afterAll, describe, expect, it } from 'vitest';
 import { session, text, toolUse } from '../scripts/make-fixture.js';
@@ -133,7 +133,7 @@ describe('session view', () => {
     });
   });
 
-  it('ccxray session: --json rows, --threshold overrides and errors', async () => {
+  it('tknxray session: --json rows, --threshold overrides and errors', async () => {
     const root = tree(viewFixture());
     const run = async (...args: string[]) => {
       let out = '';

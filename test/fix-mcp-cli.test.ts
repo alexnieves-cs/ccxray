@@ -10,9 +10,9 @@ import { toolDef } from './helpers/analyze.js';
 
 const TMP = mkdtempSync(join(tmpdir(), 'ccxray-fix-cli-'));
 afterAll(() => rmSync(TMP, { recursive: true, force: true }));
-const BIN = join(import.meta.dirname, '..', 'bin', 'ccxray.js');
+const BIN = join(import.meta.dirname, '..', 'bin', 'tknxray.js');
 
-describe('built CLI: ccxray fix mcp', () => {
+describe('built CLI: tknxray fix mcp', () => {
   it('prints a permissions.deny diff for an unused MCP server and writes nothing', () => {
     const root = join(TMP, 'projects');
     const cwd = join(TMP, 'work');

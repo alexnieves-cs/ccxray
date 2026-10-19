@@ -1,4 +1,4 @@
-// `ccxray fix mcp`: print (and with --apply, write) a permissions.deny diff for MCP tools that
+// `tknxray fix mcp`: print (and with --apply, write) a permissions.deny diff for MCP tools that
 // were never called. Dry run by default; --apply writes a timestamped backup first.
 import {
   chmodSync,
@@ -38,7 +38,7 @@ export interface FixMcpDeps {
   beforeCommit?: () => void;
 }
 
-export const FIX_MCP_HELP = `Usage: ccxray fix mcp [--settings FILE] [--apply] [--per-tool] [--root DIR]... [--since DATE] [--project NAME]
+export const FIX_MCP_HELP = `Usage: tknxray fix mcp [--settings FILE] [--apply] [--per-tool] [--root DIR]... [--since DATE] [--project NAME]
 
 Adds permissions.deny rules for MCP tools that were never called in the analyzed sessions.
 Prints a diff and writes nothing unless --apply is given (a timestamped backup is written first).
@@ -52,7 +52,7 @@ See docs/fix-mcp.md.
 `;
 
 /**
- * The real pipeline, as `ccxray` (src/commands/analyze.ts) runs it: loadSessions, then
+ * The real pipeline, as `tknxray` (src/commands/analyze.ts) runs it: loadSessions, then
  * buildReport with the default thresholds and no content. Same window defaults: `--since`
  * parsed by analyze's parseDate, else the last 7 days.
  */
@@ -137,7 +137,7 @@ export async function fixCommand(
     });
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
-    out(`ccxray fix mcp: ${err.message}\n`);
+    out(`tknxray fix mcp: ${err.message}\n`);
     return 2;
   }
 
@@ -149,11 +149,11 @@ export async function fixCommand(
       label: shown.replace(/\\/g, '/'),
     });
   } catch (err) {
-    out(`ccxray fix mcp: ${shown}: ${(err as Error).message}\n`);
+    out(`tknxray fix mcp: ${shown}: ${(err as Error).message}\n`);
     return 2;
   }
 
-  const lines = [`ccxray fix mcp · target ${shown}${before === null ? ' (new file)' : ''}`];
+  const lines = [`tknxray fix mcp · target ${shown}${before === null ? ' (new file)' : ''}`];
   for (const s of plan.servers) {
     const size =
       s.defChars !== undefined
@@ -171,7 +171,7 @@ export async function fixCommand(
   lines.push('', plan.diff.trimEnd(), '');
   lines.push(
     'Note: whether a deny rule also removes the tool definition from the context is UNVERIFIED;',
-    'measure with `ccxray` before and after. Remove a rule to re-enable a tool.',
+    'measure with `tknxray` before and after. Remove a rule to re-enable a tool.',
   );
   if (values.apply !== true) {
     lines.push(
@@ -185,17 +185,17 @@ export async function fixCommand(
   const real = before !== null ? realpathSync(target) : target;
   const mode = before !== null ? statSync(real).mode & 0o7777 : undefined;
   if (before !== null) {
-    const backup = writeBackup(real, `${real}.ccxray-backup-${stamp(deps.now ?? new Date())}`);
+    const backup = writeBackup(real, `${real}.tknxray-backup-${stamp(deps.now ?? new Date())}`);
     lines.push(`Backup: ${relative(cwd, backup) || backup}`);
   }
-  const tmp = `${real}.ccxray-tmp-${process.pid}`;
+  const tmp = `${real}.tknxray-tmp-${process.pid}`;
   writeFileSync(tmp, plan.text, mode !== undefined ? { mode } : {});
   if (mode !== undefined) chmodSync(tmp, mode); // writeFileSync's mode is masked by umask
   deps.beforeCommit?.();
   const current = existsSync(real) ? readFileSync(real, 'utf8') : null;
   if (current !== before) {
     unlinkSync(tmp);
-    lines.push(`${shown} changed while ccxray was running; nothing was written. Re-run.`);
+    lines.push(`${shown} changed while tknxray was running; nothing was written. Re-run.`);
     out(`${lines.join('\n')}\n`);
     return 2;
   }

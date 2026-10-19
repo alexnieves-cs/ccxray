@@ -1,4 +1,4 @@
-// `ccxray capture` server (opt-in, API-key only; docs/capture.md). Built as its own bundle,
+// `tknxray capture` server (opt-in, API-key only; docs/capture.md). Built as its own bundle,
 // dist/capture.js, the only file allowed to import node:http (test/no-network.test.ts).
 // It binds 127.0.0.1 only, makes no outbound connection, forwards nothing, measures the first
 // POST /v1/messages request that has tools, answers it with an error and stops.
@@ -25,7 +25,7 @@ const OAUTH_REFUSED =
 
 function reply(res: ServerResponse, status: number, message: string): void {
   res.writeHead(status, { 'content-type': 'application/json', connection: 'close' });
-  res.end(JSON.stringify({ type: 'error', error: { type: 'ccxray_capture', message } }));
+  res.end(JSON.stringify({ type: 'error', error: { type: 'tknxray_capture', message } }));
 }
 
 export function startCapture(opts: CaptureOptions): Promise<CaptureHandle> {
@@ -54,25 +54,25 @@ export function startCapture(opts: CaptureOptions): Promise<CaptureHandle> {
     );
     if ((typeof auth === 'string' && /^\s*bearer\b/i.test(auth)) || oauthKey) {
       req.resume();
-      reply(res, 401, 'ccxray capture only measures API-key requests; OAuth requests are refused');
+      reply(res, 401, 'tknxray capture only measures API-key requests; OAuth requests are refused');
       opts.out(OAUTH_REFUSED);
       return stop(1);
     }
     const path = (req.url ?? '').split('?')[0];
     if (req.method !== 'POST' || path !== '/v1/messages') {
       req.resume();
-      return reply(res, 404, 'ccxray capture only measures POST /v1/messages');
+      return reply(res, 404, 'tknxray capture only measures POST /v1/messages');
     }
     if (typeof key !== 'string' || key.length === 0) {
       req.resume();
-      reply(res, 401, 'ccxray capture needs an x-api-key request');
+      reply(res, 401, 'tknxray capture needs an x-api-key request');
       opts.out('Refused a request without x-api-key. Nothing was recorded.\n');
       return stop(1);
     }
     const enc = req.headers['content-encoding'];
     if (enc !== undefined && enc !== 'identity') {
       req.resume();
-      reply(res, 415, 'ccxray capture does not decode compressed bodies');
+      reply(res, 415, 'tknxray capture does not decode compressed bodies');
       opts.out('Refused a compressed request body. Nothing was recorded.\n');
       return stop(1);
     }
@@ -100,12 +100,16 @@ export function startCapture(opts: CaptureOptions): Promise<CaptureHandle> {
       // UNVERIFIED: Claude Code may send small requests without tools first (e.g. a title or
       // quota check). Skip those and measure the first request that carries a `tools` array.
       if (!Array.isArray((body as { tools?: unknown } | null)?.tools)) {
-        reply(res, 400, 'ccxray capture skipped a request without tools; waiting for the next one');
+        reply(
+          res,
+          400,
+          'tknxray capture skipped a request without tools; waiting for the next one',
+        );
         opts.out(`Skipped a /v1/messages request without tools (${size} bytes); waiting.\n`);
         return;
       }
       opts.out(formatMeasurement(measureRequest(body, size)));
-      reply(res, 400, 'ccxray capture measured this request and does not forward it. Stopping.');
+      reply(res, 400, 'tknxray capture measured this request and does not forward it. Stopping.');
       stop(0);
     });
   });

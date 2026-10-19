@@ -167,7 +167,7 @@ describe('4. threshold overrides', () => {
   ])('%s exits 2', async (flag) => {
     const r = await cli([flag, '--root', join(FX, 'does-not-exist')]);
     expect(r.code).toBe(2);
-    expect(r.err).toMatch(/^ccxray: /);
+    expect(r.err).toMatch(/^tknxray: /);
   });
 });
 
@@ -181,7 +181,7 @@ describe('5. subcommand routing', () => {
     expect(code).toBe(1);
     expect(out).toContain('no sessions found');
     expect(out).toContain('project ~ "doctor"');
-    expect(out).not.toContain('ccxray doctor (counts only');
+    expect(out).not.toContain('tknxray doctor (counts only');
   });
 });
 
@@ -230,7 +230,7 @@ describe('8. --html', () => {
       tmpdir(), // a directory: the write fails
     ]);
     expect(r.code).toBe(2);
-    expect(r.err).toMatch(/^ccxray: could not write the HTML report to /);
+    expect(r.err).toMatch(/^tknxray: could not write the HTML report to /);
     expect(JSON.parse(r.out).schemaVersion).toBe(1);
   });
 });

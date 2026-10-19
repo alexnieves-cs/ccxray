@@ -23,7 +23,7 @@ describe('cli', () => {
   });
 
   it('the built bin runs', () => {
-    const bin = join(import.meta.dirname, '..', 'bin', 'ccxray.js');
+    const bin = join(import.meta.dirname, '..', 'bin', 'tknxray.js');
     expect(execFileSync(process.execPath, [bin, '--version'], { encoding: 'utf8' }).trim()).toBe(
       VERSION,
     );

@@ -5,7 +5,7 @@ main(process.argv.slice(2)).then(
     process.exitCode = code;
   },
   (err: unknown) => {
-    process.stderr.write(`ccxray: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(`tknxray: ${err instanceof Error ? err.message : String(err)}\n`);
     process.exitCode = 2;
   },
 );

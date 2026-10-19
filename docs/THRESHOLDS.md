@@ -2,7 +2,7 @@
 
 Every analyzer threshold, with its default (`DEFAULT_THRESHOLDS` in `src/model/thresholds.ts`).
 Override any of them with `--threshold.<key>=<value>` (numbers only; unknown keys are an error),
-on the default command and on `ccxray session`. `test/thresholds.test.ts` checks that every key
+on the default command and on `tknxray session`. `test/thresholds.test.ts` checks that every key
 is listed here and used by the code.
 
 | Key | Default | Used by | Meaning |

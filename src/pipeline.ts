@@ -46,7 +46,7 @@ export function buildReport(input: BuildReportInput): Report {
   const totals = computeTotals(sessions);
   return {
     schemaVersion: 1,
-    tool: { name: 'ccxray', version: VERSION },
+    tool: { name: 'tknxray', version: VERSION },
     generatedAt: ctx.now.toISOString(),
     window: input.window,
     includeContent: input.includeContent,

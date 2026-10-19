@@ -1,4 +1,4 @@
-ccxray · 4 sessions (2 subagent) · 368 assistant turns · Oct 11–18 2026
+tknxray · 4 sessions (2 subagent) · 368 assistant turns · Oct 11–18 2026
   Claude Code 2.1.290–2.1.296
 
 TOKENS (measured from usage fields)
@@ -31,11 +31,11 @@ TOP FINDINGS
       → narrow the glob or set head_limit
  5. TOOL USAGE [info]  9 MCP tools from "github" server never called in 4 sessions
       1 evidence · e.g. session 9b07e5aa
-      → `ccxray fix mcp` (planned, M5) generates a permissions.deny diff
+      → `tknxray fix mcp` (planned, M5) generates a permissions.deny diff
 
 PARSE WARNINGS  4 malformed lines skipped · 1 unknown record type (x-future ×7) · 2 field warnings
-  run `ccxray doctor` for details
+  run `tknxray doctor` for details
 
 [M] measured: taken directly from usage fields in the logs
 [E] / ~ estimated: chars/4 heuristic or attribution guess, never exact
-Run `ccxray session 3fa2c1d0` for per-turn detail · `--html` for a shareable report
+Run `tknxray session 3fa2c1d0` for per-turn detail · `--html` for a shareable report

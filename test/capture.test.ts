@@ -1,4 +1,4 @@
-// `ccxray capture` (opt-in). Talks to the server over loopback only.
+// `tknxray capture` (opt-in). Talks to the server over loopback only.
 import { request } from 'node:http';
 import { describe, expect, it } from 'vitest';
 import { startCapture } from '../src/capture/index.js';
@@ -143,7 +143,7 @@ describe('capture: server', () => {
   });
 });
 
-describe('ccxray capture command', () => {
+describe('tknxray capture command', () => {
   it('refuses to start without the explicit flag, before loading the server', async () => {
     let out = '';
     let loaded = false;
