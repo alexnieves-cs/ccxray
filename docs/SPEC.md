@@ -49,7 +49,34 @@ npx tknxray --json > report.json  # machine-readable output (schema-versioned)
 npx tknxray --include-content     # allow snippets of prompts/outputs in reports (off by default)
 npx tknxray doctor                # show discovered log dirs, CC versions, parse stats, unknown record types
 npx tknxray watch [latest|<id>]   # live full-screen view of one session (polls its files; --once prints one frame)
+npx tknxray compare --at 2026-10-12            # the 7 days before vs the 7 days from that day
+npx tknxray compare --before A..B --after C..D # explicit windows (inclusive UTC days)
 ```
+
+### 3.1 compare
+
+`compare` answers "did my change help?" It builds a full report for each window, with the same
+analyzers and thresholds, and prints one row per metric: before, after, the change, and
+better / worse / same for metrics with a direction (moves under 5% relative count as the same).
+
+| Metric | Label | Better |
+|---|---|---|
+| main sessions, assistant turns | [M] | none (workload size) |
+| $ per turn, $ per main session | [E] list prices | lower |
+| cache hit ratio | [M] | higher |
+| cache writes per turn | [M] | lower |
+| output per turn | [M] | none |
+| median peak context per main session (input + cache read + cache write of its largest turn) | [M] | lower |
+| compactions per main session | [M] | lower |
+| cache rebuilds per 100 turns (A3 count) | [M] | lower |
+| subagent share of $ | [E] | none |
+| fixable waste: the action plan's combined share (§5.3) | [E] | lower |
+
+Below the metrics, "waste by kind" sums each analyzer's priced savings (§5.2) as a % of that
+window's $ (`≤` marks upper bounds). Rates are normalized because workloads differ; the verdict
+says what moved, never why. A window with fewer than 3 main sessions or 100 turns is flagged as
+thin. Exit 1 when either window has no sessions. `--json` prints the comparison object
+(`src/compare.ts` `Comparison`); it is not part of report.v1.
 
 Config dir discovery: `CLAUDE_CONFIG_DIR` (comma-separated allowed), `~/.config/claude/projects`, `~/.claude/projects` (same rules as ccusage **[M: ccusage docs]**).
 
