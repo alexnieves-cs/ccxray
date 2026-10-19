@@ -92,6 +92,7 @@
         "windowCostUsd": { "$ref": "#/$defs/usd" },
         "combinedSavingsUsd": { "$ref": "#/$defs/usd" },
         "combinedSharePct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "combinedUpperBound": { "const": true },
         "method": { "type": "string" },
         "note": { "type": "string" },
         "actions": {
@@ -125,7 +126,11 @@
                 "enum": ["context", "context-reset", "rebuild", "tool-definitions", "model"]
               },
               "savingsMainUsd": { "$ref": "#/$defs/usd" },
-              "savingsSubagentUsd": { "$ref": "#/$defs/usd" }
+              "savingsSubagentUsd": { "$ref": "#/$defs/usd" },
+              "upperBound": {
+                "const": true,
+                "description": "savingsUsd is a ceiling, not a likely figure."
+              }
             }
           }
         }
@@ -316,7 +321,11 @@
             "basis": { "type": "string" },
             "confidence": { "enum": ["measured-tokens", "estimated"] },
             "savingsMainUsd": { "$ref": "#/$defs/usd" },
-            "savingsSubagentUsd": { "$ref": "#/$defs/usd" }
+            "savingsSubagentUsd": { "$ref": "#/$defs/usd" },
+            "upperBound": {
+              "const": true,
+              "description": "savingsUsd is a ceiling, not a likely figure."
+            }
           }
         },
         "fix": {

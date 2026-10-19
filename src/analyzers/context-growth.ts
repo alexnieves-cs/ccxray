@@ -97,6 +97,7 @@ function overImpact(gs: readonly Grown[], limit: number, sub: boolean): { impact
           ? 'narrower subagent tasks would avoid most of it'
           : 'starting fresh or /clear between tasks would avoid most of it'),
       confidence: 'estimated',
+      upperBound: true,
     }),
   };
 }

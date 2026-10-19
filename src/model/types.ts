@@ -276,6 +276,8 @@ export interface Impact {
   /** savingsUsd split by where it was spent: main conversations vs subagents (sums to it). */
   savingsMainUsd: number;
   savingsSubagentUsd: number;
+  /** true when savingsUsd is a ceiling, not a likely figure (A8: some of that context was needed). */
+  upperBound?: true;
 }
 
 export interface Finding {
@@ -368,6 +370,8 @@ export interface Action {
   category: ActionCategory;
   savingsMainUsd: number;
   savingsSubagentUsd: number;
+  /** true when savingsUsd is a ceiling (any supporting finding's impact is an upper bound). */
+  upperBound?: true;
 }
 
 export interface ActionPlan {
@@ -377,6 +381,8 @@ export interface ActionPlan {
   /** Conservative union of the actions' savings (combine()). */
   combinedSavingsUsd: number;
   combinedSharePct: number;
+  /** true when any action's savings is an upper bound, so the combined figure is one too. */
+  combinedUpperBound?: true;
   /** How the combined figure was computed, one sentence. */
   method: string;
   note: string;

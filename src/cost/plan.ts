@@ -42,12 +42,13 @@ function action(
     confidence: from.every((x) => x.f.impact?.confidence === 'measured-tokens')
       ? 'measured-tokens'
       : 'estimated',
-    why: o.why,
+    why: o.why.charAt(0).toUpperCase() + o.why.slice(1),
     change: o.change,
     findings: from.map((x) => x.n),
     category,
     savingsMainUsd: usd(total - sub),
     savingsSubagentUsd: usd(sub),
+    ...(from.some((x) => x.f.impact?.upperBound === true) ? { upperBound: true as const } : {}),
   };
 }
 
@@ -67,14 +68,21 @@ interface TypeAgg {
   explicitModel: number;
 }
 
-/** How to point one subagent type at `target` (Claude Code docs, sub-agents page, 2026-10-19).
+/** How to point one subagent type at `target` (Claude Code docs: sub-agents and env-vars pages,
+ * read 2026-10-19; model order: per-call `model`, then frontmatter, then
+ * CLAUDE_CODE_SUBAGENT_MODEL, then the main model; _FORCE overrides all of them).
  * UNVERIFIED: taken from the docs, not checked against a real run (SPEC §4.4, §5.3). */
 function typeChange(t: TypeAgg): string {
   const m = t.target;
   switch (t.type) {
     case 'general-purpose':
     case '(unknown)':
-      return `${t.type}: add to settings.json\n  "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "${m}" }`;
+      return (
+        `${t.type} subagents: in ~/.claude/settings.json (or the project's .claude/settings.json) set\n` +
+        `  "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "${m}" }\n` +
+        'It is a default: a model Claude picks for one call still wins. Also set ' +
+        '"CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1" to apply it to every subagent.'
+      );
     case 'Explore':
       return `Explore: create .claude/agents/Explore.md with frontmatter \`model: ${m}\` (overrides the built-in)`;
     case 'Plan':
@@ -521,6 +529,7 @@ export function buildActionPlan(report: Report): ActionPlan {
     actions,
     combinedSavingsUsd: usd(combined),
     combinedSharePct: windowCost > 0 ? Math.round((combined / windowCost) * 1000) / 10 : 0,
+    ...(actions.some((a) => a.upperBound === true) ? { combinedUpperBound: true as const } : {}),
     method: COMBINE_METHOD,
     note: COST_NOTE,
   };

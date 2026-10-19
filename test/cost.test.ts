@@ -33,6 +33,7 @@ describe('price table', () => {
     expect(pricedId('claude-sonnet-4-5@20250929')).toBe('claude-sonnet-4-5');
     expect(pricedId('claude-fable-5-1')).toBe('claude-fable-5-1');
     expect(pricedId('claude-mythos-5')).toBe('claude-mythos-5');
+    expect(pricedId('claude-3-5-haiku-20241022')).toBe('claude-3-5-haiku');
     expect(priceFor('claude-opus-5-5')?.read).toBe(0.2);
     expect(priceFor('claude-opus-5')?.read).toBe(0.5);
     expect(priceFor('claude-sonnet-5-5')?.read).toBe(0.1);

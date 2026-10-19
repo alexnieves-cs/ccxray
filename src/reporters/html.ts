@@ -365,7 +365,7 @@ function planSection(report: Report): string {
       const refs = a.findings.map((n) => `<a href="#f${n}">#${n}</a>`).join(', ');
       return (
         `<article class="card plan"><div class="hd"><div class="tt">${i + 1}. ${e(a.title)}</div>` +
-        `<div class="save">~${e(formatUsd(a.savingsUsd))}${badge('estimated')}<span class="share">${e(formatPct(a.savingsUsd, plan.windowCostUsd))} of cost</span></div></div>` +
+        `<div class="save">${a.upperBound === true ? 'up to ' : '~'}${e(formatUsd(a.savingsUsd))}${badge('estimated')}<span class="share">${e(formatPct(a.savingsUsd, plan.windowCostUsd))} of cost</span></div></div>` +
         `<div class="sbar" role="img" aria-label="${e(formatPct(a.savingsUsd, plan.windowCostUsd))} of the window's cost"><span class="s-save" style="width:${w.toFixed(3)}%"></span></div>` +
         `<p class="why">${e(a.why)}</p><pre><code>${e(a.change)}</code></pre>` +
         `<p class="from">${a.confidence === 'measured-tokens' ? 'tokens measured, $ estimated' : 'estimated'} · from finding${a.findings.length === 1 ? '' : 's'} ${refs}</p></article>`
@@ -376,8 +376,8 @@ function planSection(report: Report): string {
     `<section id="plan"><h2>What to change first</h2>` +
     `<p class="sub">Savings in this window at API list prices [E], largest first. Bars share one scale: the window's cost (${e(formatUsd(plan.windowCostUsd))}).</p>` +
     `<div class="cards">${cards}</div>` +
-    `<p class="combined">${changesPhrase(plan.actions.length)} would have cut about ${e(formatPct(plan.combinedSavingsUsd, plan.windowCostUsd))} of this window's cost${badge('estimated')} ` +
-    `<span class="mut">(~${e(formatUsd(plan.combinedSavingsUsd))} of ${e(formatUsd(plan.windowCostUsd))}; overlapping savings are not double-counted)</span></p></section>`
+    `<p class="combined">${changesPhrase(plan.actions.length)} would have cut ${plan.combinedUpperBound === true ? 'up to' : 'about'} ${e(formatPct(plan.combinedSavingsUsd, plan.windowCostUsd))} of this window's cost${badge('estimated')} ` +
+    `<span class="mut">(${plan.combinedUpperBound === true ? 'up to ' : '~'}${e(formatUsd(plan.combinedSavingsUsd))} of ${e(formatUsd(plan.windowCostUsd))}; overlapping savings are not double-counted)</span></p></section>`
   );
 }
 
@@ -470,7 +470,7 @@ function findingCard(
       : '');
   const sv =
     f.impact !== undefined && f.impact.costUsd > 0
-      ? `<div class="sv">${f.impact.savingsUsd > 0 ? `saves ~${e(formatUsd(f.impact.savingsUsd))} of ${e(formatUsd(f.impact.costUsd))}` : `costs ${e(formatUsd(f.impact.costUsd))}`}${badge('estimated')}</div>`
+      ? `<div class="sv">${f.impact.savingsUsd > 0 ? `saves ${f.impact.upperBound === true ? 'up to ' : '~'}${e(formatUsd(f.impact.savingsUsd))} of ${e(formatUsd(f.impact.costUsd))}` : `costs ${e(formatUsd(f.impact.costUsd))}`}${badge('estimated')}</div>`
       : '';
   return (
     `<article class="card" id="f${n}"><div class="hd"><div><span class="sev sev-${e(f.severity)}">${SEV_ICON[f.severity] ?? ''} ${e(f.severity)}</span> ` +
@@ -580,7 +580,7 @@ export function renderHtml(report: Report, opts: HtmlOptions = {}): string {
       : '',
     `<h2>Findings</h2>`,
     findings.length
-      ? `<p class="sub">Largest savings first, then the rest by severity. Each one points at the session and log line it came from` +
+      ? `<p class="sub">${report.findings.some((f) => (f.impact?.savingsUsd ?? 0) > 0) ? 'Largest savings first, then the rest by severity' : 'Most severe first'}. Each one points at the session and log line it came from` +
         `${tl ? '; ▶ replay jumps to that turn' : ''}. <button id="toggle" type="button">expand / collapse all evidence</button></p>` +
         `<div class="cards">${findings.map((f, i) => findingCard(f, i + 1, report.stats.roots, home, tl)).join('')}</div>`
       : '<p class="mut">No findings in this window.</p>',

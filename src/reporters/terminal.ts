@@ -174,7 +174,7 @@ function actionPlan(report: Report, raw: Report, p: Palette, width: number): str
   if (plan === undefined || plan.actions.length === 0) return [];
   const out = ['', p.bold('WHAT TO CHANGE FIRST') + ' (savings at API list prices [E])'];
   plan.actions.forEach((a, i) => {
-    const right = `~${formatUsd(a.savingsUsd)}  ${formatPct(a.savingsUsd, plan.windowCostUsd)} of cost`;
+    const right = `${a.upperBound === true ? 'up to ' : '~'}${formatUsd(a.savingsUsd)}  ${formatPct(a.savingsUsd, plan.windowCostUsd)} of cost`;
     const num = padStart(`${i + 1}.`, 3);
     const left = truncate(`${num} ${p.bold(a.title)}`, width - visibleWidthOf(right) - 2);
     out.push(`${padEnd(left, width - visibleWidthOf(right))}${p.green(right)}`);
@@ -204,9 +204,9 @@ function actionPlan(report: Report, raw: Report, p: Palette, width: number): str
   });
   out.push(
     ...wrapText(
-      `${changesPhrase(plan.actions.length)} would have cut about ` +
+      `${changesPhrase(plan.actions.length)} would have cut ${plan.combinedUpperBound === true ? 'up to' : 'about'} ` +
         `${formatPct(plan.combinedSavingsUsd, plan.windowCostUsd)} of this window's cost [E] ` +
-        `(~${formatUsd(plan.combinedSavingsUsd)} of ${formatUsd(plan.windowCostUsd)}; overlapping ` +
+        `(${plan.combinedUpperBound === true ? 'up to ' : '~'}${formatUsd(plan.combinedSavingsUsd)} of ${formatUsd(plan.windowCostUsd)}; overlapping ` +
         'savings are not double-counted).',
       width,
       '  ',
@@ -261,7 +261,7 @@ function findingLines(
   if (f.impact !== undefined && f.impact.costUsd > 0)
     facts.push(
       f.impact.savingsUsd > 0
-        ? `saves ~${formatUsd(f.impact.savingsUsd)} of ${formatUsd(f.impact.costUsd)} [E]`
+        ? `saves ${f.impact.upperBound === true ? 'up to ' : '~'}${formatUsd(f.impact.savingsUsd)} of ${formatUsd(f.impact.costUsd)} [E]`
         : `costs ${formatUsd(f.impact.costUsd)} [E]`,
     );
   const cmd = findingCommand(f);

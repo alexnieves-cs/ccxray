@@ -168,8 +168,9 @@ describe('buildActionPlan', () => {
       'Run general-purpose, Explore, reviewer subagents on claude-sonnet-5-5 / claude-haiku-5-5',
     );
     expect(a.change.split('\n')).toEqual([
-      'general-purpose: add to settings.json',
+      "general-purpose subagents: in ~/.claude/settings.json (or the project's .claude/settings.json) set",
       '  "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5-5" }',
+      'It is a default: a model Claude picks for one call still wins. Also set "CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1" to apply it to every subagent.',
       'Explore: create .claude/agents/Explore.md with frontmatter `model: claude-sonnet-5-5` (overrides the built-in)',
       'reviewer: add `model: claude-haiku-5-5` to the frontmatter of .claude/agents/reviewer.md',
     ]);
@@ -263,5 +264,14 @@ describe('trimLine', () => {
     expect(trimLine('Bash', 'pnpm test (in a loop)')).toContain('head -n 100');
     expect(trimLine('Read', undefined)).toContain('offset/limit');
     expect(trimLine('mcp__x__y', undefined)).toBe('- Ask `mcp__x__y` for a narrower result.');
+  });
+});
+
+describe('upper-bound savings', () => {
+  it('marks context-reset actions and the combined line as upper bounds', () => {
+    const f = finding('context-growth', { subagents: 0 }, { ...imp(5), upperBound: true });
+    const p = buildActionPlan(report([f]));
+    expect(p.actions[0]).toMatchObject({ id: 'clear-context', upperBound: true });
+    expect(p.combinedUpperBound).toBe(true);
   });
 });

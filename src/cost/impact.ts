@@ -12,6 +12,7 @@ export function impact(o: {
   savingsSubagentUsd?: number;
   basis: string;
   confidence: Impact['confidence'];
+  upperBound?: boolean;
 }): Impact {
   const cost = Math.max(0, o.costUsd);
   const savings = Math.min(cost, Math.max(0, o.savingsUsd));
@@ -23,5 +24,6 @@ export function impact(o: {
     confidence: o.confidence,
     savingsMainUsd: usd(savings - sub),
     savingsSubagentUsd: usd(sub),
+    ...(o.upperBound === true ? { upperBound: true as const } : {}),
   };
 }
