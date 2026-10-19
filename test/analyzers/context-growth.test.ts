@@ -148,4 +148,32 @@ describe('A8 context-growth', () => {
       'Subagent a9999999 of session beef0000 peaked at 155,000 tokens over 1 turn',
     );
   });
+
+  it('subagent titles say "compacted" only for subagents that hit the compaction threshold', async () => {
+    const p = session('a8/cmp', { id: 'abcd0000-1111-2222-3333-444444444444' })
+      .prompt('go')
+      .assistant({ usage: { cacheWrite: 1_000 } });
+    const once = p.agent('a1000000once').prompt('explore');
+    once.assistant({ usage: { cacheWrite: 200_000 } });
+    compact(once).assistant({ usage: { cacheWrite: 30_000 } });
+    const twice = p.agent('a2000000twice').prompt('explore');
+    twice.assistant({ usage: { cacheWrite: 1_000 } });
+    compact(twice).assistant({ usage: { cacheWrite: 1_100 } });
+    compact(twice).assistant({ usage: { cacheWrite: 1_200 } });
+    const [f, ...rest] = await run(contextGrowth, [p, once]);
+    expect(rest).toEqual([]);
+    expect(f!.title).toBe(
+      'Subagent a1000000 of session abcd0000 peaked at 200,000 tokens over 2 turns',
+    );
+    expect(f!.data?.compactions).toBe(1);
+    const [g] = await run(contextGrowth, [p, once, twice]);
+    expect(g!.title).toBe(
+      '2 subagents of session abcd0000 grew large or compacted repeatedly; ' +
+        'largest peaked at 200,000 tokens (subagent a1000000, 2 turns)',
+    );
+    expect(g!.evidence.map((e) => e.detail)).toEqual([
+      'subagent a1000000: peaked at 200,000 tokens over 2 turns (peak 200,000 at turn 1)',
+      'subagent a2000000: compacted 2× over 3 turns (peak 1,200 at turn 3)',
+    ]);
+  });
 });

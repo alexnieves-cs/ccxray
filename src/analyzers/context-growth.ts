@@ -134,9 +134,15 @@ export const contextGrowth: Analyzer = {
         title:
           subs.length === 1
             ? `Subagent ${shortAgent(top.s)} of session ${short(root)} ${why(top).join(' and ')} over ${plural(top.turns, 'turn')}`
-            : `${subs.length} subagents of session ${short(root)} grew large` +
-              `${compactions > 0 ? ` or compacted` : ''}; largest peaked at ${fmt(top.max)} tokens ` +
-              `(subagent ${shortAgent(top.s)}, ${top.turns} turns)`,
+            : `${subs.length} subagents of session ${short(root)} ` +
+              [
+                subs.some((g) => g.large) ? 'grew large' : '',
+                subs.some((g) => g.compacted) ? 'compacted repeatedly' : '',
+              ]
+                .filter(Boolean)
+                .join(' or ') +
+              `; largest peaked at ${fmt(top.max)} tokens ` +
+              `(subagent ${shortAgent(top.s)}, ${plural(top.turns, 'turn')})`,
         tokens: { value: top.max, kind: 'measured' },
         data: {
           subagents: subs.length,
