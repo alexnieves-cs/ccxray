@@ -38,4 +38,6 @@ PARSE WARNINGS  4 malformed lines skipped · 1 unknown record type (x-future ×7
 
 [M] measured: taken directly from usage fields in the logs
 [E] / ~ estimated: chars/4 heuristic or attribution guess, never exact
+$ = what these tokens would cost at API list prices; subscription limits are not published, use it
+to compare, not as a bill
 Run `tknxray session 3fa2c1d0` for per-turn detail · `--html` for a shareable report

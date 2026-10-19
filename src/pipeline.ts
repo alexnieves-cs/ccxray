@@ -2,7 +2,9 @@
 // Pure: no I/O. The CLI loads sessions and renders the report.
 import { ANALYZERS } from './analyzers/index.js';
 import { computeTotals } from './analyzers/totals.js';
+import { releaseCarryIndex } from './cost/carry.js';
 import { COST_NOTE } from './cost/cost.js';
+import { buildActionPlan } from './cost/plan.js';
 import { PRICES_AS_OF, PRICES_SOURCE, pricedId } from './cost/prices.js';
 import type {
   Analyzer,
@@ -60,8 +62,9 @@ export function buildReport(input: BuildReportInput): Report {
   const { sessions, stats, ctx } = input;
   const findings: Finding[] = [];
   for (const a of input.analyzers ?? ANALYZERS) findings.push(...a.run(sessions, ctx));
+  releaseCarryIndex(sessions);
   const totals = computeTotals(sessions);
-  return {
+  const report: Report = {
     schemaVersion: 1,
     tool: { name: 'tknxray', version: VERSION },
     generatedAt: ctx.now.toISOString(),
@@ -76,4 +79,6 @@ export function buildReport(input: BuildReportInput): Report {
     calibration: calibrate(sessions),
     pricing: pricingInfo(sessions),
   };
+  report.actionPlan = buildActionPlan(report);
+  return report;
 }

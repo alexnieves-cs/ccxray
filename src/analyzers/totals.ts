@@ -7,7 +7,7 @@
 //
 // Every bucket also carries `cost`: the same tokens at API list prices [E] (src/cost). Turns on
 // unpriced models are counted in cost.unpricedTurns and left out of the $ sums.
-import { addTurnCost, emptyCost, roundCost } from '../cost/cost.js';
+import { addCost, emptyCost, roundCost, turnCost, type Cost } from '../cost/cost.js';
 import type { Session, TokenTotals, Totals, Turn } from '../model/index.js';
 
 export function emptyTokenTotals(): TokenTotals {
@@ -24,7 +24,8 @@ export function emptyTokenTotals(): TokenTotals {
   };
 }
 
-function add(t: TokenTotals, turn: Turn): void {
+// `c` is the turn's cost, computed once per turn and added to every bucket.
+function add(t: TokenTotals, turn: Turn, c: Cost | null = turnCost(turn)): void {
   const u = turn.usage;
   t.input += u.input;
   t.cacheWrite += u.cacheWrite;
@@ -33,7 +34,7 @@ function add(t: TokenTotals, turn: Turn): void {
   t.cacheRead += u.cacheRead;
   t.output += u.output;
   t.turns++;
-  if (t.cost !== undefined) addTurnCost(t.cost, turn);
+  if (t.cost !== undefined) addCost(t.cost, c);
 }
 
 /** read / (read + write + input); null when the denominator is 0. Measured. */
@@ -75,12 +76,13 @@ export function computeTotals(sessions: readonly Session[]): Totals {
     const ss = bucket(maps.bySession, s.id);
     for (const turn of s.turns) {
       if (turn.isSynthetic) continue;
-      add(all, turn);
-      add(s.isSubagent || turn.isSidechain ? subagent : main, turn);
-      add(ss, turn);
-      add(bucket(maps.byProject, s.project), turn);
-      add(bucket(maps.byModel, turn.model), turn);
-      add(bucket(maps.byDay, utcDay(turn.ts)), turn);
+      const c = turnCost(turn);
+      add(all, turn, c);
+      add(s.isSubagent || turn.isSidechain ? subagent : main, turn, c);
+      add(ss, turn, c);
+      add(bucket(maps.byProject, s.project), turn, c);
+      add(bucket(maps.byModel, turn.model), turn, c);
+      add(bucket(maps.byDay, utcDay(turn.ts)), turn, c);
     }
   }
   const obj = (m: Map<string, TokenTotals>): Record<string, TokenTotals> =>

@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { Report } from '../../src/model/index.js';
 import { stripAnsi, visibleWidth } from '../../src/reporters/format.js';
 import { renderTerminal } from '../../src/reporters/terminal.js';
-import { emptyReport, sampleReport, SAMPLE_HOME } from '../helpers/sample-report.js';
+import {
+  costedSampleReport,
+  emptyReport,
+  sampleReport,
+  SAMPLE_HOME,
+} from '../helpers/sample-report.js';
 
 const SNAP = '../__snapshots__/reporters';
 
@@ -14,6 +19,31 @@ describe('terminal reporter', () => {
   it('matches the snapshot', async () => {
     const out = renderTerminal(sampleReport(), { color: false, homeDir: SAMPLE_HOME });
     await expect(out).toMatchFileSnapshot(`${SNAP}/terminal.txt`);
+  });
+
+  it('matches the snapshot with cost and the action plan (M7)', async () => {
+    const out = renderTerminal(costedSampleReport(), { color: false, homeDir: SAMPLE_HOME });
+    await expect(out).toMatchFileSnapshot(`${SNAP}/terminal-cost.txt`);
+  });
+
+  it('shows COST under TOKENS and WHAT TO CHANGE FIRST, with the $ legend', () => {
+    const out = renderTerminal(costedSampleReport(), { color: false, width: 100 });
+    const at = (s: string) => out.indexOf(s);
+    expect(at('COST')).toBeGreaterThan(at('TOKENS (measured'));
+    expect(at('WHAT TO CHANGE FIRST')).toBeGreaterThan(at('COST'));
+    expect(at('WHAT TO CHANGE FIRST')).toBeLessThan(at('TOP FINDINGS'));
+    expect(out).toMatch(
+      /These \d changes would have cut about \d+(\.\d)?% of this window's cost \[E\]/,
+    );
+    expect(out).toContain('what these tokens would cost at API list prices');
+    // Multi-line changes survive sanitizing: each CLAUDE.md line is on its own line.
+    expect(out).toContain('\n        Add to CLAUDE.md:\n        - Run `pnpm test` as');
+    // Commands are cut like everywhere else: no env assignments, two words.
+    expect(out).not.toContain('CI=1');
+    for (const l of out.split('\n')) expect(visibleWidth(l)).toBeLessThanOrEqual(100);
+    // An old report without cost renders without these sections.
+    const old = renderTerminal(sampleReport(), { color: false });
+    expect(old).not.toContain('WHAT TO CHANGE FIRST');
   });
 
   it('colored output differs only by ANSI codes', () => {

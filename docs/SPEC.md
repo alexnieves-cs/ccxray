@@ -64,6 +64,20 @@ TOKENS (measured from usage fields)
   output                  1.1M    3%
   cache hit ratio  72%  (read / (read + write + input))
 
+COST [E] what these tokens would cost at API list prices (prices of 2026-10-19)
+  total                  $61.40  100%   main $41.10 · subagents $20.30
+  ...
+
+WHAT TO CHANGE FIRST (savings at API list prices [E])
+ 1. Batch prompts so gaps stay under 5 minutes                                  ~$9.80  16% of cost
+      29 breaks longer than the 5-minute cache TTL made Claude Code write 2.2M tokens of cache again
+      change:
+        Send related prompts in one sitting so idle gaps stay under the cache TTL; ...
+      tokens measured, $ estimated · from finding 1
+ 2. Trim big tool outputs (`pnpm test`)                                         ~$3.10   5% of cost
+      ...
+  These 2 changes would have cut about 20% of this window's cost [E] (~$12.30 of $61.40; ...)
+
 WHERE IT WENT (estimated attribution)
   fixed overhead (system + tools)   ~21k / cold turn   × 96 cold turns
   tool outputs                      ~31%  of non-cached input  · Bash 61%, Read 27%, Grep 9%
@@ -204,6 +218,7 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - Carry cost (§5.2): content stays in the cached prefix of every later request of its chain until a compaction, and a turn meeting the A2 usage rule rewrote all of it; the content's position in the prefix is not logged. A turn that wrote no cache tokens is given its session's TTL write rate (`sessionTtl`).
 - A4/A7 impact: tool definitions are part of the cached prefix of every main-chain request of the sessions whose `prompt_snapshot` lists them. Subagent requests are left out (whether they carry the same definitions is not logged), which makes the figure conservative.
 - A9 subagent type: the `subagent_type` of the parent Agent/Task tool_use (linked by `parentToolUseId`); an explicit `model` in that input overrides settings.
+- Action plan (§5.3): the subagent-model settings (`CLAUDE_CODE_SUBAGENT_MODEL`, `.claude/agents/Explore.md`, `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`) are taken from the Claude Code docs, not a real run; whether `permissions.deny` removes MCP tool definitions (not only blocks calls) is unknown; the combined savings assume the non-context levers are independent.
 
 ### 4.5 Token estimator
 - Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.
@@ -272,6 +287,27 @@ Raw token counts mix kinds that differ ~100× in price (on Opus 5.5 a cache read
 
 `savingsMainUsd` / `savingsSubagentUsd` split the savings by where the tokens were spent (subagent transcripts and inline sidechain turns count as subagent).
 
+### 5.3 Action plan (M7)
+
+The report's headline: `buildActionPlan(report)` (`src/cost/plan.ts`, pure) turns the priced findings into **at most 5 concrete changes**, ranked by `savingsUsd`, and stores them as `Report.actionPlan { windowCostUsd, actions[], combinedSavingsUsd, combinedSharePct, method, note }` (additive in report v1). Each action has `id`, `title`, `savingsUsd`, `sharePct` (of the window's cost), `confidence` (`measured-tokens` only when every source finding is), `why` (one or two sentences with the numbers), `change` (copy-pasteable; may span lines), `findings` (1-based numbers as the reporters list them, i.e. `sortFindings` order), `category`, and the main / subagent split. Actions under $0.005 are dropped.
+
+| Action (`id`) | From | Category | Change |
+|---|---|---|---|
+| `subagent-model` | A9 per-parent findings (the all-parents summary is skipped), grouped by `subagent_type`, top 3 types | model | per type: `general-purpose` / `(unknown)` → `settings.json` `"env": { "CLAUDE_CODE_SUBAGENT_MODEL": "<model>" }` (a default: a per-call `model` still wins; `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` applies it to every subagent); `Explore` → `.claude/agents/Explore.md` with `model: <model>` (overrides the built-in); `Plan` → needs `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` (moves every subagent); a custom type → `model:` in `.claude/agents/<type>.md`. Says how many launches passed `model` explicitly (that wins over settings) |
+| `trim-output` | A5 | context | CLAUDE.md lines for the top 3 groups by command shape (`cat`/`sed`/`head`… → Read with offset/limit; `grep`/`rg` → `-l`/`-m 20`; `git show/diff` → `--stat`; `git log` → `-n 20 --oneline`; other commands → `… 2>&1 \| tail -n 100`; loops → `\| head -n 100`; Read, Grep, other tools). Commands are cut to two words like everywhere else |
+| `shared-reads` | A11 | context | CLAUDE.md: put the facts subagents need from the file in their prompt |
+| `repeated-reads` | A6 | context | CLAUDE.md: do not Read a file again unless it changed |
+| `clear-context` | A8 main-session findings | context-reset | `/clear` (or a new session) between unrelated tasks |
+| `narrow-subagents` | A8 subagent findings | context-reset | CLAUDE.md: one narrow task per subagent, short answers |
+| `cache-breaks`, `model-switch`, `cc-upgrade`, `config-edit`, `tool-set-change` | A2 causes (`data.causes[].savingsUsd`); other causes get no action | rebuild | one sentence per cause (the TTL in the title follows the cause's fix text) |
+| `unused-tools` | A7 MCP servers | tool-definitions | `permissions.deny` snippet (a whole server as `mcp__<server>` when none of its tools was used, else each unused tool; at most 8 entries, then "run `tknxray fix mcp`") |
+
+**Combined savings: a conservative union, never a plain sum.** Per scope (main conversations, subagents, using `totals.byRole` costs): the `context` actions remove different tool results and are summed, but `context-reset` removes some of the same tokens, so the group counts `max(Σ context, Σ context-reset)`; that group, `rebuild`, `tool-definitions` and `model` combine as independent fractions of the scope's cost, `S = C × (1 − Π(1 − min(1, S_k / C)))`. The result is capped at the plain sum of the shown actions and at the window's cost. Reporters print it as "These N changes would have cut about X% of this window's cost [E]" ("This change" for one). **Upper bounds.** A8 savings are ceilings (some of that context was needed), so A8 impacts carry `upperBound: true`; an action built from one carries it too, and so does the plan (`combinedUpperBound`) when any shown action does. Reporters then print "up to $X" and "would have cut up to X%" instead of "~$X" / "about".
+
+**Reporters.** Terminal: a `COST [E]` table right under TOKENS (total, output, cache read, cache write, input with % of cost and the main / subagent split; unpriced turns are named), then `WHAT TO CHANGE FIRST` (title, savings and share, why, the change word-wrapped and never truncated, source findings) and the combined line; TOP FINDINGS add "saves ~$X of $Y [E]". HTML: action-plan cards before the summary, each with a savings bar on one shared scale (the window's cost) and links to the finding cards; the cost composition bar next to the token composition bar; finding cards show savings and basis. No new script; CSP stays `default-src 'none'`. JSON: `actionPlan`. Each reporter's legend carries the $ note of §5.1. Reports without `cost` (older or unpriced windows) render without these sections.
+
+**Subagent-model settings [UNVERIFIED].** The changes above follow the Claude Code docs page on subagents (code.claude.com/docs/en/sub-agents and /env-vars, read 2026-10-19): frontmatter `model` takes an alias or a full id; the model is resolved from the invocation's `model` parameter, then frontmatter, then `CLAUDE_CODE_SUBAGENT_MODEL`, then the main model; a project `.claude/agents/Explore.md` overrides the built-in Explore; Plan follows the main model unless `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`. Not checked against a real run. Likewise unverified: whether a `permissions.deny` rule removes MCP tool definitions from the prompt or only blocks calls. The permissions docs say a deny rule on a built-in tool name removes it from Claude's context, but say nothing about `mcp__` rules; the documented ways to keep a server's definitions out are toggling it off in `/mcp`, `disabledMcpjsonServers`, or `"alwaysLoad": false` (tool search).
+
 ## 6. Milestones and acceptance tests
 
 | M | Scope | Acceptance (all automated unless noted) |
@@ -282,6 +318,7 @@ Raw token counts mix kinds that differ ~100× in price (on Opus 5.5 a cache read
 | **M3 Reporters** | terminal, JSON (schema v1 + JSON Schema file), HTML (single file, inline CSS/JS, no CDN) | snapshot tests for all 3; HTML passes a test that it contains no `http(s)://` resource loads; `--json` validates against the schema; output fits 100 columns |
 | **M4 Remaining analyzers + session view** | A4, A7, A8, A9, A10, `session` command, thresholds config | fixtures as in M2; on Alex's real logs ≥ 1 true positive per analyzer type, or documented as "none present" (manual); a false-positive review of 20 random findings shows ≤ 2 wrong (manual, recorded in `bench/REVIEW.md`) |
 | **M5 Fix modules (preview)** | `tknxray fix mcp` (mcp-diet: emit a settings `permissions.deny` diff for never-used MCP tools; never writes without `--apply`); `cc-slim` design doc + prototype PostToolUse hook for Bash output; optional `tknxray capture` (API-key only, local echo server, measures tool-definition bytes, never forwards subscription OAuth) | the diff is valid JSON and merges into the existing settings in tests; the cc-slim prototype has a unit test for "keep failure lines, head/tail, dedupe stack frames"; a benchmark script exists. **No savings claim in the README until the benchmark (§8) shows it.** |
+| **M7 Impact** | §5.1 bundled list-price table and cost totals; §5.2 `Finding.impact` with carry cost, ranking by savings, A11 cross-agent reads; §5.3 action plan in terminal, JSON and HTML | every turn priced or counted as unpriced; total within ±$0.01 of `ccusage session --json` `totalCost` on real logs (`pnpm validate:real --ccusage`); hand-computed $ tests per lever; combined savings ≤ plain sum and ≤ window cost; ≤ 5 actions; HTML CSP unchanged; 1 GB corpus < 10% slower than M6 (manual, `pnpm bench:full`). Savings are per-window estimates from the user's own logs, not a product claim |
 
 ## 7. Test plan
 - **Fixtures** (`test/fixtures/projects/<name>/`, each a fake `projects/` tree; all synthetic or scrubbed): `minimal-single-turn`, `multi-block-same-msgid` (dedupe), `sidechain-replay`, `cross-session-copy`, `synthetic-error-turn` (like the real 2.1.296 not-logged-in case), `ttl-gap-rebuild`, `version-change-rebuild`, `model-switch`, `big-bash-output`, `repeated-read-unchanged`, `repeated-read-after-edit` (negative), `malformed-lines`, `nested-subagents-dir`, `unknown-record-types`, `string-vs-array-content`.

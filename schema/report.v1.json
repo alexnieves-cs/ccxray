@@ -77,6 +77,65 @@
         "note": { "type": "string" }
       }
     },
+    "actionPlan": {
+      "type": "object",
+      "description": "What to change first: at most 5 actions ranked by $ savings at API list prices (estimated). combinedSavingsUsd is a conservative union, not a sum (SPEC 5.3).",
+      "required": [
+        "windowCostUsd",
+        "actions",
+        "combinedSavingsUsd",
+        "combinedSharePct",
+        "method",
+        "note"
+      ],
+      "properties": {
+        "windowCostUsd": { "$ref": "#/$defs/usd" },
+        "combinedSavingsUsd": { "$ref": "#/$defs/usd" },
+        "combinedSharePct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "combinedUpperBound": { "const": true },
+        "method": { "type": "string" },
+        "note": { "type": "string" },
+        "actions": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "title",
+              "savingsUsd",
+              "sharePct",
+              "confidence",
+              "why",
+              "change",
+              "findings",
+              "category",
+              "savingsMainUsd",
+              "savingsSubagentUsd"
+            ],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "savingsUsd": { "$ref": "#/$defs/usd" },
+              "sharePct": { "type": "number", "minimum": 0, "maximum": 100 },
+              "confidence": { "enum": ["measured-tokens", "estimated"] },
+              "why": { "type": "string" },
+              "change": { "type": "string" },
+              "findings": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
+              "category": {
+                "enum": ["context", "context-reset", "rebuild", "tool-definitions", "model"]
+              },
+              "savingsMainUsd": { "$ref": "#/$defs/usd" },
+              "savingsSubagentUsd": { "$ref": "#/$defs/usd" },
+              "upperBound": {
+                "const": true,
+                "description": "savingsUsd is a ceiling, not a likely figure."
+              }
+            }
+          }
+        }
+      }
+    },
     "pricing": {
       "type": "object",
       "description": "The bundled, dated price table behind every $ figure (no network).",
@@ -262,7 +321,11 @@
             "basis": { "type": "string" },
             "confidence": { "enum": ["measured-tokens", "estimated"] },
             "savingsMainUsd": { "$ref": "#/$defs/usd" },
-            "savingsSubagentUsd": { "$ref": "#/$defs/usd" }
+            "savingsSubagentUsd": { "$ref": "#/$defs/usd" },
+            "upperBound": {
+              "const": true,
+              "description": "savingsUsd is a ceiling, not a likely figure."
+            }
           }
         },
         "fix": {

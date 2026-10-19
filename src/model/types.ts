@@ -276,6 +276,8 @@ export interface Impact {
   /** savingsUsd split by where it was spent: main conversations vs subagents (sums to it). */
   savingsMainUsd: number;
   savingsSubagentUsd: number;
+  /** true when savingsUsd is a ceiling, not a likely figure (A8: some of that context was needed). */
+  upperBound?: true;
 }
 
 export interface Finding {
@@ -347,6 +349,45 @@ export interface SessionSummary {
   totals: TokenTotals;
 }
 
+/** Overlap groups for the action plan's combined savings (SPEC §5.3). */
+export type ActionCategory = 'context' | 'context-reset' | 'rebuild' | 'tool-definitions' | 'model';
+
+/** One change of the action plan (SPEC §5.3), built from the findings that support it. */
+export interface Action {
+  id: string;
+  /** Imperative, plain words. */
+  title: string;
+  savingsUsd: number;
+  /** savingsUsd as a % of the window's cost (one decimal). */
+  sharePct: number;
+  confidence: 'measured-tokens' | 'estimated';
+  /** One or two plain sentences: what the numbers are and the caveat. */
+  why: string;
+  /** The change itself, copy-pasteable where possible (may span lines). */
+  change: string;
+  /** 1-based positions in Report.findings (the TOP FINDINGS numbers). */
+  findings: number[];
+  category: ActionCategory;
+  savingsMainUsd: number;
+  savingsSubagentUsd: number;
+  /** true when savingsUsd is a ceiling (any supporting finding's impact is an upper bound). */
+  upperBound?: true;
+}
+
+export interface ActionPlan {
+  /** The window's cost at list prices (priced turns only). */
+  windowCostUsd: number;
+  actions: Action[];
+  /** Conservative union of the actions' savings (combine()). */
+  combinedSavingsUsd: number;
+  combinedSharePct: number;
+  /** true when any action's savings is an upper bound, so the combined figure is one too. */
+  combinedUpperBound?: true;
+  /** How the combined figure was computed, one sentence. */
+  method: string;
+  note: string;
+}
+
 /** The machine-readable report. `--json` prints this; schema/report.v1.json describes it. */
 export interface Report {
   schemaVersion: 1;
@@ -360,6 +401,8 @@ export interface Report {
   findings: Finding[];
   /** Estimator calibration (SPEC §4.5), when enough samples exist. */
   calibration?: { samples: number; medianRatio: number | null; note: string };
+  /** What to change first (SPEC §5.3). Optional (additive in report v1). */
+  actionPlan?: ActionPlan;
   /** The bundled price table behind every $ figure (SPEC §5.1). Optional (additive in v1). */
   pricing?: {
     asOf: string;

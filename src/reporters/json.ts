@@ -20,6 +20,7 @@ const TOP_LEVEL_ORDER: (keyof Report)[] = [
   'findings',
   'calibration',
   'pricing',
+  'actionPlan',
 ];
 
 /** Longest free-form string kept from Finding.data when content is not included. */

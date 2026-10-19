@@ -70,6 +70,8 @@ const TABLE: Entry[] = [
     tier: { above: 100_000, price: p(0.5, 0.625, 1, 0.05, 2.5) },
   },
   { id: 'claude-haiku-4-5', price: p(1, 1.25, 2, 0.1, 5) },
+  // Haiku 3.5's API id uses the older naming (`claude-3-5-haiku-20241022`).
+  { id: 'claude-3-5-haiku', price: p(0.8, 1, 1.6, 0.08, 4) },
   { id: 'claude-haiku-3-5', price: p(0.8, 1, 1.6, 0.08, 4) },
 ];
 

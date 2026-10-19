@@ -1,0 +1,90 @@
+tknxray · 4 sessions (2 subagent) · 368 assistant turns · Oct 11–18 2026
+  Claude Code 2.1.290–2.1.296
+
+TOKENS (measured from usage fields)
+  input (uncached)           58k   <1%
+  cache write (creation)    2.8M   17%   5m 2.8M · 1h 0
+  cache read               13.5M   82%
+  output                    133k    1%
+  cache hit ratio  82%  (read / (read + write + input))
+
+COST [E] what these tokens would cost at API list prices (prices of 2026-10-19)
+  total                   $25.73  100%   main $25.17 · subagents $0.56
+  output                   $3.06   12%   main $2.99 · subagents $0.07
+  cache read               $6.32   25%   main $6.22 · subagents $0.10
+  cache write             $16.08   62%   main $15.69 · subagents $0.39
+  input (uncached)         $0.27    1%   main $0.27 · subagents <$0.01
+
+WHAT TO CHANGE FIRST (savings at API list prices [E])
+ 1. Batch prompts so breaks stay under the cache TTL                            ~$12.67  49% of cost
+      29 breaks longer than the cache TTL made Claude Code write 2.2M tokens of cache again ($13.78
+      at the write price; $1.10 as cache reads).
+      change:
+        Send related prompts in one sitting so idle gaps stay under the cache TTL; after a longer
+        break, start a new session (or /clear) instead of resuming a large context.
+      tokens measured, $ estimated · from finding 1
+ 2. Edit CLAUDE.md between sessions                                               ~$2.38  9% of cost
+      6 CLAUDE.md edits mid-session made Claude Code write 414k tokens of cache again ($2.59 at the
+      write price; $0.21 as cache reads).
+      change:
+        Batch CLAUDE.md edits and make them between sessions, not during one.
+      tokens measured, $ estimated · from finding 1
+ 3. Trim big tool outputs (`pnpm test`, Grep)                                     ~$1.74  7% of cost
+      14 big outputs stayed in context for up to 140 turns and cost $2.41 to carry; savings assume
+      each is cut to ~1k tokens (about 100 lines).
+      change:
+        Add to CLAUDE.md:
+        - Run `pnpm test` as `pnpm test … 2>&1 | tail -n 100`.
+        - Narrow Grep with a glob or path, or set head_limit.
+      estimated · from findings 2, 5
+ 4. Restart long sessions after upgrading Claude Code                             ~$1.16  4% of cost
+      3 upgrades mid-session made Claude Code write 201k tokens of cache again ($1.26 at the write
+      price; $0.10 as cache reads).
+      change:
+        Finish or restart sessions after a Claude Code upgrade (see anthropics/claude-code#46917).
+      tokens measured, $ estimated · from finding 1
+ 5. Stop re-reading files that did not change                                     ~$0.81  3% of cost
+      6 re-reads of unchanged files (src/api/client.ts) were carried as extra copies.
+      change:
+        Add to CLAUDE.md:
+        - Do not Read a file again unless it changed; refer to the earlier read.
+      estimated · from finding 3
+  These 5 changes would have cut about 68% of this window's cost [E] (~$17.39 of $25.73; overlapping
+  savings are not double-counted).
+
+WHERE IT WENT (estimated attribution)
+  repeated-read          ~182k [E]  1 finding · Read 100%
+  big-tool-output        ~149k [E]  2 findings · Bash 89%, Grep 11%
+
+TOP FINDINGS
+ 1. CACHE REBUILD [high]  38 rebuilds cost 2.8M cache-write tokens
+      2.8M [M] · saves ~$16.21 of $17.62 [E] · 2 evidence
+      e.g. ~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl:120
+      29 × ttl-expiry (2.2M)             → batch work; you had 29 gaps > 5 min
+      6 × config-edit (414k)             → edit CLAUDE.md between sessions
+      3 × cc-upgrade (201k)              → known: #46917 (2.1.100+)
+      → see causes above
+ 2. BIG TOOL OUTPUT [warn]  `pnpm test` returned 48k chars (×11)
+      ~132k [E] · saves ~$1.62 of $2.10 [E] · cmd `pnpm test` · 2 evidence
+      e.g. ~-src-acme-api/9b07e5aa-2222-4aaa-8bbb-000000000002.jsonl:1207
+      → pipe through `| tail -50`, or use --reporter=dot
+ 3. REPEATED READ [warn]  src/api/client.ts read 7× unchanged in session 3fa2c1d0
+      ~182k [E] · saves ~$0.81 of $0.95 [E] · 1 evidence
+      e.g. ~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl:412
+      → reference the earlier read instead of re-reading (cc-slim dedupe, planned)
+ 4. TOOL USAGE [info]  9 MCP tools from "github" server never called in 4 sessions
+      saves ~$0.40 of $0.40 [E] · 1 evidence · e.g. session 9b07e5aa
+      → run `tknxray fix mcp` to preview a permissions.deny diff
+ 5. BIG TOOL OUTPUT [info]  Grep returned 22k chars (×3)
+      ~17k [E] · saves ~$0.12 of $0.31 [E] · 1 evidence
+      e.g. ~-src-acme-api/3fa2c1d0-1111-4aaa-8bbb-000000000001.jsonl:2001
+      → narrow the glob or set head_limit
+
+PARSE WARNINGS  4 malformed lines skipped · 1 unknown record type (x-future ×7) · 2 field warnings
+  run `tknxray doctor` for details
+
+[M] measured: taken directly from usage fields in the logs
+[E] / ~ estimated: chars/4 heuristic or attribution guess, never exact
+$ = what these tokens would cost at API list prices; subscription limits are not published, use it
+to compare, not as a bill
+Run `tknxray session 3fa2c1d0` for per-turn detail · `--html` for a shareable report

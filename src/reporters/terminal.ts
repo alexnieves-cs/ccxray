@@ -1,5 +1,7 @@
 // Terminal reporter (SPEC §3 example output). Every line fits in `width` columns (≤ 100).
-import type { Finding, Report, Severity } from '../model/index.js';
+import { changesPhrase } from '../cost/plan.js';
+import { COST_NOTE } from '../cost/cost.js';
+import type { CostTotals, Finding, Report, Severity } from '../model/index.js';
 import {
   analyzerHeading,
   attribution,
@@ -20,6 +22,7 @@ import {
   formatPct,
   formatRatio,
   formatTokens,
+  formatUsd,
   formatVersionRange,
   kindTag,
   palette,
@@ -31,6 +34,7 @@ import {
   sanitizeText,
   shortId,
   truncate,
+  visibleWidth,
   wrapParts,
 } from './format.js';
 
@@ -71,6 +75,8 @@ export function renderTerminal(input: Report, opts: TerminalOptions): string {
           ...header(report, p, width),
           '',
           ...tokens(report, p),
+          ...cost(report, p, width),
+          ...actionPlan(report, input, p, width),
           ...whereItWent(report, p, width),
           ...topFindings(report, p, width, opts.maxFindings ?? 8, home),
           ...warnings(report, p, width),
@@ -114,6 +120,101 @@ function tokens(report: Report, p: Palette): string[] {
   ];
 }
 
+/** Words of `text` wrapped to `width`, every line starting with `indent`. */
+function wrapText(text: string, width: number, indent: string): string[] {
+  const words = text.split(' ').filter((w) => w !== '');
+  if (words.length === 0) return [];
+  return wrapParts([indent + words[0], ...words.slice(1)], ' ', width, indent);
+}
+
+const writes = (c: CostTotals): number => c.write5m + c.write1h;
+
+/** COST [E]: the window at API list prices, by kind and main vs subagents. */
+function cost(report: Report, p: Palette, width: number): string[] {
+  const all = report.totals.all.cost;
+  if (all === undefined) return [];
+  const main = report.totals.byRole?.main.cost;
+  const sub = report.totals.byRole?.subagent.cost;
+  const out = [
+    '',
+    p.bold('COST') +
+      ' [E] what these tokens would cost at API list prices' +
+      (report.pricing ? p.dim(` (prices of ${report.pricing.asOf})`) : ''),
+  ];
+  if (all.total > 0) {
+    const split = main !== undefined && sub !== undefined && sub.total > 0;
+    const row = (label: string, k: (c: CostTotals) => number) =>
+      `  ${padEnd(label, 22)} ${padStart(formatUsd(k(all)), 7)} ${padStart(formatPct(k(all), all.total), 5)}` +
+      (split ? p.dim(`   main ${formatUsd(k(main))} · subagents ${formatUsd(k(sub))}`) : '');
+    out.push(
+      row('total', (c) => c.total),
+      row('output', (c) => c.output),
+      row('cache read', (c) => c.read),
+      row('cache write', writes),
+      row('input (uncached)', (c) => c.input),
+    );
+  } else out.push('  no priced turns in this window');
+  if (all.unpricedTurns > 0) {
+    const models = Object.keys(report.pricing?.unpricedModels ?? {}).join(', ');
+    out.push(
+      ...wrapText(
+        `${formatInt(all.unpricedTurns)} turns on unpriced models left out` +
+          (models ? ` (${models})` : ''),
+        width,
+        '  ',
+      ).map(p.dim),
+    );
+  }
+  return out;
+}
+
+/** WHAT TO CHANGE FIRST: the action plan, largest savings first. */
+function actionPlan(report: Report, raw: Report, p: Palette, width: number): string[] {
+  const plan = report.actionPlan;
+  if (plan === undefined || plan.actions.length === 0) return [];
+  const out = ['', p.bold('WHAT TO CHANGE FIRST') + ' (savings at API list prices [E])'];
+  plan.actions.forEach((a, i) => {
+    const right = `${a.upperBound === true ? 'up to ' : '~'}${formatUsd(a.savingsUsd)}  ${formatPct(a.savingsUsd, plan.windowCostUsd)} of cost`;
+    const num = padStart(`${i + 1}.`, 3);
+    const left = truncate(`${num} ${p.bold(a.title)}`, width - visibleWidthOf(right) - 2);
+    out.push(`${padEnd(left, width - visibleWidthOf(right))}${p.green(right)}`);
+    out.push(...wrapText(a.why, width, '      ').map(p.dim));
+    // Change lines come from the unsanitized report so their line breaks survive; each line is
+    // sanitized on its own and word-wrapped, never cut (it is meant to be copied).
+    const lines = (raw.actionPlan?.actions[i]?.change ?? a.change).split('\n').map(sanitizeText);
+    out.push(`      ${p.cyan('change:')}`);
+    for (const l of lines) {
+      // Continuation lines line up under the text of an indented or `- ` bullet line.
+      const lead = /^\s*(?:- )?/.exec(l)![0];
+      const [first = '', ...rest] = wrapText(l.slice(lead.length), width - 8 - lead.length, '');
+      out.push(
+        `        ${lead}${first}`,
+        ...rest.map((r) => `        ${' '.repeat(lead.length)}${r}`),
+      );
+    }
+    const refs =
+      a.findings.slice(0, 5).join(', ') +
+      (a.findings.length > 5 ? ` +${a.findings.length - 5} more` : '');
+    out.push(
+      p.dim(
+        `      ${a.confidence === 'measured-tokens' ? 'tokens measured, $ estimated' : 'estimated'}` +
+          ` · from finding${a.findings.length === 1 ? '' : 's'} ${refs}`,
+      ),
+    );
+  });
+  out.push(
+    ...wrapText(
+      `${changesPhrase(plan.actions.length)} would have cut ${plan.combinedUpperBound === true ? 'up to' : 'about'} ` +
+        `${formatPct(plan.combinedSavingsUsd, plan.windowCostUsd)} of this window's cost [E] ` +
+        `(${plan.combinedUpperBound === true ? 'up to ' : '~'}${formatUsd(plan.combinedSavingsUsd)} of ${formatUsd(plan.windowCostUsd)}; overlapping ` +
+        'savings are not double-counted).',
+      width,
+      '  ',
+    ).map(p.bold),
+  );
+  return out;
+}
+
 function whereItWent(report: Report, p: Palette, width: number): string[] {
   const rows = attribution(report.findings);
   if (rows.length === 0) return [];
@@ -136,6 +237,8 @@ function severityTag(s: Severity, p: Palette): string {
   return p.cyan('[info]');
 }
 
+const visibleWidthOf = (s: string): number => visibleWidth(s);
+
 function finiteOr(n: number | undefined, fallback: number): number {
   return n !== undefined && Number.isFinite(n) ? n : fallback;
 }
@@ -155,6 +258,12 @@ function findingLines(
   const facts: string[] = [];
   if (!(f.tokens.value <= 0))
     facts.push(`${formatTokens(f.tokens.value, f.tokens.kind)} ${kindTag(f.tokens.kind)}`);
+  if (f.impact !== undefined && f.impact.costUsd > 0)
+    facts.push(
+      f.impact.savingsUsd > 0
+        ? `saves ${f.impact.upperBound === true ? 'up to ' : '~'}${formatUsd(f.impact.savingsUsd)} of ${formatUsd(f.impact.costUsd)} [E]`
+        : `costs ${formatUsd(f.impact.costUsd)} [E]`,
+    );
   const cmd = findingCommand(f);
   if (cmd) facts.push(`cmd \`${cmd}\``);
   facts.push(`${f.evidence.length} evidence`);
@@ -218,10 +327,10 @@ function footer(report: Report, p: Palette, width: number): string[] {
     top ? `Run \`tknxray session ${shortId(top)}\` for per-turn detail` : '',
     '`--html` for a shareable report',
   ].filter(Boolean);
-  const legend = [`[M] ${LEGEND_MEASURED}`, `[E] / ~ ${LEGEND_ESTIMATED}`];
+  const legend = [`[M] ${LEGEND_MEASURED}`, `[E] / ~ ${LEGEND_ESTIMATED}`, COST_NOTE];
   return [
     '',
-    ...wrapParts(legend, ' · ', width).map(p.dim),
+    ...legend.flatMap((l) => wrapText(l, width, '')).map(p.dim),
     ...wrapParts(hint, ' · ', width, '  '),
   ];
 }
