@@ -18,7 +18,7 @@ CONTEXT PER TURN [M]  max of up to 3 turns per column
 ────────────────────────────────────────────────────────────────────────────────
 LATEST TURN #150 · 11:04:19 UTC · sonnet-4-5 · gap 22s
   cache read 266,500 · cache write 2,000 · input 1 · output 30 [M]
-  hit ratio 99% [M]
+  hit ratio 99% [M] · $0.09 [E]
   tools (result ~tokens [E]): Bash ~5 · Read (no result yet)
   not a rebuild (A2)
 
@@ -26,6 +26,7 @@ SESSION SO FAR [M]
   input 154 · cache write 394,500 · cache read 18,982,500 · output 4,540
   hit ratio 98%
   rewritten by rebuilds 50,500 [M] · 1 rebuild · 1 compaction
+  cost at API list prices [E] $8.13
   subagents: none so far
 
 IDLE  last turn 25m41s ago · cache TTL 1h (from the cache-write split) [E]
