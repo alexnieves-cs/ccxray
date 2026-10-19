@@ -381,6 +381,30 @@ function planSection(report: Report): string {
   );
 }
 
+/** Cost by project [E] with turns and cache hit ratio [M], when there is more than one. */
+function projectsTable(report: Report, home: string): string {
+  const total = report.totals.all.cost?.total ?? 0;
+  const rows = Object.entries(report.totals.byProject)
+    .filter(([, t]) => t.turns > 0 && t.cost !== undefined)
+    .map(([k, t]) => ({ k, t, usd: t.cost!.total }))
+    .sort((a, b) => b.usd - a.usd || (a.k < b.k ? -1 : 1));
+  if (rows.length < 2 || !(total > 0)) return '';
+  return (
+    `<section id="projects"><h2>Cost by project</h2><p class="sub">At API list prices${badge('estimated')}; turns and cache hit ratio are measured. Bars share one scale: the window's cost.</p>` +
+    `<div class="panelbox"><table><tr><th>project</th><th class="n">$</th><th class="n">share</th><th></th><th class="n">turns</th><th class="n">cache hit</th></tr>` +
+    rows
+      .map(
+        (x) =>
+          `<tr><td>${e(displayProject(x.k, home))}</td><td class="n">${e(formatUsd(x.usd))}</td>` +
+          `<td class="n">${e(formatPct(x.usd, total))}</td>` +
+          `<td style="width:30%"><div class="sbar" role="img" aria-label="${e(formatPct(x.usd, total))} of the window's cost"><span class="s-save" style="width:${((x.usd / total) * 100).toFixed(3)}%"></span></div></td>` +
+          `<td class="n">${formatInt(x.t.turns)}</td><td class="n">${e(formatRatio(x.t.cacheHitRatio))}</td></tr>`,
+      )
+      .join('') +
+    `</table></div></section>`
+  );
+}
+
 function dailyChart(report: Report): string {
   const days = Object.entries(report.totals.byDay).sort((a, b) => (a[0] < b[0] ? -1 : 1));
   if (days.length < 2) return '';
@@ -584,6 +608,7 @@ export function renderHtml(report: Report, opts: HtmlOptions = {}): string {
         `${tl ? '; ▶ replay jumps to that turn' : ''}. <button id="toggle" type="button">expand / collapse all evidence</button></p>` +
         `<div class="cards">${findings.map((f, i) => findingCard(f, i + 1, report.stats.roots, home, tl)).join('')}</div>`
       : '<p class="mut">No findings in this window.</p>',
+    projectsTable(report, home),
     dailyChart(report),
     `<h2>Sessions (measured)</h2>`,
     report.sessions.length ? sessionsTable(report, home) : '<p class="mut">No sessions found.</p>',

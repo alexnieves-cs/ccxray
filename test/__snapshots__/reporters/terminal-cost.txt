@@ -15,6 +15,11 @@ COST [E] what these tokens would cost at API list prices (prices of 2026-10-19)
   cache write             $16.08   62%   main $15.69 · subagents $0.39
   input (uncached)         $0.27    1%   main $0.27 · subagents <$0.01
 
+BY DAY (UTC) [E] $ at list prices
+  Sun Oct 11      $19.17  ████████████████████████████████████████████████████  253 turns
+  Wed Oct 14       $6.36  █████████████████▎                                    97 turns
+  Sun Oct 18       $0.21  ▋                                                     18 turns
+
 WHAT TO CHANGE FIRST (savings at API list prices [E])
  1. Batch prompts so breaks stay under the cache TTL                            ~$12.67  49% of cost
       29 breaks longer than the cache TTL made Claude Code write 2.2M tokens of cache again ($13.78

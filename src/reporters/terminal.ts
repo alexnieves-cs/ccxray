@@ -1,7 +1,7 @@
 // Terminal reporter (SPEC §3 example output). Every line fits in `width` columns (≤ 100).
 import { changesPhrase } from '../cost/plan.js';
 import { COST_NOTE } from '../cost/cost.js';
-import type { CostTotals, Finding, Report, Severity } from '../model/index.js';
+import type { CostTotals, Finding, Report, Severity, TokenTotals } from '../model/index.js';
 import {
   analyzerHeading,
   attribution,
@@ -15,6 +15,7 @@ import {
 import {
   LEGEND_ESTIMATED,
   LEGEND_MEASURED,
+  displayProject,
   displayRoot,
   formatCompact,
   formatDateRange,
@@ -76,6 +77,7 @@ export function renderTerminal(input: Report, opts: TerminalOptions): string {
           '',
           ...tokens(report, p),
           ...cost(report, p, width),
+          ...breakdown(report, p, width, home),
           ...actionPlan(report, input, p, width),
           ...whereItWent(report, p, width),
           ...topFindings(report, p, width, opts.maxFindings ?? 8, home),
@@ -166,6 +168,77 @@ function cost(report: Report, p: Palette, width: number): string[] {
     );
   }
   return out;
+}
+
+const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
+
+/** A horizontal bar of `cells` columns for value / max, in eighths of a cell. */
+export function hbar(value: number, max: number, cells: number): string {
+  if (!(max > 0) || !(value > 0)) return '';
+  const e = Math.max(1, Math.round((value / max) * cells * 8));
+  return '█'.repeat(Math.floor(e / 8)) + EIGHTHS[e % 8]!;
+}
+
+const MAX_PROJECTS = 5;
+const MAX_DAYS = 14;
+
+/** BY PROJECT / BY DAY [E]: where the $ went, when there is more than one of either. */
+function breakdown(report: Report, p: Palette, width: number, home: string): string[] {
+  const priced = (r: Record<string, TokenTotals>) =>
+    Object.entries(r)
+      .filter(([, t]) => t.turns > 0 && t.cost !== undefined)
+      .map(([k, t]) => ({ k, t, usd: t.cost!.total }));
+  const total = report.totals.all.cost?.total ?? 0;
+  if (!(total > 0)) return [];
+  const out: string[] = [];
+  const barCells = Math.max(8, width - 78);
+  const projects = priced(report.totals.byProject).sort(
+    (a, b) => b.usd - a.usd || (a.k < b.k ? -1 : 1),
+  );
+  if (projects.length > 1) {
+    out.push('', p.bold('BY PROJECT') + ' [E] $ at list prices · turns and cache hit ratio [M]');
+    const max = projects[0]!.usd;
+    for (const x of projects.slice(0, MAX_PROJECTS))
+      out.push(
+        `  ${padEnd(truncate(displayProject(x.k, home), 36), 36)} ${padStart(formatUsd(x.usd), 9)} ` +
+          `${padStart(formatPct(x.usd, total), 5)}  ${padEnd(p.cyan(hbar(x.usd, max, barCells)), barCells)}` +
+          p.dim(`  ${formatInt(x.t.turns)} turns · hit ${formatRatio(x.t.cacheHitRatio)}`),
+      );
+    if (projects.length > MAX_PROJECTS) {
+      const rest = projects.slice(MAX_PROJECTS);
+      out.push(
+        p.dim(`  +${rest.length} more projects: ${formatUsd(rest.reduce((a, x) => a + x.usd, 0))}`),
+      );
+    }
+  }
+  const days = priced(report.totals.byDay).sort((a, b) => (a.k < b.k ? -1 : 1));
+  if (days.length > 1) {
+    const shown = days.slice(-MAX_DAYS);
+    out.push(
+      '',
+      p.bold('BY DAY') +
+        ' (UTC) [E] $ at list prices' +
+        (days.length > shown.length ? p.dim(` · last ${shown.length} of ${days.length} days`) : ''),
+    );
+    const max = Math.max(...shown.map((x) => x.usd));
+    for (const x of shown)
+      out.push(
+        `  ${padEnd(formatDay(x.k), 12)} ${padStart(formatUsd(x.usd), 9)}  ` +
+          `${padEnd(p.cyan(hbar(x.usd, max, barCells + 30)), barCells + 30)}` +
+          p.dim(`  ${formatInt(x.t.turns)} turns`),
+      );
+  }
+  return out;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** `2026-10-19` → `Mon Oct 19` (UTC). */
+function formatDay(day: string): string {
+  const d = new Date(`${day}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return day;
+  return `${WEEKDAYS[d.getUTCDay()]} ${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
 /** WHAT TO CHANGE FIRST: the action plan, largest savings first. */
