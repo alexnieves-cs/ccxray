@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { session, toolUse } from '../../scripts/make-fixture.js';
 import { bigToolOutput } from '../../src/analyzers/big-tool-output.js';
-import { crossAgentRead } from '../../src/analyzers/cross-agent-read.js';
+import { catTarget, crossAgentRead } from '../../src/analyzers/cross-agent-read.js';
 import { repeatedRead } from '../../src/analyzers/repeated-read.js';
 import { loadSessions } from '../../src/parser/index.js';
 import { cleanup, ctx, run } from '../helpers/analyze.js';
@@ -87,7 +87,54 @@ describe('A11 cross-agent-read', () => {
       isError: true,
     });
     const a3 = s.agent('n3').prompt('c');
-    a3.assistant({ blocks: [toolUse('Bash', { command: 'cat b.md' })] }).toolResult(100);
+    a3.assistant({ blocks: [toolUse('Bash', { command: 'cat b.md | head' })] }).toolResult(100);
     expect(await run(crossAgentRead, [s, a1, a2, a3])).toEqual([]);
+  });
+
+  it('plain `cat` counts, and the same relative path from several worktrees is one file', async () => {
+    const s = session('a11/cat').prompt('x');
+    s.assistant({ blocks: [toolUse('Read', { file_path: '/home/dev/app/docs/SPEC.md' })] });
+    s.toolResult(8000);
+    const cmds = [
+      'cd /home/dev/wt-a && cat docs/SPEC.md',
+      'cd /home/dev/wt-b && cat -n docs/SPEC.md',
+    ];
+    const agents = cmds.map((command, i) => {
+      const a = s.agent(`c${i}`).prompt('read the spec');
+      a.assistant({ blocks: [toolUse('Bash', { command })] }).toolResult(8000);
+      return a;
+    });
+    const [f, ...rest] = await run(crossAgentRead, [s, ...agents]);
+    expect(rest).toEqual([]);
+    expect(f!.title).toBe(
+      `docs/SPEC.md read by 3 agents of session ${s.id.slice(0, 8)} (main + 2 subagents, from 3 directories)`,
+    );
+    expect(f!.data).toMatchObject({ tool: 'Read+Bash', directories: 3, agents: 3 });
+    expect(f!.evidence[1]!.detail).toMatch(/^read by subagent c0 with cat /);
+  });
+});
+
+describe('catTarget', () => {
+  it('accepts one plain file, optionally after cd', () => {
+    expect(catTarget('cat a.md')).toEqual({ file: 'a.md' });
+    expect(catTarget('cat -n /x/a.md')).toEqual({ file: '/x/a.md' });
+    expect(catTarget('cd /w && cat docs/a.md')).toEqual({ dir: '/w', file: 'docs/a.md' });
+    expect(catTarget('cd /w; cat docs/a.md')).toEqual({ dir: '/w', file: 'docs/a.md' });
+  });
+
+  it('rejects pipes, globs, several files and other commands', () => {
+    for (const c of [
+      'cat a.md | head',
+      'cat a.md b.md',
+      'cat *.md',
+      'cat a.md && cat b.md',
+      'cat a.md > b.md',
+      'cd /w && ls && cat a.md',
+      'cat "a b.md"',
+      'cat',
+      'cat -A a.md',
+      'git show HEAD:a.md',
+    ])
+      expect(catTarget(c), c).toBeUndefined();
   });
 });
