@@ -343,6 +343,7 @@ describe('A5 big-tool-output', () => {
           persisted: 0,
           persistedBytes: 0,
           errors: 0,
+          persistedByClaudeCode: 0,
         },
       ],
       [
@@ -358,6 +359,7 @@ describe('A5 big-tool-output', () => {
           persisted: 0,
           persistedBytes: 0,
           errors: 1,
+          persistedByClaudeCode: 0,
         },
       ],
     ]);
@@ -369,20 +371,81 @@ describe('A5 big-tool-output', () => {
     );
   });
 
-  it('persisted-tool-output: counts the inline preview, reports the full size', async () => {
-    const sessions = await fixture('persisted-tool-output');
-    const f = run(bigToolOutput, sessions);
-    expect(f).toHaveLength(1);
+  it('persisted-tool-output: a persisted output under the inline threshold is no finding', async () => {
     // Inline preview = 19 (tag + \n) + 49 ("Output too large (36.4KB). Full output saved to: ")
     // + 132 (saved path) + 23 ("\n\nPreview (first 2KB):\n") + 2,048 + 20 ("\n</persisted-output>")
-    // = 2,291 chars → ceil(2,291 / 4) = 573 tokens [E]. That is what entered the context.
-    expect(f[0]).toMatchObject({
-      severity: 'info',
-      tokens: { value: 573, kind: 'estimated' },
-      data: { tool: 'Bash', command: 'pnpm test', count: 1, persisted: 1, persistedBytes: 37274 },
+    // = 2,291 chars → ceil(2,291 / 4) = 573 tokens [E]: Claude Code already handled it.
+    expect(run(bigToolOutput, await fixture('persisted-tool-output'))).toEqual([]);
+  });
+
+  it('persisted outputs under the threshold only add to persistedByClaudeCode of a big group', async () => {
+    const preview = (kb: string) => ({
+      content: `<persisted-output>\nOutput too large (${kb}KB). Full output saved to: /x\n</persisted-output>`,
     });
-    expect(f[0]!.fix.summary).toContain('Claude Code already truncated 1 to a preview');
-    expect(f[0]!.evidence[0]!.detail).toContain('persisted by Claude Code (full 37,274 bytes)');
+    const a = s('persisted-mix')
+      .prompt('x')
+      .assistant({
+        usage: { input: 1 },
+        blocks: [toolUse('Bash', { command: 'sed -n 1,900p a.ts' })],
+      })
+      .toolResult(preview('40.0'))
+      .assistant({
+        usage: { input: 1 },
+        blocks: [toolUse('Bash', { command: 'sed -n 1,400p b.ts' })],
+      })
+      .toolResult(24_000);
+    const [f, ...rest] = run(bigToolOutput, await built('persisted-mix', [a]));
+    expect(rest).toEqual([]);
+    expect(f!.title).toBe('`sed -n` returned up to 24k chars inline (1 big output)');
+    expect(f!.tokens.value).toBe(6_000);
+    expect(f!.data).toMatchObject({ count: 1, persisted: 0, persistedByClaudeCode: 1 });
+    expect(f!.evidence).toHaveLength(1);
+  });
+
+  it('fix advice depends on the command family', async () => {
+    const cmds: [string, string][] = [
+      ['cat src/a.ts', 'use Read with offset/limit, or grep -n for the part you need'],
+      ['cat -n src/a.ts', 'use Read with offset/limit, or grep -n for the part you need'],
+      ['head -n 5000 log.txt', 'use Read with offset/limit, or grep -n for the part you need'],
+      ['grep -rn foo .', 'add -l, -m N or a narrower path/glob'],
+      ['rg foo', 'add -l, -m N or a narrower path/glob'],
+      ['git show HEAD', 'run with --stat first, then show a single path'],
+      ['git diff main', 'run with --stat first, then show a single path'],
+      ['git log -p', 'limit it with -n N --oneline'],
+      ['pnpm test', 'pipe through `| tail -n 100`, or use --silent / --reporter=dot'],
+      ['npm run build', 'pipe through `| tail -n 100`, or use --silent / --reporter=dot'],
+      ['npx vitest run', 'pipe through `| tail -n 100`, or use --silent / --reporter=dot'],
+      ['cargo test', 'pipe through `| tail -n 100`, or use --silent / --reporter=dot'],
+      ['go test ./...', 'pipe through `| tail -n 100`, or use --silent / --reporter=dot'],
+      ['make all', 'pipe through `| tail -n 100`, or use --silent / --reporter=dot'],
+      ['tsc --noEmit', 'pipe through `| tail -n 100`, or use --silent / --reporter=dot'],
+      [
+        'for f in *.ts; do cat "$f"; done',
+        'limit the output (| head, | tail, or a narrower command)',
+      ],
+      ['find . -type f', 'limit the output (| head, | tail, or a narrower command)'],
+    ];
+    const b = s('advice').prompt('x');
+    for (const [command] of cmds)
+      b.assistant({ usage: { input: 1 }, blocks: [toolUse('Bash', { command })] }).toolResult(
+        20_000,
+      );
+    const f = run(bigToolOutput, await built('advice', [b]));
+    const byCommand = new Map(f.map((x) => [x.data!.command, x.fix.summary]));
+    for (const [command, advice] of cmds)
+      expect([command, byCommand.get(normalizeCommand(command))]).toEqual([command, advice]);
+  });
+
+  it('names shell loops by the first meaningful command of the body', () => {
+    expect(normalizeCommand('for f in src/*.ts; do cat "$f"; done')).toBe('cat (in a loop)');
+    expect(normalizeCommand('for f in a b; do echo "== $f"; sed -n 1,50p "$f"; done')).toBe(
+      'sed -n (in a loop)',
+    );
+    expect(normalizeCommand('cd /home/dev/app && while read f; do head -5 "$f"; done < l')).toBe(
+      'head -5 (in a loop)',
+    );
+    expect(normalizeCommand('for f in a b c')).toBe('for f');
+    expect(normalizeCommand('for f in a; do echo "$f"; done')).toBe('for f');
   });
 
   it('groups env-prefixed and cd-prefixed commands, and other tools across sessions', async () => {
