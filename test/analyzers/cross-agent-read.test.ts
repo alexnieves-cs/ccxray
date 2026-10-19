@@ -92,16 +92,19 @@ describe('A11 cross-agent-read', () => {
   });
 
   it('plain `cat` counts, and the same relative path from several worktrees is one file', async () => {
-    const s = session('a11/cat').prompt('x');
-    s.assistant({ blocks: [toolUse('Read', { file_path: '/home/dev/app/docs/SPEC.md' })] });
-    s.toolResult(8000);
+    const s = session('a11/cat', { model: 'claude-sonnet-4-5' }).prompt('x');
+    const U = { usage: { input: 3, cacheWrite: 2_000, output: 10 } };
+    s.assistant({ ...U, blocks: [toolUse('Read', { file_path: '/home/dev/app/docs/SPEC.md' })] });
+    s.toolResult(8000).assistant(U);
     const cmds = [
       'cd /home/dev/wt-a && cat docs/SPEC.md',
       'cd /home/dev/wt-b && cat -n docs/SPEC.md',
     ];
     const agents = cmds.map((command, i) => {
       const a = s.agent(`c${i}`).prompt('read the spec');
-      a.assistant({ blocks: [toolUse('Bash', { command })] }).toolResult(8000);
+      a.assistant({ ...U, blocks: [toolUse('Bash', { command })] })
+        .toolResult(8000)
+        .assistant(U);
       return a;
     });
     const [f, ...rest] = await run(crossAgentRead, [s, ...agents]);
@@ -111,6 +114,9 @@ describe('A11 cross-agent-read', () => {
     );
     expect(f!.data).toMatchObject({ tool: 'Read+Bash', directories: 3, agents: 3 });
     expect(f!.evidence[1]!.detail).toMatch(/^read by subagent c0 with cat /);
+    // Different directories may not be checkouts of one repo: the savings are an upper bound.
+    expect(f!.impact?.upperBound).toBe(true);
+    expect(f!.impact?.basis).toMatch(/assumes the 3 directories are checkouts of one repo/);
   });
 });
 
@@ -134,6 +140,13 @@ describe('catTarget', () => {
       'cat',
       'cat -A a.md',
       'git show HEAD:a.md',
+      'cd a && cd b && cat f',
+      'cd ~/x && cat f',
+      'cd - && cat f',
+      'cat f&',
+      'cat (f)',
+      'cat !$',
+      'cat f # note',
     ])
       expect(catTarget(c), c).toBeUndefined();
   });

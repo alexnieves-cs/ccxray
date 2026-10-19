@@ -174,7 +174,7 @@ const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
 
 /** A horizontal bar of `cells` columns for value / max, in eighths of a cell. */
 export function hbar(value: number, max: number, cells: number): string {
-  if (!(max > 0) || !(value > 0)) return '';
+  if (!(max > 0) || !(value > 0) || !(cells > 0)) return '';
   const e = Math.max(1, Math.round((value / max) * cells * 8));
   return '█'.repeat(Math.floor(e / 8)) + EIGHTHS[e % 8]!;
 }
@@ -191,18 +191,28 @@ function breakdown(report: Report, p: Palette, width: number, home: string): str
   const total = report.totals.all.cost?.total ?? 0;
   if (!(total > 0)) return [];
   const out: string[] = [];
-  const barCells = Math.max(8, width - 78);
+  const MIN_BAR = 6;
   const projects = priced(report.totals.byProject).sort(
     (a, b) => b.usd - a.usd || (a.k < b.k ? -1 : 1),
   );
   if (projects.length > 1) {
     out.push('', p.bold('BY PROJECT') + ' [E] $ at list prices · turns and cache hit ratio [M]');
     const max = projects[0]!.usd;
-    for (const x of projects.slice(0, MAX_PROJECTS))
+    const shown = projects.slice(0, MAX_PROJECTS);
+    const tail = (x: (typeof shown)[number]): string =>
+      `  ${formatInt(x.t.turns)} turns · hit ${formatRatio(x.t.cacheHitRatio)}`;
+    // The measured turns and hit ratio come last and must not be cut: the project name shrinks
+    // first, then the bar is dropped.
+    const tailW = Math.max(...shown.map((x) => tail(x).length));
+    const fixed = 2 + 1 + 9 + 1 + 5 + 2 + tailW;
+    const nameW = Math.max(8, Math.min(36, width - fixed - MIN_BAR));
+    const room = width - fixed - nameW;
+    const barCells = room >= MIN_BAR ? room : 0;
+    for (const x of shown)
       out.push(
-        `  ${padEnd(truncate(displayProject(x.k, home), 36), 36)} ${padStart(formatUsd(x.usd), 9)} ` +
+        `  ${padEnd(truncate(displayProject(x.k, home), nameW), nameW)} ${padStart(formatUsd(x.usd), 9)} ` +
           `${padStart(formatPct(x.usd, total), 5)}  ${padEnd(p.cyan(hbar(x.usd, max, barCells)), barCells)}` +
-          p.dim(`  ${formatInt(x.t.turns)} turns · hit ${formatRatio(x.t.cacheHitRatio)}`),
+          p.dim(tail(x)),
       );
     if (projects.length > MAX_PROJECTS) {
       const rest = projects.slice(MAX_PROJECTS);
@@ -221,10 +231,12 @@ function breakdown(report: Report, p: Palette, width: number, home: string): str
         (days.length > shown.length ? p.dim(` · last ${shown.length} of ${days.length} days`) : ''),
     );
     const max = Math.max(...shown.map((x) => x.usd));
+    const tailW = Math.max(...shown.map((x) => `  ${formatInt(x.t.turns)} turns`.length));
+    const barCells = Math.max(MIN_BAR, Math.min(60, width - (2 + 12 + 1 + 9 + 2) - tailW));
     for (const x of shown)
       out.push(
         `  ${padEnd(formatDay(x.k), 12)} ${padStart(formatUsd(x.usd), 9)}  ` +
-          `${padEnd(p.cyan(hbar(x.usd, max, barCells + 30)), barCells + 30)}` +
+          `${padEnd(p.cyan(hbar(x.usd, max, barCells)), barCells)}` +
           p.dim(`  ${formatInt(x.t.turns)} turns`),
       );
   }

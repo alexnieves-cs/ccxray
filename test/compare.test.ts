@@ -114,6 +114,7 @@ describe('tknxray compare', () => {
       ['--at', '2026-10-08T05:00'],
       ['--before', '2026-10-05', '--after', '2026-10-08..2026-10-09'],
       ['--before', '2026-10-05..2026-10-09', '--after', '2026-10-08..2026-10-09'],
+      ['--before', '2026-10-01..2026-10-08T10:00', '--after', '2026-10-08T10:00..2026-10-09'],
     ]) {
       const r = await run(argv);
       expect(r.code, argv.join(' ')).toBe(2);
@@ -125,6 +126,35 @@ describe('tknxray compare', () => {
     const r = await run(['--help']);
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/tknxray compare --at DATE/);
+  });
+
+  it('turns without a list price are left out of the $ rates, never counted as $0', async () => {
+    const root = writeBuilt('compare-unpriced', [
+      ...week('priced', '2026-10-01T09:00:00.000Z', 4, 40_000),
+      ...week('after', '2026-10-08T09:00:00.000Z', 4, 40_000),
+      ...[9, 10, 11].map((d) =>
+        session(`unpriced-${d}`, {
+          start: `2026-10-${String(d).padStart(2, '0')}T20:00:00.000Z`,
+          model: 'claude-future-9',
+        })
+          .prompt('x')
+          .assistant({ usage: { input: 3, cacheWrite: 1_000, output: 10 } }),
+      ),
+    ]);
+    let out = '';
+    const code = await compareCommand(
+      ['--at', '2026-10-08', '--json', '--root', root],
+      (s) => (out += s),
+      { err: () => {}, isTTY: false, now: new Date('2026-10-19T00:00:00.000Z') },
+    );
+    expect(code).toBe(0);
+    const c = JSON.parse(out) as ReturnType<typeof compare>;
+    const m = Object.fromEntries(c.metrics.map((x) => [x.id, x]));
+    // The after window's priced turns cost the same per turn as the before window's.
+    expect(m.costPerTurn!.after).toBeCloseTo(m.costPerTurn!.before!, 6);
+    expect(m.costPerSession!.after).toBeNull();
+    expect(c.improved).not.toContain('costPerTurn');
+    expect(c.thin).toMatch(/after window has 3 turns on a model with no list price/);
   });
 
   it('side() keeps only main sessions with real turns', () => {

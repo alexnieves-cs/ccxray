@@ -12,7 +12,8 @@
 // Bash counts too when the whole command is one plain `cat FILE` (optionally after `cd DIR &&`):
 // agents often read a file that way. Paths inside the directory they were read from are keyed
 // relative to it, so the same file read from several git worktrees counts as one file (its
-// content may differ by branch: UNVERIFIED that the copies were identical).
+// content may differ by branch: UNVERIFIED that the copies were identical). The directories may
+// also be unrelated checkouts, so savings across directories are marked as an upper bound.
 //
 // Impact (SPEC §5.2): carry cost of each copy (src/cost/carry.ts); savings = (copies − 1) ×
 // the median copy's carry (one agent still reads the file; the others get the facts they need
@@ -47,7 +48,9 @@ interface Copy {
   base: string | undefined;
 }
 
-const SHELL_META = /[|<>*?[\]{}$`'"\\]/;
+const SHELL_META = /[|<>*?[\]{}$`'"\\()!#~\n]/;
+/** A lone `&` (background job) inside a segment; `&&` is split on before this is checked. */
+const AMP = /&/;
 
 /**
  * `cat FILE`, `cat -n FILE` or `cd DIR && cat FILE` (also `;`): the one file it prints and the
@@ -59,8 +62,11 @@ export function catTarget(cmd: string): { dir?: string; file: string } | undefin
   let dir: string | undefined;
   let file: string | undefined;
   for (const seg of cmd.split(/\s*(?:&&|;)\s*/)) {
+    if (AMP.test(seg)) return undefined;
     const w = seg.trim().split(/\s+/);
-    if (w[0] === 'cd' && w.length === 2 && file === undefined) dir = w[1];
+    // One `cd` to a plain directory (not `cd -`), before the `cat`.
+    if (w[0] === 'cd' && w.length === 2 && w[1] !== '-' && dir === undefined && file === undefined)
+      dir = w[1];
     else if (w[0] === 'cat' && file === undefined) {
       const args = w.slice(1).filter((a) => a !== '-n');
       if (args.length !== 1 || args[0]!.startsWith('-')) return undefined;
@@ -244,8 +250,14 @@ function finding(
             basis:
               `${copies.length} agents each carried their own copy until a compaction or the ` +
               `end of their session (${formatUsd(costUsd)} in all); one copy instead of ` +
-              `${copies.length} saves ${copies.length - 1} × the median copy's carry`,
+              `${copies.length} saves ${copies.length - 1} × the median copy's carry` +
+              (bases.size > 1
+                ? `; at most, since it assumes the ${bases.size} directories are checkouts of ` +
+                  'one repo and the copies are the same file'
+                : ''),
             confidence: 'estimated',
+            // Same relative path from different directories: maybe worktrees, maybe not.
+            ...(bases.size > 1 ? { upperBound: true } : {}),
           }),
         }
       : {}),

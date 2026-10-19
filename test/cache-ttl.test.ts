@@ -46,6 +46,39 @@ describe('A12 cache-ttl', () => {
     expect(f!.fix.summary).toContain('"promptCacheTtl": "1h"');
   });
 
+  it('new content in a rebuild is still written under 1h, at the 1h price', async () => {
+    const b = session('grow', { model: 'claude-opus-4-5' });
+    b.prompt('start').assistant({ usage: { input: 3, cacheWrite: CTX, output: 100 } });
+    b.prompt('go').assistant({ usage: { input: 3, cacheRead: CTX, output: 100 } });
+    let cached = CTX;
+    for (let i = 0; i < 3; i++) {
+      b.gap('10m');
+      // Rewrites the cached prefix plus 20,000 new tokens.
+      b.prompt('back').assistant({ usage: { input: 3, cacheWrite: cached + 20_000, output: 100 } });
+      cached += 20_000;
+      b.prompt('go').assistant({ usage: { input: 3, cacheRead: cached, output: 100 } });
+    }
+    const [f] = cacheTtl.run(await built('ttl-grow', [b]), ctx());
+    // Each rebuild under 1h: the prefix (50k, 70k, 90k) read at $0.50 and 20,000 new tokens
+    // written at $10, instead of all of it written at $6.25.
+    const avoided = [50_000, 70_000, 90_000].reduce(
+      (a, k) => a + ((k + 20_000) * 6.25 - (k * 0.5 + 20_000 * 10)) / 1e6,
+      0,
+    );
+    expect(f!.data!.rebuilds).toBe(3);
+    expect(f!.data!.avoidedUsd).toBeCloseTo(avoided, 6);
+  });
+
+  it('a window with both TTLs gets one direction: the larger net', async () => {
+    const s = await built('ttl-both', [
+      chain('m5', '5m', 3, '10m', true),
+      chain('m1', '1h', 3, '1m', false),
+    ]);
+    const found = cacheTtl.run(s, ctx());
+    expect(found).toHaveLength(1);
+    expect(found[0]!.data).toMatchObject({ ttl: '1h' });
+  });
+
   it('5m TTL with breaks over an hour: no finding (1h would expire too)', async () => {
     const s = await built('ttl-5m-long', [chain('b', '5m', 3, '90m', true)]);
     expect(cacheTtl.run(s, ctx())).toEqual([]);
