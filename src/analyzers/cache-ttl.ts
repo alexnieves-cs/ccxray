@@ -4,9 +4,9 @@
 // overrides it (code.claude.com/docs/en/prompt-caching, read 2026-10-19).
 //
 // Replays each main chain under the other TTL, from measured usage at list prices [E]:
-//   5m → 1h: a ttl-expiry rebuild (A2/A3) after a gap of at most 1h would have been a cache read:
-//     saves its write − read. Every other 5m write costs the 1h write price instead:
-//     costs Σ w5m × (write1h − write5m).
+//   5m → 1h: a ttl-expiry rebuild (A2/A3) after a gap of at most 1h would have read the prefix
+//     the previous turn cached and written only the rest, at the 1h price. Every other 5m write
+//     costs the 1h write price instead: costs Σ w5m × (write1h − write5m).
 //   1h → 5m: a turn after a gap of 5m–1h that was not a rebuild read its context from a cache
 //     that a 5m TTL would have let expire: costs cacheRead × (write5m − read). Every 1h write
 //     costs the 5m price instead: saves Σ w1h × (write1h − write5m).
@@ -48,8 +48,13 @@ function toHour(
   let writeCost = 0;
   for (const r of saved) {
     const u = rebuildUsd(r.turn);
-    if (u === null) continue;
-    avoided += u.savings;
+    const p = priceFor(r.turn.model, promptTokens(r.turn.usage));
+    if (u === null || p === undefined) continue;
+    // Under 1h the prefix the previous turn left in the cache is read; the rest of this turn's
+    // write is new content, still written, at the 1h price.
+    const w = r.turn.usage.cacheWrite;
+    const kept = Math.min(w, r.prev.usage.cacheRead + r.prev.usage.cacheWrite);
+    avoided += u.cost - (kept * p.read + (w - kept) * p.write1h) / 1e6;
     writeCost += u.cost;
   }
   let extra = 0;
@@ -158,9 +163,13 @@ export const cacheTtl: Analyzer = {
     const th = ctx.thresholds;
     const rebuilds = findRebuilds(sessions, th);
     const rebuilt = new Set(rebuilds.map((r) => r.turn));
-    return [
+    const found = [
       toHour(sessions, rebuilds, th.ttl1hMs),
       toFive(sessions, rebuilt, th.ttl5mMs, th.ttl1hMs),
     ].filter((f): f is Finding => f !== undefined);
+    // A window with both 5m and 1h sessions can price both directions; there is one
+    // promptCacheTtl setting, so only the larger net is advised.
+    const net = (f: Finding): number => (typeof f.data?.netUsd === 'number' ? f.data.netUsd : 0);
+    return found.length > 1 ? [found.reduce((a, b) => (net(b) > net(a) ? b : a))] : found;
   },
 };
