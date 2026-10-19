@@ -350,7 +350,8 @@ export interface SessionSummary {
 }
 
 /** Overlap groups for the action plan's combined savings (SPEC §5.3). */
-export type ActionCategory = 'context' | 'context-reset' | 'rebuild' | 'tool-definitions' | 'model';
+export type ActionCategory =
+  'context' | 'context-reset' | 'rebuild' | 'cache-ttl' | 'tool-definitions' | 'model';
 
 /** One change of the action plan (SPEC §5.3), built from the findings that support it. */
 export interface Action {

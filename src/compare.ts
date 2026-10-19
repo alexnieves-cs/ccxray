@@ -55,6 +55,7 @@ const WASTE_LABELS: Record<string, string> = {
   'subagent-cost': 'Subagents on a larger model than needed',
   'context-growth': 'Large context re-read every turn',
   'cache-rebuild': 'Cache rebuilt after breaks or changes',
+  'cache-ttl': 'Prompt cache TTL (5m vs 1h) not the cheaper one',
   'big-tool-output': 'Big tool outputs carried in context',
   'repeated-read': 'Same file read again',
   'cross-agent-read': 'Same file read by several agents',

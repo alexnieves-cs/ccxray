@@ -6,6 +6,7 @@
 import type { Action, ActionCategory, ActionPlan, Finding, Report } from '../model/index.js';
 import { sortFindings } from '../reporters/derive.js';
 import { formatCompact, formatInt, formatUsd, shortCommand } from '../reporters/format.js';
+import { TTL_CHANGE } from '../analyzers/cache-ttl.js';
 import { COST_NOTE, usd } from './cost.js';
 
 export const MAX_ACTIONS = 5;
@@ -422,6 +423,35 @@ function rebuildActions(found: Picked[], windowCost: number): Action[] {
   return out;
 }
 
+// ---- A12: prompt-cache TTL --------------------------------------------------------------------
+
+function cacheTtlActions(found: Picked[], windowCost: number): Action[] {
+  const out: Action[] = [];
+  for (const x of found) {
+    if (x.f.analyzer !== 'cache-ttl') continue;
+    const ttl = x.f.data?.ttl === '5m' ? '5m' : '1h';
+    const why =
+      ttl === '1h'
+        ? `${formatInt(num(x.f.data?.rebuilds))} ${num(x.f.data?.rebuilds) === 1 ? 'break' : 'breaks'} ` +
+          `of 5–60 minutes let the 5-minute cache expire, and Claude Code wrote the context ` +
+          `again (${formatUsd(num(x.f.data?.avoidedUsd))} more than reading it). A 1h TTL ` +
+          `costs more per write (${formatUsd(num(x.f.data?.extraUsd))} here); the net is the saving.`
+        : `1h cache writes cost ${formatUsd(num(x.f.data?.premiumUsd))} more than 5m writes, ` +
+          `and only ${formatInt(num(x.f.data?.warmBreaks))} breaks of 5–60 minutes needed them ` +
+          `(${formatUsd(num(x.f.data?.lostUsd))} to rewrite). On a subscription 1h is the ` +
+          'in-plan default; this compares list prices.';
+    const a = action(
+      `cache-ttl-${ttl}`,
+      'cache-ttl',
+      [x],
+      { title: `Set the prompt cache TTL to ${ttl}`, why, change: TTL_CHANGE(ttl) },
+      windowCost,
+    );
+    if (a !== undefined) out.push(a);
+  }
+  return out;
+}
+
 // ---- A7: unused MCP tools ------------------------------------------------------------------
 
 // UNVERIFIED: whether a permissions.deny rule removes MCP tool definitions from the prompt or only
@@ -482,7 +512,8 @@ export function combine(actions: readonly Action[], main: number, subagent: numb
     for (const a of actions) by.set(a.category, (by.get(a.category) ?? 0) + part(a));
     const groups = [
       Math.max(by.get('context') ?? 0, by.get('context-reset') ?? 0),
-      by.get('rebuild') ?? 0,
+      // A TTL change and batching prompts avoid some of the same rebuilds: count the larger.
+      Math.max(by.get('rebuild') ?? 0, by.get('cache-ttl') ?? 0),
       by.get('tool-definitions') ?? 0,
       by.get('model') ?? 0,
     ];
@@ -511,6 +542,7 @@ export function buildActionPlan(report: Report): ActionPlan {
     repeatedReadsAction(found, windowCost),
     ...contextActions(found, windowCost),
     ...rebuildActions(found, windowCost),
+    ...cacheTtlActions(found, windowCost),
     unusedToolsAction(found, windowCost),
   ].filter((a): a is Action => a !== undefined && a.savingsUsd >= 0.005);
   const actions = candidates
