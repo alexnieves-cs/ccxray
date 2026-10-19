@@ -1,0 +1,8 @@
+dist
+coverage
+pnpm-lock.yaml
+test/fixtures
+test/__snapshots__
+bench/out
+*.jsonl
+*.md
