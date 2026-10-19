@@ -1,4 +1,4 @@
-// `ccxray capture` (opt-in, API-key only; docs/capture.md). The server lives in a separate
+// `tknxray capture` (opt-in, API-key only; docs/capture.md). The server lives in a separate
 // bundle (dist/capture.js) loaded here only after the explicit flag, so the main bundle keeps
 // passing the no-network scan.
 import { parseArgs } from 'node:util';
@@ -6,7 +6,7 @@ import type { CaptureHandle, CaptureOptions } from '../capture/index.js';
 
 export const CAPTURE_FLAG = 'i-understand-this-is-api-key-only';
 
-export const CAPTURE_HELP = `Usage: ccxray capture --${CAPTURE_FLAG} [--port N] [--timeout SECONDS]
+export const CAPTURE_HELP = `Usage: tknxray capture --${CAPTURE_FLAG} [--port N] [--timeout SECONDS]
 
 Opt-in, API-key only. Starts a local server on 127.0.0.1 that measures the sizes (tool
 definitions, system prompt, messages) of the FIRST request Claude Code sends to it, answers
@@ -55,13 +55,13 @@ export async function captureCommand(
   const port = values.port === undefined ? 0 : Number(values.port);
   const timeout = values.timeout === undefined ? 300 : Number(values.timeout);
   if (!Number.isInteger(port) || port < 0 || port > 65535 || !(timeout > 0)) {
-    out('ccxray capture: --port must be 0-65535 and --timeout a positive number\n');
+    out('tknxray capture: --port must be 0-65535 and --timeout a positive number\n');
     return 2;
   }
   const { startCapture } = await load();
   const h = await startCapture({ port, timeoutMs: timeout * 1000, out });
   out(
-    `ccxray capture listening on http://127.0.0.1:${h.port} (local only, forwards nothing).\n` +
+    `tknxray capture listening on http://127.0.0.1:${h.port} (local only, forwards nothing).\n` +
       `In another terminal, with ANTHROPIC_API_KEY set (not a subscription login), run:\n` +
       `  ANTHROPIC_BASE_URL=http://127.0.0.1:${h.port} claude -p "say hi"\n` +
       `Claude Code will show an error; that is expected.\n`,

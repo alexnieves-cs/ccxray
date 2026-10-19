@@ -1,5 +1,5 @@
 {
-  "name": "ccxray-dev",
+  "name": "tknxray",
   "private": true,
   "version": "0.0.0",
   "description": "Local-only CLI that explains where Claude Code tokens go. Reads your transcripts; no network calls.",
@@ -7,7 +7,7 @@
   "author": "Alex Nieves",
   "type": "module",
   "bin": {
-    "ccxray": "bin/ccxray.js"
+    "tknxray": "bin/tknxray.js"
   },
   "files": [
     "bin",

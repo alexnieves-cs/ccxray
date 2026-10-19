@@ -74,7 +74,7 @@ export function within(ours: Counts, theirs: Counts): boolean {
 }
 
 /**
- * ccxray sessions keyed for matching ccusage: subagent sessions are folded into their parent
+ * tknxray sessions keyed for matching ccusage: subagent sessions are folded into their parent
  * (UNVERIFIED: that ccusage reports a subagent under its parent's sessionId).
  */
 export function oursBySession(
@@ -111,7 +111,7 @@ export function compareReport(
 ): { lines: string[]; pass: boolean } {
   const lines: string[] = ['', `ccusage cross-check (±${TOLERANCE_PCT}% per metric)`];
   const total = theirs.totals ?? sumCounts([...theirs.sessions.values()]);
-  lines.push('  metric         ccxray        ccusage       diff');
+  lines.push('  metric         tknxray       ccusage       diff');
   for (const m of METRICS)
     lines.push(
       `  ${m.padEnd(12)} ${n(ours.all[m]).padStart(14)} ${n(total[m]).padStart(14)} ` +
@@ -129,7 +129,7 @@ export function compareReport(
     const o = ours.bySession.get(id);
     if (o === undefined) {
       missing++;
-      lines.push(`  ${hashId(id)}  not found in ccxray`);
+      lines.push(`  ${hashId(id)}  not found in tknxray`);
       continue;
     }
     const good = within(o, t);
@@ -142,8 +142,8 @@ export function compareReport(
   const extra = [...ours.bySession.keys()].filter((k) => !theirs.sessions.has(k)).length;
   lines.push(
     `  sessions: ${theirs.sessions.size} in ccusage · ${ok} pass · ` +
-      `${theirs.sessions.size - ok - missing} fail · ${missing} missing in ccxray · ` +
-      `${extra} only in ccxray`,
+      `${theirs.sessions.size - ok - missing} fail · ${missing} missing in tknxray · ` +
+      `${extra} only in tknxray`,
   );
   return { lines, pass };
 }
@@ -180,7 +180,7 @@ async function mainScript(argv: string[]): Promise<number> {
   });
   const sum = (m: Record<string, number>): number => Object.values(m).reduce((a, b) => a + b, 0);
   const lines = [
-    'ccxray validate:real (counts only)',
+    'tknxray validate:real (counts only)',
     `roots found: ${stats.roots.length} · files ${n(stats.files)} · ${(stats.bytes / 1e6).toFixed(1)} MB`,
     `lines ${n(stats.lines)} · blank ${n(stats.blankLines)} · malformed ${n(stats.malformedLines)}`,
     `unknown record types: ${Object.keys(stats.unknownRecordTypes).length} kinds, ` +

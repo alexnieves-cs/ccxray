@@ -1,21 +1,23 @@
-# ccxray
+# tknxray
 
 **Explains where your Claude Code tokens go and what you can change, using the transcripts already on your machine.**
+
+tknxray (repo: ccxray; renamed because `ccxray` is taken on npm by an unrelated project).
 
 [![CI](https://github.com/alexnieves-cs/ccxray/actions/workflows/ci.yml/badge.svg)](https://github.com/alexnieves-cs/ccxray/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![ccxray analyzing a synthetic demo corpus, then showing the per-turn view of one session](docs/demo.gif)
+![tknxray analyzing a synthetic demo corpus, then showing the per-turn view of one session](docs/demo.gif)
 
 <sub>The GIF runs against a synthetic corpus made by [`scripts/demo-corpus.ts`](scripts/demo-corpus.ts). Every number in it is made up; it shows the output format, not real usage. Recorded with [vhs](https://github.com/charmbracelet/vhs) from [`docs/demo.tape`](docs/demo.tape).</sub>
 
-Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** tokens you used. ccxray tries to tell you **why**: cache rebuilds and their likely cause, fixed overhead per fresh context, huge tool outputs, files read again unchanged, MCP tools you never call, subagent spend and wasted error turns. Every finding points at the session and turn it came from, so you can check it by hand.
+Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** tokens you used. tknxray tries to tell you **why**: cache rebuilds and their likely cause, fixed overhead per fresh context, huge tool outputs, files read again unchanged, MCP tools you never call, subagent spend and wasted error turns. Every finding points at the session and turn it came from, so you can check it by hand.
 
 > **Status: preview.** Milestones M0–M5 are implemented and tested against synthetic fixtures. Validation against real logs is **pending**. See the [roadmap](#roadmap).
 
 ## Privacy
 
-- **Local only.** ccxray reads files. It makes **no network calls**: no telemetry, no update checks, no crash reports, no remote pricing. CI enforces this: [`test/no-network.test.ts`](test/no-network.test.ts) scans the built `dist/`, and runtime dependencies are allow-listed in [`deps-allowlist.json`](deps-allowlist.json) (there are none today).
+- **Local only.** tknxray reads files. It makes **no network calls**: no telemetry, no update checks, no crash reports, no remote pricing. CI enforces this: [`test/no-network.test.ts`](test/no-network.test.ts) scans the built `dist/`, and runtime dependencies are allow-listed in [`deps-allowlist.json`](deps-allowlist.json) (there are none today).
 - **What it reads:** Claude Code's transcripts under `~/.claude/projects` (also `~/.config/claude/projects` and `CLAUDE_CONFIG_DIR`, comma-separated). `--root DIR` points it somewhere else.
 - **What reports contain:** token counts, tool names, file paths relative to the project, and the first two words of Bash commands. **Prompt and file contents are not embedded** unless you pass `--include-content`.
 - The HTML report is a single self-contained file that loads nothing remote.
@@ -23,10 +25,10 @@ Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** t
 
 ## Install and usage
 
-> **Not published yet.** The npm package name is not decided (`ccxray` is taken on npm by an unrelated project; see [SPEC §10](docs/SPEC.md#10-distribution)). Once it is published it will run as:
+> **Not published yet.** The npm package will be `tknxray` (see [SPEC §10](docs/SPEC.md#10-distribution)). Once it is published it will run as:
 >
 > ```sh
-> npx <name>
+> npx tknxray
 > ```
 
 Run from source (Node ≥ 20, pnpm):
@@ -40,19 +42,19 @@ node dist/cli.js            # analyze the last 7 days of ~/.claude/projects
 node dist/cli.js --help
 ```
 
-The examples below write `ccxray` for `node dist/cli.js`.
+The examples below write `tknxray` for `node dist/cli.js`.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `ccxray` | Analyze the sessions of the last 7 days: measured token totals, estimated attribution, top findings with a suggested fix each. Filters: `--since DATE`, `--until DATE` (UTC days), `--project NAME`. |
-| `ccxray --json` | Machine-readable report on stdout, versioned by [`schema/report.v1.json`](schema/report.v1.json). |
-| `ccxray --html report.html` | Single-file HTML report (inline CSS/JS, no external assets). |
-| `ccxray session <id\|prefix\|latest>` | Per-turn view of one session: gap since the previous turn, model, input, cache write/read, output, tools called, flags for rebuilds (🔁), repeated reads (📄) and big outputs (📦), and its subagents. |
-| `ccxray doctor` | Discovered log dirs, Claude Code versions, parse stats, malformed lines and unknown record types. Run it first if numbers look off. |
-| `ccxray fix mcp` | **Preview.** Prints a `permissions.deny` diff for MCP tools never called in the analyzed sessions. Dry run by default; writes only with `--apply`, after a backup. See [docs/fix-mcp.md](docs/fix-mcp.md). |
-| `ccxray capture --i-understand-this-is-api-key-only` | **Opt-in, API key only.** See [below](#capture-opt-in-api-key-only). |
+| `tknxray` | Analyze the sessions of the last 7 days: measured token totals, estimated attribution, top findings with a suggested fix each. Filters: `--since DATE`, `--until DATE` (UTC days), `--project NAME`. |
+| `tknxray --json` | Machine-readable report on stdout, versioned by [`schema/report.v1.json`](schema/report.v1.json). |
+| `tknxray --html report.html` | Single-file HTML report (inline CSS/JS, no external assets). |
+| `tknxray session <id\|prefix\|latest>` | Per-turn view of one session: gap since the previous turn, model, input, cache write/read, output, tools called, flags for rebuilds (🔁), repeated reads (📄) and big outputs (📦), and its subagents. |
+| `tknxray doctor` | Discovered log dirs, Claude Code versions, parse stats, malformed lines and unknown record types. Run it first if numbers look off. |
+| `tknxray fix mcp` | **Preview.** Prints a `permissions.deny` diff for MCP tools never called in the analyzed sessions. Dry run by default; writes only with `--apply`, after a backup. See [docs/fix-mcp.md](docs/fix-mcp.md). |
+| `tknxray capture --i-understand-this-is-api-key-only` | **Opt-in, API key only.** See [below](#capture-opt-in-api-key-only). |
 | cc-slim hook | **Prototype.** A PostToolUse hook that shortens huge Bash outputs. See [below](#cc-slim-hook-prototype). |
 
 Other options: `--include-content`, `--threshold.KEY=VALUE` (see [docs/THRESHOLDS.md](docs/THRESHOLDS.md)), `--no-color`, `--root DIR` (repeatable).
@@ -62,7 +64,7 @@ Other options: `--include-content`, `--threshold.KEY=VALUE` (see [docs/THRESHOLD
 Transcripts do not always say how big your tool definitions and system prompt are. `capture` measures one real request: it listens on `127.0.0.1`, you point Claude Code at it with `ANTHROPIC_BASE_URL` and an **API key**, and it prints sizes only (bytes and chars [M], tokens as chars/4 [E]), answers with an error and exits.
 
 ```sh
-ccxray capture --i-understand-this-is-api-key-only               # prints the port
+tknxray capture --i-understand-this-is-api-key-only               # prints the port
 ANTHROPIC_BASE_URL=http://127.0.0.1:<port> claude -p "say hi"    # in another terminal
 ```
 
@@ -124,7 +126,7 @@ From [SPEC §5](docs/SPEC.md#5-analyzers) and [`src/analyzers/`](src/analyzers).
 
 ## Measured vs estimated
 
-Every number ccxray prints carries one of two labels:
+Every number tknxray prints carries one of two labels:
 
 - **[M] measured:** summed directly from the `usage` fields Claude Code logs for each API response (input, cache write, cache read, output), or a plain count of records. Exact for what the logs contain.
 - **[E] estimated** (also shown with a leading `~`): a heuristic. Token sizes of tool outputs, reads and tool definitions use `ceil(chars / 4)`, not a tokenizer. Splitting a measured total between causes or tools is an attribution guess. Treat these as orders of magnitude.
@@ -133,7 +135,7 @@ Estimates are never presented as exact. Findings from different analyzers can ov
 
 ## HTML report
 
-`ccxray --html report.html` writes one self-contained file you can attach to a bug report:
+`tknxray --html report.html` writes one self-contained file you can attach to a bug report:
 
 ![HTML report of the synthetic demo corpus](docs/report.png)
 
@@ -162,7 +164,7 @@ Read [CLAUDE.md](CLAUDE.md) (the rules for humans and agents) and [docs/SPEC.md]
 
 ## Disclaimer
 
-ccxray is an independent project. It is **not affiliated with, endorsed by or sponsored by Anthropic**. "Claude" and "Claude Code" are trademarks of Anthropic. ccxray only reads logs on your machine and does not change Claude Code's requests.
+tknxray is an independent project. It is **not affiliated with, endorsed by or sponsored by Anthropic**. "Claude" and "Claude Code" are trademarks of Anthropic. tknxray only reads logs on your machine and does not change Claude Code's requests.
 
 ## License
 

@@ -196,7 +196,7 @@ const verdict = (ok: boolean): string => (ok ? 'meets' : 'misses');
 export function toMarkdown(rep: Report): string {
   const m = rep.machine;
   const L: string[] = [
-    `# ccxray perf, ${rep.date} [M]`,
+    `# tknxray perf, ${rep.date} [M]`,
     '',
     `All numbers are **[M] measured** on: ${m.cpu} (${m.cores} cores), ${m.os}, ${m.memGiB} GiB RAM, Node ${m.node}.`,
     'SPEC §8 targets are set for an M-series laptop; on any other machine read "meets/misses" as a rough guide.',
@@ -262,8 +262,8 @@ export function toMarkdown(rep: Report): string {
     const spec =
       size === TARGETS.coldStartCorpus ? '' : ` (SPEC target is for ${TARGETS.coldStartCorpus})`;
     L.push(
-      `| Cold start < ${TARGETS.coldStartSeconds} s for ${size}${spec} | ${f2(d.wall / 1000)} s [M] (\`node bin/ccxray.js --json\`, all sessions, ${f1(rep.coldStart.report.bytes / 1e6)} MB; not npx) | ${verdict(d.wall / 1000 < TARGETS.coldStartSeconds)} |`,
-      `| (info) \`ccxray --version\` | ${Math.round(v)} ms [M] | n/a |`,
+      `| Cold start < ${TARGETS.coldStartSeconds} s for ${size}${spec} | ${f2(d.wall / 1000)} s [M] (\`node bin/tknxray.js --json\`, all sessions, ${f1(rep.coldStart.report.bytes / 1e6)} MB; not npx) | ${verdict(d.wall / 1000 < TARGETS.coldStartSeconds)} |`,
+      `| (info) \`tknxray --version\` | ${Math.round(v)} ms [M] | n/a |`,
     );
   }
   if (rep.pkg)
@@ -357,17 +357,17 @@ async function main(): Promise<number> {
     const c = await corpus(size);
     const versionMs: number[] = [];
     for (let i = 0; i < Math.max(iterations, 5); i++)
-      versionMs.push(node(['bin/ccxray.js', '--version']).sample.wallMs);
-    // The default report command, as `npx ccxray` runs it (SPEC §8), over the whole corpus.
+      versionMs.push(node(['bin/tknxray.js', '--version']).sample.wallMs);
+    // The default report command, as `npx tknxray` runs it (SPEC §8), over the whole corpus.
     const report: StageResult = {
-      stage: 'ccxray --json (cold start)',
+      stage: 'tknxray --json (cold start)',
       size,
       bytes: c.summary.bytes,
       samples: [],
     };
     for (let i = 0; i < iterations; i++)
       report.samples.push(
-        node(['bin/ccxray.js', '--root', c.root, '--since', '1970-01-01', '--json'], {
+        node(['bin/tknxray.js', '--root', c.root, '--since', '1970-01-01', '--json'], {
           hook: true,
         }).sample,
       );

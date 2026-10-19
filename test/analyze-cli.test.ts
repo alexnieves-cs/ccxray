@@ -50,11 +50,11 @@ function validator() {
   return ajv.compile(JSON.parse(readFileSync(schema, 'utf8')) as object);
 }
 
-describe('ccxray (default command)', () => {
+describe('tknxray (default command)', () => {
   it('prints the terminal report within 100 columns', async () => {
     const { code, out } = await run([...ROOTS, ...SINCE, '--no-color']);
     expect(code).toBe(0);
-    expect(out).toContain('ccxray · 7 sessions (2 subagent)');
+    expect(out).toContain('tknxray · 7 sessions (2 subagent)');
     expect(out).toContain('2 rebuilds cost 42k cache-write tokens');
     expect(out).toContain('`pnpm test` returned up to 48k chars inline');
     expect(out).toContain('src/api/client.ts re-read 2× unchanged');
@@ -151,7 +151,7 @@ describe('ccxray (default command)', () => {
     const { code, out, err } = await runArgs([...argv, '--root', join(FX, 'does-not-exist')]);
     expect(code).toBe(2);
     expect(out).toBe('');
-    expect(err).toMatch(/^ccxray: /);
+    expect(err).toMatch(/^tknxray: /);
   });
 
   it('parses dates and threshold flags', () => {

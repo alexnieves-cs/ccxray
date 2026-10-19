@@ -1,4 +1,4 @@
-// `ccxray doctor`: what the parser found. Counts only, never content (CLAUDE.md hard rule 4).
+// `tknxray doctor`: what the parser found. Counts only, never content (CLAUDE.md hard rule 4).
 
 import { defaultRoots } from '../discover.js';
 import { loadSessions } from '../parser/index.js';
@@ -46,7 +46,7 @@ export async function doctor(
     return stats.files > 0 ? 0 : 1;
   }
   const lines: string[] = [
-    'ccxray doctor (counts only; no prompt or file content is read out)',
+    'tknxray doctor (counts only; no prompt or file content is read out)',
     '',
   ];
   if (stats.roots.length === 0) {

@@ -118,13 +118,13 @@ possibly sensitive output and is not implemented either.
 
 ## 5. Opt-in only
 
-cc-slim is never installed by ccxray. The user adds the hook entry by hand (or, later, with an
-explicit `ccxray fix slim --apply`, which would print a diff first like `fix mcp`).
+cc-slim is never installed by tknxray. The user adds the hook entry by hand (or, later, with an
+explicit `tknxray fix slim --apply`, which would print a diff first like `fix mcp`).
 
 ## 6. Measurement plan (before any claim)
 
 0. **Does the hook take effect?** Install it in a scratch project, run a command with a large
-   output, then check the transcript: ccxray A5 reports the logged `tool_result` chars. If
+   output, then check the transcript: tknxray A5 reports the logged `tool_result` chars. If
    they are unchanged, PostToolUse cannot replace Bash output (§3.1) and the §3.3 design is
    the only route.
 1. **Compressor behavior on synthetic outputs:** `pnpm bench:slim` (bench/slim.ts) prints chars

@@ -231,7 +231,7 @@ describe('unifiedDiff', () => {
   });
 });
 
-describe('ccxray fix mcp', () => {
+describe('tknxray fix mcp', () => {
   const findings = [usage('github', ['create_issue'], ['get_issue']), usage('slack', ['post'])];
   const now = new Date('2026-10-18T12:34:56.789Z');
   function setup(content: string | null): { cwd: string; file: string } {
@@ -279,7 +279,7 @@ describe('ccxray fix mcp', () => {
     const { cwd, file } = setup(EXISTING);
     const { code, out } = await run(['fix', 'mcp', '--apply'], cwd);
     expect(code).toBe(0);
-    const backup = `${file}.ccxray-backup-2026-10-18T12-34-56-789Z`;
+    const backup = `${file}.tknxray-backup-2026-10-18T12-34-56-789Z`;
     expect(readFileSync(backup, 'utf8')).toBe(EXISTING);
     expect(out).toContain('Wrote 2 deny rule(s)');
     const written = JSON.parse(readFileSync(file, 'utf8'));
@@ -293,7 +293,7 @@ describe('ccxray fix mcp', () => {
     expect(again.out).toContain('Nothing to add');
     expect(readdirSync(join(cwd, '.claude')).sort()).toEqual([
       'settings.local.json',
-      'settings.local.json.ccxray-backup-2026-10-18T12-34-56-789Z',
+      'settings.local.json.tknxray-backup-2026-10-18T12-34-56-789Z',
     ]);
   });
 
@@ -319,7 +319,7 @@ describe('ccxray fix mcp', () => {
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
     expect(JSON.parse(readFileSync(realFile, 'utf8')).permissions.deny).toContain('mcp__slack');
     expect(statSync(realFile).mode & 0o777).toBe(0o640);
-    expect(readdirSync(cwd).some((n) => n.startsWith('real-settings.json.ccxray-backup-'))).toBe(
+    expect(readdirSync(cwd).some((n) => n.startsWith('real-settings.json.tknxray-backup-'))).toBe(
       true,
     );
   });
@@ -331,14 +331,14 @@ describe('ccxray fix mcp', () => {
       beforeCommit: () => writeFileSync(file, edited),
     });
     expect(code).toBe(2);
-    expect(out).toContain('changed while ccxray was running; nothing was written');
+    expect(out).toContain('changed while tknxray was running; nothing was written');
     expect(readFileSync(file, 'utf8')).toBe(edited);
-    expect(readdirSync(join(cwd, '.claude')).some((n) => n.includes('ccxray-tmp'))).toBe(false);
+    expect(readdirSync(join(cwd, '.claude')).some((n) => n.includes('tknxray-tmp'))).toBe(false);
   });
 
   it('--apply picks a -1, -2… backup name when the timestamped one exists', async () => {
     const { cwd, file } = setup(EXISTING);
-    const base = `${file}.ccxray-backup-2026-10-18T12-34-56-789Z`;
+    const base = `${file}.tknxray-backup-2026-10-18T12-34-56-789Z`;
     writeFileSync(base, 'older backup');
     writeFileSync(`${base}-1`, 'older backup 1');
     expect((await run(['fix', 'mcp', '--apply'], cwd)).code).toBe(0);
@@ -349,6 +349,6 @@ describe('ccxray fix mcp', () => {
   it('is routed from main (usage without a subcommand)', async () => {
     let out = '';
     expect(await main(['fix'], (s) => (out += s))).toBe(2);
-    expect(out).toContain('Usage: ccxray fix mcp');
+    expect(out).toContain('Usage: tknxray fix mcp');
   });
 });

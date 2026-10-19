@@ -5,7 +5,7 @@ DRAFT — not posted; needs Alex's approval
 1/
 Hitting Claude Code usage limits and can't tell why?
 
-I built ccxray: it reads the transcripts Claude Code already keeps on your machine and explains where the tokens went. Local only, no telemetry, MIT.
+I built tknxray: it reads the transcripts Claude Code already keeps on your machine and explains where the tokens went. Local only, no telemetry, MIT.
 
 github.com/alexnieves-cs/ccxray
 

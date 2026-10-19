@@ -6,15 +6,15 @@ import { fixCommand } from './commands/fix-mcp.js';
 import { sessionCommand } from './commands/session.js';
 import { VERSION } from './version.js';
 
-const HELP = `ccxray ${VERSION}: explain where your Claude Code tokens go (local only, no network)
+const HELP = `tknxray ${VERSION}: explain where your Claude Code tokens go (local only, no network)
 
 Usage:
-  ccxray [--since DATE] [--until DATE] [--project NAME] [--json] [--html FILE]
-         [--include-content] [--threshold.KEY=VALUE]... [--no-color] [--root DIR]...
-  ccxray session <id|prefix|latest> [--root DIR]... [--json] [--threshold.KEY=VALUE]...
-  ccxray doctor [--root DIR]... [--json]
-  ccxray fix mcp [--settings FILE] [--apply]   (preview; see ccxray fix mcp --help)
-  ccxray capture --i-understand-this-is-api-key-only   (opt-in; see docs/capture.md)
+  tknxray [--since DATE] [--until DATE] [--project NAME] [--json] [--html FILE]
+          [--include-content] [--threshold.KEY=VALUE]... [--no-color] [--root DIR]...
+  tknxray session <id|prefix|latest> [--root DIR]... [--json] [--threshold.KEY=VALUE]...
+  tknxray doctor [--root DIR]... [--json]
+  tknxray fix mcp [--settings FILE] [--apply]   (preview; see tknxray fix mcp --help)
+  tknxray capture --i-understand-this-is-api-key-only   (opt-in; see docs/capture.md)
 
 Options:
   --since DATE    first day to analyze, YYYY-MM-DD UTC (default: 7 days ago)

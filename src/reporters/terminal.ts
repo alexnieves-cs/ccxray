@@ -106,7 +106,7 @@ function header(report: Report, p: Palette, width: number): string[] {
   const subagents = report.sessions.filter((s) => s.isSubagent).length;
   const span = dateSpan(report);
   const parts = [
-    p.bold('ccxray'),
+    p.bold('tknxray'),
     `${formatInt(report.sessions.length)} sessions` + (subagents ? ` (${subagents} subagent)` : ''),
     `${formatInt(report.totals.all.turns)} assistant turns`,
     span ? formatDateRange(span.from, span.to) : 'unknown dates',
@@ -227,7 +227,7 @@ function warnings(report: Report, p: Palette, width: number): string[] {
   return [
     '',
     ...wrapParts(
-      [`${p.yellow('PARSE WARNINGS')}  ${w[0]}`, ...w.slice(1), 'run `ccxray doctor` for details'],
+      [`${p.yellow('PARSE WARNINGS')}  ${w[0]}`, ...w.slice(1), 'run `tknxray doctor` for details'],
       ' · ',
       width,
       '  ',
@@ -238,7 +238,7 @@ function warnings(report: Report, p: Palette, width: number): string[] {
 function footer(report: Report, p: Palette, width: number): string[] {
   const top = sortFindings(report.findings)[0]?.evidence[0]?.sessionId ?? report.sessions[0]?.id;
   const hint = [
-    top ? `Run \`ccxray session ${shortId(top)}\` for per-turn detail` : '',
+    top ? `Run \`tknxray session ${shortId(top)}\` for per-turn detail` : '',
     '`--html` for a shareable report',
   ].filter(Boolean);
   const legend = [`[M] ${LEGEND_MEASURED}`, `[E] / ~ ${LEGEND_ESTIMATED}`];
@@ -251,7 +251,7 @@ function footer(report: Report, p: Palette, width: number): string[] {
 
 function emptyState(report: Report, p: Palette, width: number, homeDir?: string): string[] {
   const roots = report.stats.roots;
-  const out = [`${p.bold('ccxray')} · no sessions found`, ''];
+  const out = [`${p.bold('tknxray')} · no sessions found`, ''];
   if (roots.length === 0) out.push('  No Claude Code log directories were found.');
   else {
     out.push('  Looked in:');
@@ -267,7 +267,7 @@ function emptyState(report: Report, p: Palette, width: number, homeDir?: string)
   out.push(
     `  Files scanned: ${formatInt(report.stats.files)} · lines: ${formatInt(report.stats.lines)}`,
     '',
-    '  Try a wider --since, set CLAUDE_CONFIG_DIR, or run `ccxray doctor`.',
+    '  Try a wider --since, set CLAUDE_CONFIG_DIR, or run `tknxray doctor`.',
   );
   return [...out, ...warnings(report, p, width)];
 }

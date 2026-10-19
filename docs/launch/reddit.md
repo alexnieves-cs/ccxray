@@ -12,7 +12,7 @@ Built with Claude / Open source (whichever the sub uses)
 
 ## Body
 
-If you've hit usage limits and couldn't tell why, this might help. **ccxray** reads the JSONL transcripts Claude Code already keeps in `~/.claude/projects` and tells you *why* tokens were used, not just how many:
+If you've hit usage limits and couldn't tell why, this might help. **tknxray** reads the JSONL transcripts Claude Code already keeps in `~/.claude/projects` and tells you *why* tokens were used, not just how many:
 
 - **Cache rebuilds** and their likely cause: an idle gap longer than the cache TTL, a Claude Code upgrade, a `/model` switch, compaction, or a CLAUDE.md edit mid-session.
 - **Fixed overhead** of each fresh context, per Claude Code version.

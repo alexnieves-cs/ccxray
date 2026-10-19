@@ -2,11 +2,11 @@
 //
 //   tsx scripts/demo-corpus.ts <dir>
 //
-// Writes <dir>/.claude/projects/..., so `HOME=<dir> ccxray` reads it through the default
+// Writes <dir>/.claude/projects/..., so `HOME=<dir> tknxray` reads it through the default
 // discovery and nothing real is touched. Everything is synthetic: made-up projects, file names,
 // commands and usage numbers, built with the fixture DSL (scripts/make-fixture.ts). The numbers
 // are chosen so most analyzers have something to show; they say nothing about real usage.
-// Dates are fixed (2026-10-12 to 2026-10-16), so run ccxray with `--since 2026-10-12`.
+// Dates are fixed (2026-10-12 to 2026-10-16), so run tknxray with `--since 2026-10-12`.
 
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';

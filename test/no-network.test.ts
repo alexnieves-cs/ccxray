@@ -103,7 +103,7 @@ describe('no-network', () => {
     expect(hits).toEqual([]);
   });
 
-  // `ccxray capture` (opt-in, docs/capture.md) is the single allowlisted file: a local listener
+  // `tknxray capture` (opt-in, docs/capture.md) is the single allowlisted file: a local listener
   // that may import node:http, but must never open an outbound connection or bind beyond loopback.
   it('dist/capture.js only listens on 127.0.0.1 and makes no outbound calls', () => {
     expect(existsSync(CAPTURE), 'dist/capture.js missing: run `pnpm build` first').toBe(true);

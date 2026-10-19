@@ -157,7 +157,7 @@ export async function analyze(
     o = parse(argv, now);
   } catch (x) {
     if (!(x instanceof UsageError)) throw x;
-    err(`ccxray: ${x.message}\nRun \`ccxray --help\` for usage.\n`);
+    err(`tknxray: ${x.message}\nRun \`tknxray --help\` for usage.\n`);
     return 2;
   }
   const { sessions, stats } = await loadSessions({
@@ -184,7 +184,7 @@ export async function analyze(
       writeFileSync(path, render(report, 'html'));
     } catch (x) {
       err(
-        `ccxray: could not write the HTML report to ${path}: ` +
+        `tknxray: could not write the HTML report to ${path}: ` +
           `${x instanceof Error ? x.message : String(x)}\n`,
       );
       return 2;

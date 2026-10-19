@@ -19,22 +19,22 @@ Hide
 Type "export REPO=$PWD DEMO=$(mktemp -d) && npx tsx scripts/demo-corpus.ts $DEMO >/dev/null"
 Enter
 Sleep 4s
-Type "export HOME=$DEMO PS1='$ ' && unset CLAUDE_CONFIG_DIR && cd $DEMO && ccxray() { node $REPO/dist/cli.js $@; } && clear"
+Type "export HOME=$DEMO PS1='$ ' && unset CLAUDE_CONFIG_DIR && cd $DEMO && tknxray() { node $REPO/dist/cli.js $@; } && clear"
 Enter
 Sleep 1s
 Show
 
-Type "# synthetic demo corpus; ccxray reads ~/.claude/projects, locally"
+Type "# synthetic demo corpus; tknxray reads ~/.claude/projects, locally"
 Enter
 Sleep 500ms
-Type "ccxray --since 2026-10-12"
+Type "tknxray --since 2026-10-12"
 Sleep 300ms
 Enter
 Sleep 7s
 
 Type "clear"
 Enter
-Type "ccxray session 72f3"
+Type "tknxray session 72f3"
 Sleep 300ms
 Enter
 Sleep 6s

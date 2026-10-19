@@ -3,7 +3,7 @@
 // without one, the analyzer reports call counts only. Definition sizes are chars [M] and
 // tokens [E chars/4], paid on every cold turn.
 //
-// Finding.data for MCP servers is consumed by `ccxray fix mcp` (M5). Keep exactly:
+// Finding.data for MCP servers is consumed by `tknxray fix mcp` (M5). Keep exactly:
 //   { server: string, unusedTools: string[], usedTools: string[], defChars?: number }
 // with full tool names (`mcp__<server>__<tool>`). defChars = definition chars of the unused tools.
 //
@@ -149,8 +149,8 @@ export const toolUsage: Analyzer = {
         ),
         fix: {
           summary: none
-            ? `Disable the "${server}" MCP server, or scope it to a subagent (ccxray fix mcp, M5)`
-            : `Deny the unused "${server}" tools in permissions.deny (ccxray fix mcp, M5)`,
+            ? `Disable the "${server}" MCP server, or scope it to a subagent (tknxray fix mcp, M5)`
+            : `Deny the unused "${server}" tools in permissions.deny (tknxray fix mcp, M5)`,
         },
       });
     }

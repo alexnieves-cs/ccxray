@@ -1,4 +1,4 @@
-// `ccxray session <id|latest>`: per-turn drill-down for one session (SPEC §3).
+// `tknxray session <id|latest>`: per-turn drill-down for one session (SPEC §3).
 
 import { parseArgs } from 'node:util';
 import { repeatedReadToolUseIds } from '../analyzers/repeated-read.js';
@@ -185,19 +185,19 @@ export async function sessionCommand(
       allowPositionals: true,
     }));
   } catch (e) {
-    out(`ccxray session: ${e instanceof Error ? e.message : String(e)}\n`);
+    out(`tknxray session: ${e instanceof Error ? e.message : String(e)}\n`);
     return 2;
   }
   const args = positionals[0] === 'session' ? positionals.slice(1) : positionals;
   if (args.length !== 1) {
-    out('Usage: ccxray session <id|prefix|latest> [--root DIR]... [--json] [--threshold.KEY=N]\n');
+    out('Usage: tknxray session <id|prefix|latest> [--root DIR]... [--json] [--threshold.KEY=N]\n');
     return 2;
   }
   const roots = values.root ?? defaultRoots();
   const { sessions } = await loadSessions({ roots });
   const found = resolveSession(sessions, args[0]!);
   if ('error' in found) {
-    out(`ccxray session: ${found.error}\n`);
+    out(`tknxray session: ${found.error}\n`);
     return 1;
   }
   const { view, subagentRows } = buildSessionView(found.session, sessions, th);

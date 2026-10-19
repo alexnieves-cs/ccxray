@@ -268,7 +268,7 @@ export class FileParser {
  * envelope `agentId` = `<id>`), or, UNVERIFIED, when every user/assistant record has
  * `isSidechain: true` and an `agentId` (e.g. a flat `agent-<id>.jsonl` next to the parent; parent
  * = envelope sessionId). Being deeper below the root does not make a file a subagent.
- * Session.id is `<parentSessionId>:agent-<agentId>` (or `<parentSessionId>:<file stem>`), a ccxray
+ * Session.id is `<parentSessionId>:agent-<agentId>` (or `<parentSessionId>:<file stem>`), a tknxray
  * choice: `:` never occurs in a sessionId UUID, so it cannot collide with the parent.
  */
 export function sessionIdentity(
