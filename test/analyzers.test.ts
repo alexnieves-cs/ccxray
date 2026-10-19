@@ -20,6 +20,7 @@ import { emptyStats } from '../src/parser/index.js';
 import { buildReport } from '../src/pipeline.js';
 import { calibrate, calibrationSamples } from '../src/tokens/calibrate.js';
 import { built, cleanupTmp, ctx, fixture } from './helpers/analyzer-fixtures.js';
+import { observedCompaction } from './helpers/analyze.js';
 
 afterAll(cleanupTmp);
 
@@ -305,6 +306,25 @@ describe('A2/A3 cache-rebuild', () => {
     const sub = parent.agent('x1');
     turn(turn(turn(sub, warm[0]!), warm[1]!), rebuild, '6m');
     expect(run(cacheRebuild, await built('neg', [growth, small, cold, parent, sub]))).toEqual([]);
+  });
+
+  it('regression: the first turn after a compaction is not a rebuild', async () => {
+    // Shape seen in CC 2.1.302 (FORMAT.md Q5, synthetic numbers of the same size): cache_read
+    // drops from ~374k to ~80k and ~54k is written for the new summary prefix. The write is far
+    // under 0.5 × the previous context, so A2 does not count it.
+    const b = turn(turn(s('post-compaction'), warm[0]!), {
+      input: 2,
+      cacheWrite: 617,
+      cacheRead: 374_036,
+      output: 10,
+    });
+    observedCompaction(b).assistant({
+      usage: { input: 2, cacheWrite: 54_227, cacheRead: 79_590, output: 10 },
+      blocks: [text('ok')],
+    });
+    const sessions = await built('post-compaction', [b]);
+    expect(sessions[0]!.events.filter((e) => e.kind === 'compaction')).toHaveLength(2);
+    expect(run(cacheRebuild, sessions)).toEqual([]);
   });
 
   it('negative: thresholds are honored', async () => {

@@ -26,7 +26,11 @@ export function downsample(xs: readonly number[], n = CURVE_POINTS): number[] {
  * Compactions in a session. One compaction can leave several markers (e.g. a compact_boundary
  * record followed by an isCompactSummary line), so markers with no assistant turn between them
  * count once.
- * UNVERIFIED (FORMAT.md Q5): which markers one compaction writes; no real compaction seen yet.
+ * [M] CC 2.1.302–2.1.303 (FORMAT.md Q5): one compaction writes a `system`/`compact_boundary` record
+ * and, 4–5 lines later, an `isCompactSummary` user line stamped up to ~0.3 s *before* the
+ * boundary, with no assistant turn between them, so the pair counts once (markers are sorted by
+ * timestamp). Other markers (`summary` records) are still accepted.
+ * UNVERIFIED: the marker set of other Claude Code versions, and `summary` records as markers.
  */
 export function countCompactions(s: Session): number {
   const turnTimes = realTurns(s).map((t) => t.ts);

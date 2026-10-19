@@ -152,7 +152,7 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 
 ### 4.4 Open questions [UNVERIFIED]. Each must be resolved in M1 against real logs
 
-> **Status (2026-10-18):** answered as far as current evidence allows in [docs/FORMAT.md](FORMAT.md#spec-44-answers). Q1–Q4 have [M] answers from one CC 2.1.302 session (notably, Q3: tool definitions *are* logged in `attachment.type = prompt_snapshot` on that version; Q1: large outputs are externalized as a `<persisted-output>` preview plus `{sessionId}/tool-results/<id>.txt`, threshold and KB unit UNVERIFIED; Q4: subagents are `{sessionId}/subagents/agent-<id>.jsonl`, linked by `agent-<id>.meta.json` `toolUseId` and the parent's `toolUseResult.agentId`). Q5 remains UNVERIFIED until a corpus with compaction is probed.
+> **Status (2026-10-18):** answered as far as current evidence allows in [docs/FORMAT.md](FORMAT.md#spec-44-answers). Q1–Q4 have [M] answers from one CC 2.1.302 session (notably, Q3: tool definitions *are* logged in `attachment.type = prompt_snapshot` on that version; Q1: large outputs are externalized as a `<persisted-output>` preview plus `{sessionId}/tool-results/<id>.txt`, threshold and KB unit UNVERIFIED; Q4: subagents are `{sessionId}/subagents/agent-<id>.jsonl`, linked by `agent-<id>.meta.json` `toolUseId` and the parent's `toolUseResult.agentId`). Q5 has an [M] answer since 2026-10-19 from a CC 2.1.302–2.1.303 snapshot with 3 compactions: each writes a `system`/`compact_boundary` record (with `compactMetadata`) and, 4–5 lines later, an `isCompactSummary: true` user line stamped up to ~0.3 s *before* the boundary, with no assistant turn between them; the first turn after shows a cache_read drop that the A2 rule does not count as a rebuild.
 1. Is `tool_result` content always inline in the JSONL, or truncated or externalized for big outputs? This affects tool-output sizing.
 2. Do `attachment` records carry CLAUDE.md / memory / hook output, and can they be used to detect CLAUDE.md edits? (Fallback: compare file mtime against the session timeline.)
 3. Are tool definitions logged anywhere? (Assumption: **no**. Fixed overhead is inferred from first-turn `cache_creation + input`, and optionally measured exactly via the M5 capture mode with an API key only.)
@@ -165,7 +165,7 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - Lines without `requestId` are deduped by `message.id` within one file only.
 - Older versions may write partial `output_tokens` on earlier block lines; the largest is kept.
 - String `assistant.message.content` is one text block.
-- Compaction markers: `isCompactSummary`, `system`/`compact_boundary`, `summary` (Q5). `system`/`api_error` is an API error.
+- Compaction markers: `summary` records (Q5). *(`isCompactSummary` and `system`/`compact_boundary` are [M] since 2026-10-19, FORMAT.md Q5.)* `system`/`api_error` is an API error.
 - `isMeta: true` user lines are client-injected, not typed prompts.
 - One file = one session (its first `sessionId`). Besides the [M] `{sessionId}/subagents/agent-<id>.jsonl` layout, `{sessionId}/agent-<id>.jsonl` (UUID-shaped `{sessionId}` dir) and files whose every user/assistant record is `isSidechain` with an `agentId` (e.g. flat `agent-<id>.jsonl`) are treated as subagents (Q4); any other file, at any depth, is a main session whose project is its immediate parent dir. `Session.id = <parent>:agent-<id>` is a tknxray choice.
 - `<persisted-output>` sizes: `KB` = 1024, and the externalization threshold is unknown (Q1).
@@ -182,7 +182,7 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 **Analyzer assumptions added in M4 [UNVERIFIED]** (marked `// UNVERIFIED:` in `src/analyzers/`):
 - A7: a `prompt_snapshot`'s `tools[]` lists every tool sent on a cold turn (deferred tools may be missing), so a tool counts as defined only when some snapshot lists it (Q3).
 - A7: in `mcp__<server>__<tool>`, the server name ends at the first `__` after `mcp__`.
-- A8: compaction markers with no assistant turn between them belong to one compaction (Q5).
+- A8: compaction markers with no assistant turn between them belong to one compaction (Q5). *([M] for the observed `compact_boundary` + `isCompactSummary` pair, 3 of 3 in CC 2.1.302–2.1.303; still UNVERIFIED for `summary` records and for other versions.)*
 - A4: a resumed or continued session's first envelope record has a non-null `parentUuid` (`Session.continued`); such sessions, and sessions whose first kept turn is not the chain's first, are not baselines.
 - A7: `deferred_tools_record` attachments name tools whose definitions are not sent up front; names are read from `tools` / `toolNames` / `names` / `deferredTools` arrays (strings or `{name}`), and those tools cost 0 tokens per cold turn.
 - A10: a `system`/`api_error` record followed by a synthetic turn, with no real turn between them, is one error.

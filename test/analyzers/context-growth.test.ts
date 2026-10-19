@@ -2,11 +2,11 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { session, type SessionBuilder } from '../../scripts/make-fixture.js';
 import { contextGrowth, downsample } from '../../src/analyzers/context-growth.js';
-import { cleanup, run } from '../helpers/analyze.js';
+import { cleanup, observedCompaction, run } from '../helpers/analyze.js';
 
 afterAll(cleanup);
 
-/** One compaction as Claude Code is reported to log it: a boundary plus a summary line. */
+/** One compaction, minimal form: a boundary plus a summary line. */
 const compact = (s: SessionBuilder) =>
   s
     .record('system', { subtype: 'compact_boundary' })
@@ -175,5 +175,16 @@ describe('A8 context-growth', () => {
       'subagent a1000000: peaked at 200,000 tokens over 2 turns (peak 200,000 at turn 1)',
       'subagent a2000000: compacted 2× over 3 turns (peak 1,200 at turn 3)',
     ]);
+  });
+
+  it('the observed CC 2.1.302 marker pair (summary stamped before the boundary) counts once', async () => {
+    const s = session('a8/observed')
+      .prompt('go')
+      .assistant({ usage: { cacheWrite: 1_000 } });
+    observedCompaction(s).assistant({ usage: { cacheWrite: 1_100 } });
+    observedCompaction(s).assistant({ usage: { cacheWrite: 1_200 } });
+    const [f, ...rest] = await run(contextGrowth, [s]);
+    expect(rest).toEqual([]);
+    expect(f!.data).toMatchObject({ compactions: 2, turns: 3 });
   });
 });
