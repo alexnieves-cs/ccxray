@@ -10,7 +10,7 @@
 //   carry = tokens × ( write(i+1) + Σ_{t = i+2 .. end-1} unit(t) ),   turnsCarried = end − (i+1)
 //
 // where unit(t) = write(t) on a cold/rebuild turn, else read(t), each at turn t's own model
-// price (Haiku 5.5 tier included), `end` = the first turn after the next compaction, or the end
+// price (Haiku 5.5 tier included; same rates as unitPrices() in cost.ts), `end` = the first turn after the next compaction, or the end
 // of the chain. Unpriced turns count 0 $ (and the result is flagged `unpriced`).
 // Estimated [E]: the tokens are chars/4 estimates and the position of the content in the cache
 // is not logged.
@@ -22,7 +22,8 @@
 // analyzer shares one index.
 import type { Session, Thresholds, Turn } from '../model/index.js';
 import { meetsRebuildRule, sessionTtl } from '../analyzers/rules.js';
-import { unitPrices } from './cost.js';
+import { promptTokens } from './cost.js';
+import { priceFor } from './prices.js';
 
 export interface Chain {
   session: Session;
@@ -69,10 +70,19 @@ function buildChain(s: Session, turns: Turn[], th: Thresholds, compactions: numb
   const ttl = sessionTtl(s);
   for (let i = 0; i < n; i++) {
     const t = turns[i]!;
-    const p = unitPrices(t, ttl);
-    if (p !== null) {
-      c.write[i] = p.write;
-      c.read[i] = p.read;
+    // unitPrices() inlined: no object per turn on large corpora.
+    const u = t.usage;
+    const price = priceFor(t.model, promptTokens(u));
+    if (price !== undefined) {
+      const w1h = Math.min(u.cacheWrite, Math.max(0, u.cacheWrite1h ?? 0));
+      const w5m = u.cacheWrite - w1h;
+      c.write[i] =
+        (w5m + w1h > 0
+          ? (w5m * price.write5m + w1h * price.write1h) / (w5m + w1h)
+          : ttl === '1h'
+            ? price.write1h
+            : price.write5m) / 1e6;
+      c.read[i] = price.read / 1e6;
       c.priced[i] = 1;
     }
     const prev = turns[i - 1];
@@ -94,8 +104,12 @@ function buildChain(s: Session, turns: Turn[], th: Thresholds, compactions: numb
   return c;
 }
 
+/** Packing base for turn positions: 2^26 turns per chain × 2^26 chains stays a safe integer. */
+const POS = 2 ** 26;
+
 export class CarryIndex {
-  private readonly at = new Map<Turn, { chain: Chain; i: number }>();
+  // Turn → chain index × POS + turn index: a number, so no object per turn.
+  private readonly at = new Map<Turn, number>();
   private readonly mains = new Map<Session, Chain>();
   readonly chains: Chain[] = [];
 
@@ -116,16 +130,17 @@ export class CarryIndex {
       for (const [k, turns] of groups) {
         // Inline sidechains have no compaction markers of their own.
         const chain = buildChain(s, turns, th, k.startsWith('side:') ? [] : compactions);
+        const base = this.chains.length * POS;
         this.chains.push(chain);
         if (k === 'main' || k === 'all') this.mains.set(s, chain);
-        turns.forEach((t, i) => this.at.set(t, { chain, i }));
+        for (let i = 0; i < turns.length; i++) this.at.set(turns[i]!, base + i);
       }
     }
   }
 
   /** Carry cost of `tokens` of content added by a tool result of `turn` (enters request i+1). */
   carry(turn: Turn, tokens: number): Carry {
-    const pos = this.at.get(turn);
+    const pos = this.position(turn);
     if (pos === undefined || tokens <= 0) return { usd: 0, turnsCarried: 0, unpriced: false };
     const { chain: c, i } = pos;
     const end = c.segEnd[i]!;
@@ -139,7 +154,9 @@ export class CarryIndex {
 
   /** The chain a turn belongs to, with its index. */
   position(turn: Turn): { chain: Chain; i: number } | undefined {
-    return this.at.get(turn);
+    const p = this.at.get(turn);
+    if (p === undefined) return undefined;
+    return { chain: this.chains[Math.floor(p / POS)]!, i: p % POS };
   }
 
   /** The main chain of a session (all turns for a subagent transcript). */
@@ -163,4 +180,9 @@ export function carryIndex(sessions: readonly Session[], th: Thresholds): CarryI
  * written on cold/rebuild turns, read on the others. Σ over the chain. */
 export function everyTurnUnit(c: Chain): number {
   return c.prefix[c.turns.length]!;
+}
+
+/** Drop the memoized index of `sessions` (the pipeline calls it once every analyzer has run). */
+export function releaseCarryIndex(sessions: readonly Session[]): void {
+  memo.delete(sessions);
 }

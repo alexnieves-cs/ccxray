@@ -79,7 +79,11 @@ export function emptyCost(): CostTotals {
 
 /** Add one turn's cost into `t` (or count it as unpriced). Mutates and returns `t`. */
 export function addTurnCost(t: CostTotals, turn: Pick<Turn, 'model' | 'usage'>): CostTotals {
-  const c = turnCost(turn);
+  return addCost(t, turnCost(turn));
+}
+
+/** Add one turn's already computed cost into `t` (null = unpriced). Mutates and returns `t`. */
+export function addCost(t: CostTotals, c: Cost | null): CostTotals {
   if (c === null) {
     t.unpricedTurns++;
     return t;

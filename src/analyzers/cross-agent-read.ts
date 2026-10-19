@@ -42,11 +42,32 @@ interface Copy {
 const rootOf = (s: Session): string =>
   s.isSubagent ? (s.parentSessionId ?? s.id.split(':')[0] ?? s.id) : s.id;
 
-/** First non-error Read of each (agent, canonical path), grouped by tree and path. */
-function copiesByTree(sessions: readonly Session[]): Map<string, Map<string, Copy[]>> {
+/** Agents per tree: one per session, plus each inline sidechain agentId of a main session. */
+function agentsByTree(sessions: readonly Session[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const s of sessions) {
+    let n = 1;
+    if (!s.isSubagent) {
+      const inline = new Set<string>();
+      for (const t of s.turns) if (t.isSidechain) inline.add(t.agentId ?? '');
+      n += inline.size;
+    }
+    out.set(rootOf(s), (out.get(rootOf(s)) ?? 0) + n);
+  }
+  return out;
+}
+
+/** First non-error Read of each (agent, canonical path), grouped by tree and path. Trees with
+ * fewer agents than the threshold cannot be flagged and are skipped. */
+function copiesByTree(
+  sessions: readonly Session[],
+  minAgents: number,
+): Map<string, Map<string, Copy[]>> {
+  const agents = agentsByTree(sessions);
   const trees = new Map<string, Map<string, Copy[]>>();
   for (const s of sessions) {
     const root = rootOf(s);
+    if ((agents.get(root) ?? 0) < minAgents) continue;
     let paths = trees.get(root);
     if (paths === undefined) trees.set(root, (paths = new Map()));
     const seen = new Set<string>();
@@ -89,7 +110,7 @@ function copiesByTree(sessions: readonly Session[]): Map<string, Map<string, Cop
 /** Groups of copies that reach the threshold, by tree root. */
 function flagged(sessions: readonly Session[], th: Thresholds): [string, string, Copy[]][] {
   const out: [string, string, Copy[]][] = [];
-  for (const [root, paths] of copiesByTree(sessions))
+  for (const [root, paths] of copiesByTree(sessions, th.crossAgentReadMinAgents))
     for (const [path, copies] of paths)
       if (copies.length >= th.crossAgentReadMinAgents) out.push([root, path, copies]);
   return out;
