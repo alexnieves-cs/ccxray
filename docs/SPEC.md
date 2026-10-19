@@ -64,6 +64,20 @@ TOKENS (measured from usage fields)
   output                  1.1M    3%
   cache hit ratio  72%  (read / (read + write + input))
 
+COST [E] what these tokens would cost at API list prices (prices of 2026-10-19)
+  total                  $61.40  100%   main $41.10 · subagents $20.30
+  ...
+
+WHAT TO CHANGE FIRST (savings at API list prices [E])
+ 1. Batch prompts so gaps stay under 5 minutes                                  ~$9.80  16% of cost
+      29 breaks longer than the 5-minute cache TTL made Claude Code write 2.2M tokens of cache again
+      change:
+        Send related prompts in one sitting so idle gaps stay under the cache TTL; ...
+      tokens measured, $ estimated · from finding 1
+ 2. Trim big tool outputs (`pnpm test`)                                         ~$3.10   5% of cost
+      ...
+  These 2 changes would have cut about 20% of this window's cost [E] (~$12.30 of $61.40; ...)
+
 WHERE IT WENT (estimated attribution)
   fixed overhead (system + tools)   ~21k / cold turn   × 96 cold turns
   tool outputs                      ~31%  of non-cached input  · Bash 61%, Read 27%, Grep 9%
@@ -304,6 +318,7 @@ The report's headline: `buildActionPlan(report)` (`src/cost/plan.ts`, pure) turn
 | **M3 Reporters** | terminal, JSON (schema v1 + JSON Schema file), HTML (single file, inline CSS/JS, no CDN) | snapshot tests for all 3; HTML passes a test that it contains no `http(s)://` resource loads; `--json` validates against the schema; output fits 100 columns |
 | **M4 Remaining analyzers + session view** | A4, A7, A8, A9, A10, `session` command, thresholds config | fixtures as in M2; on Alex's real logs ≥ 1 true positive per analyzer type, or documented as "none present" (manual); a false-positive review of 20 random findings shows ≤ 2 wrong (manual, recorded in `bench/REVIEW.md`) |
 | **M5 Fix modules (preview)** | `tknxray fix mcp` (mcp-diet: emit a settings `permissions.deny` diff for never-used MCP tools; never writes without `--apply`); `cc-slim` design doc + prototype PostToolUse hook for Bash output; optional `tknxray capture` (API-key only, local echo server, measures tool-definition bytes, never forwards subscription OAuth) | the diff is valid JSON and merges into the existing settings in tests; the cc-slim prototype has a unit test for "keep failure lines, head/tail, dedupe stack frames"; a benchmark script exists. **No savings claim in the README until the benchmark (§8) shows it.** |
+| **M7 Impact** | §5.1 bundled list-price table and cost totals; §5.2 `Finding.impact` with carry cost, ranking by savings, A11 cross-agent reads; §5.3 action plan in terminal, JSON and HTML | every turn priced or counted as unpriced; total within ±$0.01 of `ccusage session --json` `totalCost` on real logs (`pnpm validate:real --ccusage`); hand-computed $ tests per lever; combined savings ≤ plain sum and ≤ window cost; ≤ 5 actions; HTML CSP unchanged; 1 GB corpus < 10% slower than M6 (manual, `pnpm bench:full`). Savings are per-window estimates from the user's own logs, not a product claim |
 
 ## 7. Test plan
 - **Fixtures** (`test/fixtures/projects/<name>/`, each a fake `projects/` tree; all synthetic or scrubbed): `minimal-single-turn`, `multi-block-same-msgid` (dedupe), `sidechain-replay`, `cross-session-copy`, `synthetic-error-turn` (like the real 2.1.296 not-logged-in case), `ttl-gap-rebuild`, `version-change-rebuild`, `model-switch`, `big-bash-output`, `repeated-read-unchanged`, `repeated-read-after-edit` (negative), `malformed-lines`, `nested-subagents-dir`, `unknown-record-types`, `string-vs-array-content`.

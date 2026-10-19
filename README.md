@@ -11,7 +11,7 @@ tknxray (repo: ccxray; renamed because `ccxray` is taken on npm by an unrelated 
 
 <sub>The GIF runs against a synthetic corpus made by [`scripts/demo-corpus.ts`](scripts/demo-corpus.ts). Every number in it is made up; it shows the output format, not real usage. Recorded with [vhs](https://github.com/charmbracelet/vhs) from [`docs/demo.tape`](docs/demo.tape).</sub>
 
-Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** tokens you used. tknxray tries to tell you **why**: cache rebuilds and their likely cause, fixed overhead per fresh context, huge tool outputs, files read again unchanged, MCP tools you never call, subagent spend and wasted error turns. Every finding points at the session and turn it came from, so you can check it by hand.
+Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** tokens you used. tknxray tries to tell you **why**: cache rebuilds and their likely cause, fixed overhead per fresh context, huge tool outputs, files read again unchanged (also across subagents), MCP tools you never call, subagent spend and wasted error turns. Each finding is priced at API list prices, and the report opens with **what to change first**: up to five concrete changes (a CLAUDE.md line, a settings snippet) ranked by what they would have saved in your own logs. Every finding points at the session and turn it came from, so you can check it by hand.
 
 > **Status: 0.1.0 preview.** Milestones M0–M5 are implemented and tested against synthetic fixtures. On real logs, only the parser has been checked so far: it read a 3.7 GB corpus with 0 malformed lines. Accuracy against ccusage and the false-positive review are still **pending**, and token estimates marked [E] may run low (see [FORMAT.md](docs/FORMAT.md)). See the [roadmap](#roadmap).
 
@@ -96,8 +96,8 @@ flowchart LR
   A["discover<br/>~/.claude/projects,<br/>CLAUDE_CONFIG_DIR, --root"] --> B["stream parse<br/>JSONL line by line,<br/>malformed lines counted"]
   B --> C["dedupe<br/>message.id + requestId,<br/>replays and copies"]
   C --> D["sessions<br/>turns, subagents,<br/>events"]
-  D --> E["analyzers<br/>A1–A10, pure functions"]
-  E --> F["reporters<br/>terminal · JSON · HTML"]
+  D --> E["analyzers<br/>A1–A11, pure functions"] --> P["cost + action plan<br/>list prices, carry cost"]
+  P --> F["reporters<br/>terminal · JSON · HTML"]
 ```
 
 - **Discover** finds `projects/{project}/{sessionId}.jsonl` and nested subagent transcripts.
@@ -105,6 +105,7 @@ flowchart LR
 - **Dedupe** counts the `usage` of one API response once, even though Claude Code writes one line per content block and can copy a response into several files.
 - **Sessions** orders turns by timestamp and links subagents to the tool call that started them.
 - **Analyzers** are pure, deterministic functions with configurable thresholds.
+- **Cost and action plan** price every turn from a bundled, dated list-price table (no network), give each finding a cost and a plausible saving, and pick the five changes worth the most ([SPEC §5.1–5.3](docs/SPEC.md#51-cost-model-m7)).
 - **Reporters** render the same report as a terminal summary, JSON or HTML.
 
 ## Analyzers
@@ -123,6 +124,7 @@ From [SPEC §5](docs/SPEC.md#5-analyzers) and [`src/analyzers/`](src/analyzers).
 | A8 | context-growth | Sessions whose context grew past 150k tokens, or that compacted repeatedly. | measured |
 | A9 | subagent-cost | Usage of subagent transcripts vs their parent session, and the models they ran on. | measured |
 | A10 | error-waste | API error turns and retries, and failed tool calls repeated with the same input. | errors measured; repeated calls estimated |
+| A11 | cross-agent-read | The same file read by 3 or more agents (main session and subagents) of one session, each carrying its own copy. | estimated (chars/4) |
 
 ## Measured vs estimated
 
@@ -132,6 +134,18 @@ Every number tknxray prints carries one of two labels:
 - **[E] estimated** (also shown with a leading `~`): a heuristic. Token sizes of tool outputs, reads and tool definitions use `ceil(chars / 4)`, not a tokenizer. Splitting a measured total between causes or tools is an attribution guess. Treat these as orders of magnitude.
 
 Estimates are never presented as exact. Findings from different analyzers can overlap (the same tokens can be part of a rebuild and of a big output), so their token figures do not add up and are **not savings**. Every finding lists evidence (session, turn, file and line) so you can verify it.
+
+## Cost and what to change first
+
+Token counts mix kinds that differ about 100× in price (a cache read vs output), so tknxray also prices every turn at **API list prices** from a table bundled with the release (`src/cost/prices.ts`, dated; never fetched). Every $ is labeled **[E]**:
+
+> $ = what these tokens would cost at API list prices; subscription limits are not published, use it to compare, not as a bill
+
+- **COST** splits the window's $ by token kind and by main session vs subagents. Unknown models are left out and named, never guessed.
+- **Each finding** gets `impact { costUsd, savingsUsd, basis }`, and TOP FINDINGS are ranked by savings. Content from a tool result is priced over every turn it stayed in context (written once, then re-read until a compaction).
+- **WHAT TO CHANGE FIRST** lists up to five changes with their saving, share of cost, a copy-pasteable change and the findings behind it. The combined line ("These N changes would have cut about X% of this window's cost [E]") is a conservative union, not a sum, because levers overlap. A cheaper subagent model may need more or fewer tokens and may do worse; savings from context size are upper bounds.
+
+These are estimates for *your* logs and window, not a product claim. How each number is computed, and what is still unverified, is in [SPEC §5.1–5.3](docs/SPEC.md#51-cost-model-m7).
 
 ## HTML report
 
@@ -155,6 +169,7 @@ Benchmarks live in [`bench/`](bench) and run on synthetic corpora generated by [
 | M3 Reporters | terminal, JSON (schema v1), self-contained HTML | Implemented |
 | M4 More analyzers | A4, A7, A8, A9, A10, `session` view, thresholds | Implemented; real-log true/false-positive review **pending** |
 | M5 Fix modules (preview) | `fix mcp`, cc-slim prototype hook, opt-in `capture` | Implemented as previews; the hook's effect on Bash is **UNVERIFIED** |
+| M7 Impact | list-price cost, $ impact per finding, A11 cross-agent reads, action plan in every reporter | Implemented; total cost matches ccusage on the dogfood snapshot; savings are estimates |
 
 Not done yet: real-log validation of every analyzer, choosing an npm name and publishing, and any savings benchmark. This README will make no savings claim until a reproducible benchmark ([SPEC §8](docs/SPEC.md#8-benchmarks-and-performance-targets)) supports one.
 
