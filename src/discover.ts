@@ -3,7 +3,7 @@
 import { realpathSync } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 
 export interface DiscoveredFile {
   path: string;
@@ -113,27 +113,60 @@ async function walk(
       isFile = target.isFile();
     }
     if (isDir) await walk(p, root, out, seen, seenDirs);
-    else if (isFile && e.name.endsWith('.jsonl')) {
-      const rp = real(p);
-      const st = await stat(p).catch(() => undefined);
-      if (rp === undefined || st === undefined) {
-        out.errors++;
-        continue;
-      }
-      if (seen.has(rp)) continue;
-      seen.add(rp);
-      out.files.push({
-        path: p,
-        root,
-        ...layout(relative(root, p).split(sep)),
-        size: st.size,
-        mtimeMs: st.mtimeMs,
-        ...(names.has(`${e.name.slice(0, -'.jsonl'.length)}.meta.json`)
-          ? { metaPath: join(dir, `${e.name.slice(0, -'.jsonl'.length)}.meta.json`) }
-          : {}),
-      });
-    }
+    else if (isFile && e.name.endsWith('.jsonl')) await addFile(p, root, out, seen, names);
   }
+}
+
+/** Add one `*.jsonl` file (already known to be a file); `names` are its directory's entries. */
+async function addFile(
+  p: string,
+  root: string,
+  out: Discovery,
+  seen: Set<string>,
+  names: ReadonlySet<string>,
+): Promise<void> {
+  const rp = real(p);
+  const st = await stat(p).catch(() => undefined);
+  if (rp === undefined || st === undefined) {
+    out.errors++;
+    return;
+  }
+  if (seen.has(rp)) return;
+  seen.add(rp);
+  const stem = basename(p, '.jsonl');
+  out.files.push({
+    path: p,
+    root,
+    ...layout(relative(root, p).split(sep)),
+    size: st.size,
+    mtimeMs: st.mtimeMs,
+    ...(names.has(`${stem}.meta.json`) ? { metaPath: join(dirname(p), `${stem}.meta.json`) } : {}),
+  });
+}
+
+/**
+ * The files of one session under `root` (for `tknxray watch`, which re-reads them on every
+ * change): the main transcript `mainPath` plus every `*.jsonl` below `{dir}/{name}/` for each
+ * name in `dirNames` (the sessionId and the file stem; subagent transcripts live there, [M]
+ * CC 2.1.302). Same layout rules as `discover`. Flat `agent-<id>.jsonl` files next to the main
+ * transcript (UNVERIFIED older layout) are not included. Never throws.
+ */
+export async function discoverSession(
+  root: string,
+  mainPath: string,
+  dirNames: readonly string[],
+): Promise<Discovery> {
+  const out: Discovery = { roots: [resolve(root)], files: [], errors: 0 };
+  const seen = new Set<string>();
+  const seenDirs = new Set<string>();
+  await addFile(resolve(mainPath), out.roots[0]!, out, seen, new Set());
+  for (const name of new Set(dirNames)) {
+    const dir = join(dirname(resolve(mainPath)), name);
+    const st = await stat(dir).catch(() => undefined);
+    if (st?.isDirectory()) await walk(dir, out.roots[0]!, out, seen, seenDirs);
+  }
+  out.files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return out;
 }
 
 export const fileStem = (f: DiscoveredFile): string => basename(f.path, '.jsonl');

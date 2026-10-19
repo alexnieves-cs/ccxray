@@ -366,3 +366,31 @@ export function shouldUseColor(
   if (force !== undefined) return !(force === '0' || force.toLowerCase() === 'false');
   return isTTY === true;
 }
+
+export type Paint = (s: string) => string;
+export interface Palette {
+  bold: Paint;
+  dim: Paint;
+  red: Paint;
+  yellow: Paint;
+  cyan: Paint;
+  green: Paint;
+  magenta: Paint;
+}
+
+/** SGR color helpers; every one is the identity when `color` is false. */
+export function palette(color: boolean): Palette {
+  const sgr =
+    (open: number, close: number): Paint =>
+    (s) =>
+      color && s ? `\x1b[${open}m${s}\x1b[${close}m` : s;
+  return {
+    bold: sgr(1, 22),
+    dim: sgr(2, 22),
+    red: sgr(31, 39),
+    yellow: sgr(33, 39),
+    cyan: sgr(36, 39),
+    green: sgr(32, 39),
+    magenta: sgr(35, 39),
+  };
+}
