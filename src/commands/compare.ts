@@ -101,7 +101,7 @@ function parse(argv: readonly string[]): Options {
     if (values.days !== undefined) throw new UsageError('--days goes with --at');
     before = range(values.before, '--before');
     after = range(values.after, '--after');
-    if (before.until > after.since)
+    if (before.until >= after.since)
       throw new UsageError('the --before window must end before the --after window starts');
   } else {
     throw new UsageError('compare needs --at DATE, or both --before and --after');
