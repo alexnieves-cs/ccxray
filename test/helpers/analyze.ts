@@ -53,3 +53,27 @@ export function toolDef(name: string, chars: number): { name: string; descriptio
 }
 
 export { text };
+
+/**
+ * One compaction as observed in CC 2.1.302–2.1.303 (FORMAT.md Q5, [M]): a `system`
+ * `compact_boundary` record with `compactMetadata`, re-injected attachments, then the
+ * `isCompactSummary` user line 4–5 lines later whose timestamp is up to ~0.3 s *before* the
+ * boundary's. Synthetic values only.
+ */
+export const observedCompaction = (s: SessionBuilder): SessionBuilder =>
+  s
+    .record('system', {
+      subtype: 'compact_boundary',
+      level: 'info',
+      content: 'Conversation compacted',
+      compactMetadata: { trigger: 'auto', preTokens: 380_000, postTokens: 20_000 },
+    })
+    .attachment({ type: 'instructions', files: [] })
+    .attachment({ type: 'session_context' })
+    .attachment({ type: 'date' })
+    .gap(-4_300)
+    .prompt('summary of the earlier conversation', {
+      isCompactSummary: true,
+      isVisibleInTranscriptOnly: true,
+    })
+    .gap('1s');

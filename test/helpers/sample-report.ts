@@ -165,7 +165,7 @@ export function sampleReport(): Report {
             detail: 'tool list at first turn',
           },
         ],
-        fix: { summary: '`tknxray fix mcp` (planned, M5) generates a permissions.deny diff' },
+        fix: { summary: 'run `tknxray fix mcp` to preview a permissions.deny diff' },
       },
       {
         analyzer: 'big-tool-output',

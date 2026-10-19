@@ -12,6 +12,21 @@ export function shortSession(id: string): string {
   return rest.length > 0 ? `${h}:${rest.join(':').slice(0, 14)}` : h;
 }
 
+/** Short agent id of a subagent session: first 8 characters of `agentId` (else of its id suffix). */
+export function shortAgent(s: Pick<Session, 'id' | 'agentId'>): string {
+  const raw = s.agentId ?? s.id.slice(s.id.indexOf(':') + 1).replace(/^agent-/, '');
+  return raw.slice(0, 8);
+}
+
+/**
+ * How titles name a session: `session <8 chars>` for a main session, `subagent <agent id, 8 chars>`
+ * for a subagent transcript (whose Session.id starts with the parent's id, so `short(s.id)` would
+ * name the parent).
+ */
+export function sessionLabel(s: Pick<Session, 'id' | 'agentId' | 'isSubagent'>): string {
+  return s.isSubagent ? `subagent ${shortAgent(s)}` : `session ${s.id.slice(0, 8)}`;
+}
+
 // A home directory at the start of a path: /home/<u>, /Users/<u>, C:\Users\<u>, /root.
 const HOME_PREFIX =
   /^(?:\/home\/[^/\\]+|\/Users\/[^/\\]+|[A-Za-z]:[\\/]Users[\\/][^/\\]+|\/root)(?=[/\\]|$)/;

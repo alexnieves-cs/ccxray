@@ -54,6 +54,11 @@ describe('A7 tool-usage', () => {
     });
     expect(lin!.tokens.value).toBe(25);
     expect(lin!.fix.summary).toContain('Disable the "linear" MCP server');
+    expect(gh!.fix.summary).toBe(
+      'Deny the unused "github" tools in permissions.deny (run `tknxray fix mcp` to preview the change)',
+    );
+    // No internal milestone labels (M4, M5…) in user-visible text.
+    for (const f of fs) expect(`${f.title} ${f.fix.summary}`).not.toMatch(/\bM\d\b/);
     const builtin = fs[3]!;
     expect(builtin.severity).toBe('info');
     expect(builtin.data).toEqual({ unusedTools: ['Grep'], deferredTools: [], defChars: 200 });
