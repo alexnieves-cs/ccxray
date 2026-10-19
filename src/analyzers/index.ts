@@ -1,6 +1,7 @@
 import type { Analyzer } from '../model/index.js';
 import { bigToolOutput } from './big-tool-output.js';
 import { cacheRebuild } from './cache-rebuild.js';
+import { cacheTtl } from './cache-ttl.js';
 import { contextGrowth } from './context-growth.js';
 import { crossAgentRead } from './cross-agent-read.js';
 import { errorWaste } from './error-waste.js';
@@ -23,4 +24,5 @@ export const ANALYZERS: Analyzer[] = [
   subagentCost, // A9
   errorWaste, // A10
   crossAgentRead, // A11
+  cacheTtl, // A12
 ];

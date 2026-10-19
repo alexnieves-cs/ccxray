@@ -123,7 +123,14 @@
               "change": { "type": "string" },
               "findings": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
               "category": {
-                "enum": ["context", "context-reset", "rebuild", "tool-definitions", "model"]
+                "enum": [
+                  "context",
+                  "context-reset",
+                  "rebuild",
+                  "cache-ttl",
+                  "tool-definitions",
+                  "model"
+                ]
               },
               "savingsMainUsd": { "$ref": "#/$defs/usd" },
               "savingsSubagentUsd": { "$ref": "#/$defs/usd" },
