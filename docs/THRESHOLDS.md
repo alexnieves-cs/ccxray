@@ -15,7 +15,7 @@ is listed here and used by the code.
 | `baselineJumpTokens` | 2000 | A4 fixed-overhead | Increase of the median first-turn context [M] between two consecutive Claude Code versions worth flagging. |
 | `baselineMinSessions` | 3 | A4 fixed-overhead | Fresh sessions a Claude Code version needs before its median baseline is compared for a jump; versions with fewer are reported but not compared. |
 | `bigToolOutputTokens` | 5000 | A5 big-tool-output, `session` 📦 flag | Estimated tokens [E, chars/4] for one `tool_result` to count as big. |
-| `contextLargeTokens` | 150000 | A8 context-growth | Peak context per turn [M] that flags a session. |
+| `contextLargeTokens` | 150000 | A8 context-growth | Peak context per turn [M] that flags a session. Flagged subagents of one session are reported together in one finding. |
 | `compactionsPerSession` | 2 | A8 context-growth | Compactions in one session that flag it (markers with no assistant turn between them count once). |
 
 ## Fixed constants (not configurable)

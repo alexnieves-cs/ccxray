@@ -3,7 +3,8 @@
 
 import type { Analyzer, Finding, Session, Turn } from '../model/index.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
-import { chain, fmt, short, turnTokens } from './rules.js';
+import { chain, fmt, turnTokens } from './rules.js';
+import { sessionLabel } from './util.js';
 
 /** A retry is the next real turn within this window after an error, on the same model. */
 export const RETRY_WINDOW_MS = 60_000;
@@ -110,7 +111,7 @@ export const errorWaste: Analyzer = {
           analyzer: 'error-waste',
           severity: 'info',
           title:
-            `${errors.length} API error${errors.length === 1 ? '' : 's'} in session ${short(s.id)}` +
+            `${errors.length} API error${errors.length === 1 ? '' : 's'} in ${sessionLabel(s)}` +
             `, ${retries} retried within ${RETRY_WINDOW_MS / 1000} s`,
           tokens: { value: tokens, kind: 'measured' },
           data: {

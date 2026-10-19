@@ -505,10 +505,7 @@ describe('A6 repeated-read', () => {
     call(sub, read('/home/dev/notes/todo.md'), 400);
     const f = run(repeatedRead, await built('outside', [p, sub]));
     expect(f).toHaveLength(1);
-    expect(f[0]!.title).toBe(
-      `~/notes/todo.md re-read 1× unchanged in session ${shortSession(`${p.id}:agent-r2`)}`,
-    );
-    expect(f[0]!.title).toContain(':agent-r2');
+    expect(f[0]!.title).toBe('~/notes/todo.md re-read 1× unchanged in subagent r2');
     expect(f[0]!.evidence[0]!.sessionId).toBe(`${p.id}:agent-r2`);
   });
 
