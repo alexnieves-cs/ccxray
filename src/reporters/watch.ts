@@ -11,12 +11,15 @@
 import { countCompactions } from '../analyzers/context-growth.js';
 import { findRebuilds, type Rebuild } from '../analyzers/cache-rebuild.js';
 import { cacheTtlMs, chain, contextTokens, sessionTtl, turnTokens } from '../analyzers/rules.js';
+import { promptTokens, turnCost } from '../cost/cost.js';
+import { priceFor } from '../cost/prices.js';
 import { DEFAULT_THRESHOLDS, type Session, type Thresholds, type Turn } from '../model/index.js';
 import {
   displayProject,
   formatCompact,
   formatInt,
   formatRatio,
+  formatUsd,
   formatUtc,
   padStart,
   palette,
@@ -280,6 +283,7 @@ function latest(f: Facts, p: Palette, w: number): string[] {
         `input ${formatInt(u.input)}`,
         `output ${formatInt(u.output)} [M]`,
         `hit ratio ${formatRatio(ctx > 0 ? u.cacheRead / ctx : null)} [M]`,
+        ...costPart(t),
       ],
       ' · ',
       w,
@@ -325,6 +329,26 @@ function latest(f: Facts, p: Palette, w: number): string[] {
   return lines;
 }
 
+/** `$0.17 [E]` for a priced turn: list-price cost of its usage. */
+function costPart(t: Turn): string[] {
+  const c = turnCost(t);
+  return c === null ? [] : [`${formatUsd(c.total)} [E]`];
+}
+
+/** List-price $ of real turns; null when none is priced. */
+function sessionUsd(turns: readonly Turn[]): number | null {
+  let sum = 0;
+  let any = false;
+  for (const t of turns) {
+    if (t.isSynthetic) continue;
+    const c = turnCost(t);
+    if (c === null) continue;
+    sum += c.total;
+    any = true;
+  }
+  return any ? sum : null;
+}
+
 function totals(f: Facts, subs: readonly Session[], p: Palette, w: number): string[] {
   const sum = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
   for (const t of f.turns) {
@@ -360,6 +384,15 @@ function totals(f: Facts, subs: readonly Session[], p: Palette, w: number): stri
       '  ',
     ),
   ];
+  const mainUsd = sessionUsd(f.turns);
+  const subUsd = subs.length > 0 ? sessionUsd(subs.flatMap((x) => x.turns)) : null;
+  if (mainUsd !== null || subUsd !== null)
+    lines.push(
+      `  cost at API list prices [E] ${p.bold(formatUsd((mainUsd ?? 0) + (subUsd ?? 0)))}` +
+        (subUsd !== null
+          ? ` · main ${formatUsd(mainUsd ?? 0)} · subagents ${formatUsd(subUsd)}`
+          : ''),
+    );
   if (subs.length === 0) {
     lines.push('  subagents: none so far');
     return lines;
@@ -415,9 +448,31 @@ function idle(f: Facts, o: WatchFrameOptions, p: Palette, w: number): string[] {
     w,
     '      ',
   );
+  // Expired: what the next turn pays to write the context again, at the session's TTL rate
+  // (list prices [E]). Nothing is said while the cache is warm: no countdown, so nothing here
+  // nudges anyone to send a prompt to keep the cache alive (CLAUDE.md rule 5).
   // "A gap exactly equal to the TTL is not an expiry" (SPEC §5 M2 notes), same as A3.
-  if (ago > ttlMs)
-    lines.push(p.yellow('      cache has likely expired; the next turn will rebuild it [E]'));
+  if (ago > ttlMs) {
+    const ctx = promptTokens(last.usage);
+    const price = priceFor(last.model, ctx);
+    const cost =
+      price !== undefined
+        ? `, ${formatUsd((ctx * (ttl === '1h' ? price.write1h : price.write5m)) / 1e6)} at the ` +
+          'write price'
+        : '';
+    lines.push(
+      ...wrapParts(
+        [
+          p.yellow('      cache has likely expired; the next turn will rebuild it [E]:'),
+          p.yellow(`~${formatCompact(ctx)} tokens${cost};`),
+          p.yellow('/clear first if you are switching tasks'),
+        ],
+        ' ',
+        w,
+        '      ',
+      ),
+    );
+  }
   return lines;
 }
 
