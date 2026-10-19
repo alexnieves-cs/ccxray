@@ -62,15 +62,14 @@ run pnpm -s my-sessions --out "$OUT/MY_SESSIONS.md"
 cat "$OUT/MY_SESSIONS.md"
 
 step "timing + peak RSS"
-for W in "--since $(date -u -v-7d +%Y-%m-%d 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%d)" "--since 2000-01-01"; do
+WEEK=$(date -u -v-7d +%Y-%m-%d 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%d)
+for W in "$WEEK" 2000-01-01; do
   for i in 1 2 3; do
-    if /usr/bin/time -l true >/dev/null 2>&1; then
-      /usr/bin/time -l node dist/cli.js $W --json >/dev/null 2>"$OUT/t"
-      echo "$W run $i: $(grep -E 'real|maximum resident' "$OUT/t" | tr -s ' ' | tr '\n' ' ')"
-    else
-      /usr/bin/time -v node dist/cli.js $W --json >/dev/null 2>"$OUT/t"
-      echo "$W run $i: $(grep -E 'Elapsed|Maximum resident' "$OUT/t" | tr -s ' ' | tr '\n' ' ')"
-    fi
+    T0=$(node -e 'console.log(Date.now())')
+    CCXRAY_BENCH_RSS_OUT="$OUT/rss.json" node --import ./bench/rss-hook.mjs dist/cli.js --since "$W" --json >/dev/null 2>&1
+    T1=$(node -e 'console.log(Date.now())')
+    RSS=$(node -e 'console.log((JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).maxRssKiB*1024/1e6).toFixed(1))' "$OUT/rss.json" 2>/dev/null)
+    echo "--since $W run $i: wall $(( (T1 - T0) ))ms, peak RSS ${RSS:-?} MB"
   done
 done
 
