@@ -226,8 +226,9 @@ export const toolUsage: Analyzer = {
         ),
         fix: {
           summary: none
-            ? `Disable the "${server}" MCP server, or scope it to a subagent (run \`tknxray fix mcp\` to preview the change)`
-            : `Deny the unused "${server}" tools in permissions.deny (run \`tknxray fix mcp\` to preview the change)`,
+            ? `Turn the "${server}" MCP server off (/mcp, or disabledMcpjsonServers), or move it into the one subagent that needs it`
+            : `Set "alwaysLoad": false on the "${server}" server so its tools load on demand, or deny the unused ones (\`tknxray fix mcp\`)`,
+          docsUrl: 'https://code.claude.com/docs/en/mcp',
         },
       });
     }

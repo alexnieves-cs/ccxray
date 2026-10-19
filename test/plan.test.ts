@@ -105,7 +105,9 @@ describe('buildActionPlan', () => {
     expect(trim.change).toBe(
       'Add to CLAUDE.md:\n' +
         '- Run `pnpm test` as `pnpm test … 2>&1 | tail -n 100`.\n' +
-        '- Narrow Grep with a glob or path, or set head_limit.',
+        '- Narrow Grep with a glob or path, or set head_limit.\n' +
+        'Or cap tool output in settings.json (suggested values):\n' +
+        '  "env": { "BASH_MAX_OUTPUT_LENGTH": "20000" }',
     );
     expect(p.actions[0]!.confidence).toBe('measured-tokens');
     // Unknown causes are skipped, never guessed into an action.
@@ -177,7 +179,7 @@ describe('buildActionPlan', () => {
     expect(a.why).toContain('may do worse');
   });
 
-  it('builds a permissions.deny snippet for unused MCP tools', () => {
+  it('turns off never-used MCP servers and defers partly used ones (documented settings)', () => {
     const p = buildActionPlan(
       report([
         finding(
@@ -193,8 +195,12 @@ describe('buildActionPlan', () => {
       ]),
     );
     expect(p.actions[0]!.change).toBe(
-      'Preview with `tknxray fix mcp`, or add to .claude/settings.json:\n' +
-        '"permissions": { "deny": [\n    "mcp__gh",\n    "mcp__db__drop"\n] }',
+      '- Never used (gh): toggle off in /mcp, or for a .mcp.json server add to settings.json ' +
+        '"disabledMcpjsonServers": ["gh"]\n' +
+        '- Partly used (db): set "alwaysLoad": false on the server so its tools load only when ' +
+        'needed (tool search, on unless ENABLE_TOOL_SEARCH=false)\n' +
+        '- Or deny the unused tools: preview with `tknxray fix mcp` (a deny rule removes a ' +
+        'definition only while tool search is off; otherwise it only blocks calls)',
     );
   });
 

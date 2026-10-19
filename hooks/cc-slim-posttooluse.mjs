@@ -11,9 +11,10 @@
 // UNVERIFIED: stdin fields { session_id, transcript_path, cwd, hook_event_name: "PostToolUse",
 //             tool_name, tool_input, tool_response }; stdout: JSON; exit 0.
 // UNVERIFIED: the Bash `tool_response` shape { stdout, stderr, interrupted, isImage }.
-// UNVERIFIED: `hookSpecificOutput.updatedMCPToolOutput` is documented for MCP tools; whether
-// Claude Code honors it for Bash (replacing what enters the context) is unknown and may be
-// ignored. docs/cc-slim.md step 0 of the measurement plan checks this before anything else.
+// Documented (code.claude.com/docs/en/hooks, read 2026-10-19): `hookSpecificOutput.
+// updatedToolOutput` replaces any tool's output before it is sent to Claude; a built-in tool's
+// replacement must match its output schema or it is ignored. UNVERIFIED: that the Bash object
+// below matches that schema; docs/cc-slim.md step 0 of the measurement plan checks it.
 import { Buffer } from 'node:buffer';
 
 // A closed pipe must not turn into an error exit.
@@ -53,7 +54,7 @@ async function run(input) {
   if (updated === undefined) return; // short output: nothing to say, Claude Code keeps it as is
   process.stdout.write(
     JSON.stringify({
-      hookSpecificOutput: { hookEventName: 'PostToolUse', updatedMCPToolOutput: updated },
+      hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated },
     }),
   );
 }

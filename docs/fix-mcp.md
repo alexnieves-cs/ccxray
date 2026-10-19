@@ -11,8 +11,15 @@ using the `tool-usage` (A7) findings. Run `tknxray fix mcp --help` for options.
   called gets one server-wide `mcp__<server>` rule (`--per-tool` turns that off). Rules that
   are already there, including `mcp__<server>` and `mcp__<server>__*`, are not added again.
   Nothing is ever removed. Remove a rule by hand to re-enable a tool.
-- **UNVERIFIED:** whether a deny rule also removes the tool's definition from the request,
-  which is what would save tokens. Measure with `tknxray` before and after.
+- **When it saves tokens** (code.claude.com/docs/en/prompt-caching and /mcp, read 2026-10-19):
+  a deny rule on a whole tool removes its definition from the next request only while tool
+  search is off. Tool search is on by default and already defers MCP definitions; then a deny
+  rule only blocks calls. If A7 found definitions sent up front, the server loads eagerly
+  (`"alwaysLoad": true`, or `ENABLE_TOOL_SEARCH=false`): set `"alwaysLoad": false` on it, or
+  turn a never-used server off in `/mcp` (or `disabledMcpjsonServers`). Check the effect with
+  `tknxray compare --at <the day you changed it>`.
+- **UNVERIFIED:** that the server-wide `mcp__<server>` rule form matches Claude Code's
+  permission syntax for MCP servers.
 
 ## How the file is written
 

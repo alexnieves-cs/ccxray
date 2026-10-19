@@ -223,10 +223,26 @@ function trimAction(found: Picked[], windowCost: number): Action | undefined {
         `${formatInt(count)} big outputs stayed in context for up to ${formatInt(longest)} turns ` +
         `and cost ${formatUsd(sum(from, (f) => f.impact?.costUsd ?? 0))} to carry; savings ` +
         'assume each is cut to ~1k tokens (about 100 lines).',
-      change: `Add to CLAUDE.md:\n${lines.join('\n')}`,
+      change: `Add to CLAUDE.md:\n${lines.join('\n')}${capLines(from)}`,
     },
     windowCost,
   );
+}
+
+/**
+ * Output caps for the tools behind the big outputs (code.claude.com/docs/en/env-vars, read
+ * 2026-10-19): BASH_MAX_OUTPUT_LENGTH (chars) and MAX_MCP_OUTPUT_TOKENS (default 25,000). The
+ * values are suggestions near A5's threshold, not documented defaults.
+ */
+function capLines(from: readonly Picked[]): string {
+  const tools = new Set(from.map(({ f }) => str(f.data?.tool) ?? ''));
+  const env = [
+    ...(tools.has('Bash') ? ['"BASH_MAX_OUTPUT_LENGTH": "20000"'] : []),
+    ...([...tools].some((t) => t.startsWith('mcp__')) ? ['"MAX_MCP_OUTPUT_TOKENS": "10000"'] : []),
+  ];
+  return env.length === 0
+    ? ''
+    : `\nOr cap tool output in settings.json (suggested values):\n  "env": { ${env.join(', ')} }`;
 }
 
 // ---- A11 / A6: reads ----------------------------------------------------------------------
@@ -454,8 +470,10 @@ function cacheTtlActions(found: Picked[], windowCost: number): Action[] {
 
 // ---- A7: unused MCP tools ------------------------------------------------------------------
 
-// UNVERIFIED: whether a permissions.deny rule removes MCP tool definitions from the prompt or only
-// blocks calls; the action's text says so (SPEC §4.4).
+// Documented (code.claude.com/docs/en/mcp and /prompt-caching, read 2026-10-19): MCP tools are
+// deferred by tool search by default, so definitions sent up front mean tool search is off or the
+// server sets "alwaysLoad": true; a bare-tool permissions.deny rule removes the definition only
+// while tool search is off. Toggling a server off (/mcp, disabledMcpjsonServers) removes it.
 function unusedToolsAction(found: Picked[], windowCost: number): Action | undefined {
   const from = found.filter(
     (x) =>
@@ -463,19 +481,31 @@ function unusedToolsAction(found: Picked[], windowCost: number): Action | undefi
   );
   if (from.length === 0) return undefined;
   const sorted = [...from].sort((a, b) => savings(b.f) - savings(a.f));
-  const deny: string[] = [];
+  const off: string[] = [];
+  const partly: string[] = [];
   let tools = 0;
   for (const { f } of sorted) {
     const server = str(f.data?.server)!;
-    const unused = strs(f.data?.unusedTools);
-    tools += unused.length;
-    if (strs(f.data?.usedTools).length === 0) deny.push(`mcp__${server}`);
-    else deny.push(...unused);
+    tools += strs(f.data?.unusedTools).length;
+    (strs(f.data?.usedTools).length === 0 ? off : partly).push(server);
   }
-  const MAX = 8;
-  const shown = deny.slice(0, MAX).map((d) => `    "${d}"`);
-  const more =
-    deny.length > MAX ? `\n    … ${deny.length - MAX} more: run \`tknxray fix mcp\`` : '';
+  const q = (xs: string[]): string => xs.map((x) => `"${x}"`).join(', ');
+  const lines = [
+    ...(off.length > 0
+      ? [
+          `- Never used (${off.join(', ')}): toggle off in /mcp, or for a .mcp.json server add ` +
+            `to settings.json "disabledMcpjsonServers": [${q(off)}]`,
+        ]
+      : []),
+    ...(partly.length > 0
+      ? [
+          `- Partly used (${partly.join(', ')}): set "alwaysLoad": false on the server so its ` +
+            'tools load only when needed (tool search, on unless ENABLE_TOOL_SEARCH=false)',
+        ]
+      : []),
+    '- Or deny the unused tools: preview with `tknxray fix mcp` (a deny rule removes a ' +
+      'definition only while tool search is off; otherwise it only blocks calls)',
+  ];
   const servers = sorted.map(({ f }) => str(f.data?.server)!);
   return action(
     'unused-tools',
@@ -484,12 +514,10 @@ function unusedToolsAction(found: Picked[], windowCost: number): Action | undefi
     {
       title: `Remove MCP tools you never call (${servers.slice(0, 3).join(', ')}${servers.length > 3 ? ', …' : ''})`,
       why:
-        `${formatInt(tools)} MCP tool definitions were sent with every main-session request ` +
-        'and never called. Disabling a server removes its definitions; whether a deny rule ' +
-        'also removes them (not only blocks calls) is unverified.',
-      change:
-        'Preview with `tknxray fix mcp`, or add to .claude/settings.json:\n' +
-        `"permissions": { "deny": [\n${shown.join(',\n')}${more}\n] }`,
+        `${formatInt(tools)} MCP tool definitions were sent up front with every main-session ` +
+        'request and never called. Claude Code defers MCP tools by default (tool search), so ' +
+        'these servers load eagerly: tool search is off, or the server sets "alwaysLoad": true.',
+      change: lines.join('\n'),
     },
     windowCost,
   );

@@ -36,6 +36,8 @@ WHAT TO CHANGE FIRST (savings at API list prices [E])
         Add to CLAUDE.md:
         - Run `pnpm test` as `pnpm test … 2>&1 | tail -n 100`.
         - Narrow Grep with a glob or path, or set head_limit.
+        Or cap tool output in settings.json (suggested values):
+          "env": { "BASH_MAX_OUTPUT_LENGTH": "20000" }
       estimated · from findings 2, 5
  4. Restart long sessions after upgrading Claude Code                             ~$1.16  4% of cost
       3 upgrades mid-session made Claude Code write 201k tokens of cache again ($1.26 at the write
