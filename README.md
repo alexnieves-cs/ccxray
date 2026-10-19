@@ -13,7 +13,7 @@ tknxray (repo: ccxray; renamed because `ccxray` is taken on npm by an unrelated 
 
 Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** tokens you used. tknxray tries to tell you **why**: cache rebuilds and their likely cause, fixed overhead per fresh context, huge tool outputs, files read again unchanged, MCP tools you never call, subagent spend and wasted error turns. Every finding points at the session and turn it came from, so you can check it by hand.
 
-> **Status: preview.** Milestones M0–M5 are implemented and tested against synthetic fixtures. Validation against real logs is **pending**. See the [roadmap](#roadmap).
+> **Status: 0.1.0 preview.** Milestones M0–M5 are implemented and tested against synthetic fixtures. On real logs, only the parser has been checked so far: it read a 3.7 GB corpus with 0 malformed lines. Accuracy against ccusage and the false-positive review are still **pending**, and token estimates marked [E] may run low (see [FORMAT.md](docs/FORMAT.md)). See the [roadmap](#roadmap).
 
 ## Privacy
 
@@ -25,13 +25,12 @@ Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** t
 
 ## Install and usage
 
-> **Not published yet.** The npm package will be `tknxray` (see [SPEC §10](docs/SPEC.md#10-distribution)). Once it is published it will run as:
->
-> ```sh
-> npx tknxray
-> ```
+```sh
+npx tknxray                 # analyze the last 7 days of ~/.claude/projects
+npx tknxray --help
+```
 
-Run from source (Node ≥ 20, pnpm):
+Or run from source (Node ≥ 20, pnpm):
 
 ```sh
 git clone https://github.com/alexnieves-cs/ccxray.git
