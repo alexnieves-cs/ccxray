@@ -1,0 +1,40 @@
+name: bench
+
+# Perf numbers are recorded, never gated (SPEC §8). The job is informational: a bench script error
+# shows on the job (pnpm bench still exits 1 locally) but never turns the PR checks red.
+# 1 GB is manual: `pnpm bench:full`.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'bench/**'
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # 10 MB + 100 MB (plus the 50 MB cold-start corpus). Results are [M] for a GitHub runner.
+      - run: pnpm bench
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: |
+            bench/out/perf-*.json
+            bench/out/perf-*.md
+            bench/out/corpus-*/manifest.json
+          if-no-files-found: warn
