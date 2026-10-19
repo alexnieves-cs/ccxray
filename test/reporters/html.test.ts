@@ -39,6 +39,19 @@ describe('html reporter', () => {
       expect(html).toContain(`width:${((a.savingsUsd / plan.windowCostUsd) * 100).toFixed(3)}%`);
   });
 
+  it('lists cost by project, largest first, only for two or more projects', () => {
+    const r = costedSampleReport();
+    expect(renderHtml(r)).not.toContain('id="projects"');
+    const all = r.totals.all;
+    r.totals.byProject = {
+      '-home-dev-small': { ...all, turns: 3, cost: { ...all.cost!, total: 1 } },
+      '-home-dev-big': { ...all, turns: 9, cost: { ...all.cost!, total: 4 } },
+    };
+    const html = renderHtml(r, { homeDir: '/home/dev' });
+    expect(html).toContain('<h2>Cost by project</h2>');
+    expect(html.indexOf('~-big')).toBeLessThan(html.indexOf('~-small'));
+  });
+
   it('the remote-load detector catches what it should (self-test)', () => {
     expect(remoteLoads('<script src="https://cdn.example/x.js"></script>')).toHaveLength(1);
     expect(remoteLoads('<link rel="stylesheet" href="//cdn.example/x.css">')).toHaveLength(1);

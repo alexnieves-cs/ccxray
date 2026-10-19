@@ -74,6 +74,15 @@
         "cacheWrite": 2080000,
         "cacheWrite1h": 0,
         "cacheWrite5m": 2080000,
+        "cost": {
+          "input": 0.20909999999999998,
+          "output": 2.2565,
+          "read": 4.7501999999999995,
+          "total": 19.1658,
+          "unpricedTurns": 0,
+          "write1h": 0,
+          "write5m": 11.95
+        },
         "input": 44300,
         "output": 98100,
         "turns": 253
@@ -84,6 +93,15 @@
         "cacheWrite": 640500,
         "cacheWrite1h": 0,
         "cacheWrite5m": 640500,
+        "cost": {
+          "input": 0.0645,
+          "output": 0.78125,
+          "read": 1.5075,
+          "total": 6.356375,
+          "unpricedTurns": 0,
+          "write1h": 0,
+          "write5m": 4.003125
+        },
         "input": 12900,
         "output": 31250,
         "turns": 97
@@ -94,6 +112,15 @@
         "cacheWrite": 98400,
         "cacheWrite1h": 0,
         "cacheWrite5m": 98400,
+        "cost": {
+          "input": 0.00105,
+          "output": 0.0206,
+          "read": 0.06401,
+          "total": 0.20866,
+          "unpricedTurns": 0,
+          "write1h": 0,
+          "write5m": 0.123
+        },
         "input": 1050,
         "output": 4120,
         "turns": 18

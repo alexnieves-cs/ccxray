@@ -331,6 +331,11 @@ export function costedSampleReport(): Report {
       'claude-opus-4-5': { ...r.totals.byModel['claude-opus-4-5']!, cost: addCost(c1, c2) },
       'claude-haiku-4-5': { ...r.totals.byModel['claude-haiku-4-5']!, cost: addCost(c3, c4) },
     },
+    byDay: {
+      '2026-10-11': { ...r.totals.byDay['2026-10-11']!, cost: addCost(c1, c3) },
+      '2026-10-14': { ...r.totals.byDay['2026-10-14']!, cost: c2 },
+      '2026-10-18': { ...r.totals.byDay['2026-10-18']!, cost: c4 },
+    },
     byRole: {
       main: { ...sum(t1, t2), cost: addCost(c1, c2) },
       subagent: { ...sum(t3, t4), cost: addCost(c3, c4) },

@@ -26,6 +26,35 @@ describe('terminal reporter', () => {
     await expect(out).toMatchFileSnapshot(`${SNAP}/terminal-cost.txt`);
   });
 
+  it('BY PROJECT and BY DAY: $ with bars, largest project first, hidden for one project', () => {
+    const r = costedSampleReport();
+    const one = stripAnsi(renderTerminal(r, { color: false, width: 100 }));
+    expect(one).not.toContain('BY PROJECT');
+    expect(one).toMatch(/BY DAY \(UTC\)[^\n]*\n {2}Sun Oct 11 +\$\S+ +█/);
+    const all = r.totals.all;
+    const cost = (usd: number) => ({ ...all.cost!, total: usd });
+    r.totals.byProject = {
+      '-home-dev-small': { ...all, turns: 3, cost: cost(1) },
+      '-home-dev-big': { ...all, turns: 9, cost: cost(4) },
+    };
+    const out = stripAnsi(renderTerminal(r, { color: false, width: 100, homeDir: '/home/dev' }));
+    expect(out).toMatch(
+      /BY PROJECT[^\n]*\n {2}~-big +\$4\.00 +\d+% +█+ +9 turns[^\n]*\n {2}~-small/,
+    );
+    expect(maxWidth(out)).toBeLessThanOrEqual(100);
+    // Large turn counts and narrow terminals: the measured turns and hit ratio are never cut.
+    r.totals.byProject = {
+      '-home-dev-another-very-long-project-name': { ...all, turns: 123_456, cost: cost(4) },
+      '-home-dev-small': { ...all, turns: 12_345, cost: cost(1) },
+    };
+    for (const width of [60, 80, 100]) {
+      const o = stripAnsi(renderTerminal(r, { color: false, width, homeDir: '/home/dev' }));
+      expect(o).toMatch(/123,456 turns · hit \d/);
+      expect(o).toMatch(/12,345 turns · hit \d/);
+      expect(maxWidth(o), `width ${width}`).toBeLessThanOrEqual(width);
+    }
+  });
+
   it('shows COST under TOKENS and WHAT TO CHANGE FIRST, with the $ legend', () => {
     const out = renderTerminal(costedSampleReport(), { color: false, width: 100 });
     const at = (s: string) => out.indexOf(s);

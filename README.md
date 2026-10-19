@@ -144,6 +144,7 @@ Token counts mix kinds that differ about 100× in price (a cache read vs output)
 
 - **COST** splits the window's $ by token kind and by main session vs subagents. Unknown models are left out and named, never guessed.
 - **Each finding** gets `impact { costUsd, savingsUsd, basis }`, and TOP FINDINGS are ranked by savings. Content from a tool result is priced over every turn it stayed in context (written once, then re-read until a compaction).
+- **BY PROJECT** and **BY DAY** show where the $ went [E] when there is more than one project or day: the top five projects with turns and cache hit ratio, and the last 14 UTC days. The HTML report has the project table too.
 - **WHAT TO CHANGE FIRST** lists up to five changes with their saving, share of cost, a copy-pasteable change and the findings behind it. The combined line ("These N changes would have cut about X% of this window's cost [E]") is a conservative union, not a sum, because levers overlap. A cheaper subagent model may need more or fewer tokens and may do worse; savings from context size are upper bounds.
 
 These are estimates for *your* logs and window, not a product claim. How each number is computed, and what is still unverified, is in [SPEC §5.1–5.3](docs/SPEC.md#51-cost-model-m7).
