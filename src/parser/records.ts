@@ -41,10 +41,11 @@ const count = (v: unknown): number =>
 const optCount = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined;
 
-export function parseTs(v: unknown): Date | undefined {
+/** Epoch ms of an ISO timestamp string, or undefined. A number, not a Date (memory, SPEC §8). */
+export function parseTs(v: unknown): number | undefined {
   if (typeof v !== 'string') return undefined;
   const ms = Date.parse(v);
-  return Number.isNaN(ms) ? undefined : new Date(ms);
+  return Number.isNaN(ms) ? undefined : ms;
 }
 
 /** Types the parser reads for turns, prompts and events. */

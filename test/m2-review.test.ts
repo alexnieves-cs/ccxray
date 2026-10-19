@@ -247,7 +247,7 @@ describe('9. performance', () => {
         sessionId: 'perf',
         uuid: `u${i}`,
         messageId: `m${i}`,
-        ts: new Date(t0 + i * 400_000),
+        ts: t0 + i * 400_000,
         gapMs: i === 0 ? null : 400_000,
         index: i,
         model: 'm',
@@ -330,7 +330,7 @@ describe('11. labels and the TTL boundary', () => {
       return b.assistant({ usage: { input: 3, cacheWrite: 21000 }, blocks: [text('ok')] });
     };
     const at = await built('ttl-edge', [mk('edge', 300_000)]);
-    expect(at[0]!.turns[2]!.ts.getTime() - at[0]!.turns[1]!.ts.getTime()).toBe(300_000);
+    expect(at[0]!.turns[2]!.ts - at[0]!.turns[1]!.ts).toBe(300_000);
     expect(cacheRebuild.run(at, ctx())[0]!.data!.causes).toMatchObject([{ cause: 'unknown' }]);
     const past = await built('ttl-past', [mk('past', 300_001)]);
     expect(cacheRebuild.run(past, ctx())[0]!.data!.causes).toMatchObject([{ cause: 'ttl-expiry' }]);

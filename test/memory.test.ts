@@ -1,7 +1,7 @@
 // Regression guard for parser memory (SPEC §8: < 300 MB RSS at 1 GB). Peak RSS is too noisy to
 // assert in CI, so this checks the heap retained by loadSessions() per MB of a small synthetic
 // corpus after a full GC. That number is deterministic to within a few percent; the threshold
-// leaves ~38% headroom over the measured value (see FORMAT.md "Implementation notes: memory").
+// leaves ~35% headroom over the measured value (see FORMAT.md "Implementation notes: memory").
 
 import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -50,7 +50,7 @@ async function warmUp(): Promise<void> {
 }
 
 describe('memory', () => {
-  it('retains under 0.25 MiB of heap per MB of transcript', async () => {
+  it('retains under 0.20 MiB of heap per MB of transcript', async () => {
     writeTree(dir, corpus());
     // Warm-up run (in its own function, so no frame keeps its result alive): compiles the
     // parser and fills interning tables, so they are not counted.
@@ -63,9 +63,9 @@ describe('memory', () => {
       sessions.reduce((a, s) => a + s.files.reduce((b, f) => b + statSync(f).size, 0), 0),
     );
     const perMB = retained / 2 ** 20 / (stats.bytes / 1e6);
-    // [M] this container, Node 22.22: 0.181 MiB/MB (stable to 3 digits over runs); the parser
-    // before the memory pass retained 0.285 here. 0.25 fails on a regression of that size.
-    expect(perMB).toBeLessThan(0.25);
+    // [M] this container, Node 22.22: 0.148 MiB/MB with epoch-ms timestamps (0.147-0.148 over
+    // runs); 0.181 with Date timestamps, 0.285 before the memory pass. 0.20 keeps ~35% headroom.
+    expect(perMB).toBeLessThan(0.2);
     expect(sessions.length).toBe(20); // keep `sessions` alive until after the measurement
   });
 });

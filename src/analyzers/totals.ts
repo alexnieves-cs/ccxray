@@ -38,7 +38,7 @@ export function withHitRatio(t: TokenTotals): TokenTotals {
 }
 
 /** UTC calendar day of a turn, `YYYY-MM-DD`. */
-export const utcDay = (d: Date): string => d.toISOString().slice(0, 10);
+export const utcDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
 /** Totals of one session's non-synthetic turns. */
 export function sessionTotals(s: Session): TokenTotals {

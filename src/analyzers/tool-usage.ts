@@ -40,7 +40,7 @@ export const toolUsage: Analyzer = {
     const snaps = sessions
       .filter((s) => !s.isSubagent)
       .flatMap((s) => s.events.flatMap((e) => (e.kind === 'tools-snapshot' ? [{ s, e }] : [])))
-      .sort((a, b) => a.e.ts.getTime() - b.e.ts.getTime());
+      .sort((a, b) => a.e.ts - b.e.ts);
     for (const { s, e } of snaps) {
       snapSession = s;
       for (const t of e.tools) defs.set(t.name, t.chars);

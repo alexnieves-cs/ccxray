@@ -111,7 +111,7 @@ Data flow: discover → stream parse → dedupe → build sessions/turns → ana
 ### 4.1 Core types (sketch)
 ```ts
 type Turn = {
-  sessionId: string; uuid: string; ts: Date; gapMs: number | null;
+  sessionId: string; uuid: string; ts: number /* epoch ms UTC */; gapMs: number | null;
   model: string; ccVersion?: string; isSidechain: boolean;
   usage: { input: number; cacheWrite: number; cacheWrite5m?: number; cacheWrite1h?: number; cacheRead: number; output: number }; // measured
   toolUses: { id: string; name: string; input: unknown }[];
@@ -124,6 +124,8 @@ type Finding = {
   fix: { summary: string; diff?: string; docsUrl?: string };
 };
 ```
+
+Every timestamp in the model (`Turn.ts`, `ToolResult.ts`, `UserPrompt.ts`, `SessionEvent.ts`, `Session.firstTs`/`lastTs`) is epoch milliseconds (UTC) as a `number`, not a `Date`: a Date object costs ~112 B of retained heap each (§8). Reports keep emitting ISO-8601 strings (`new Date(ms).toISOString()`).
 
 **Finding.data conventions (provisional, reporters ↔ analyzers).** `Finding.data` is analyzer-specific, but reporters read three keys when present and well-formed: `causes: { cause, count, tokens?, tokensKind?, fix? }[]` (per-cause breakdown, e.g. A2/A3; `tokens` has `tokensKind` when given, else the finding's kind; A3 sets `estimated` because assigning a cause is a guess), `tool: string` (tool name; groups "where it went" by tool) and `command: string` (raw Bash command; reporters only show its first two words, never env assignments). Without `--include-content`, the JSON report keeps only those keys plus number/boolean scalars and strings of at most 80 chars. This contract may change until M4; the source of truth is the comment at the top of `src/reporters/derive.ts`. A7's per-MCP-server data is a fixed contract consumed by M5 `ccxray fix mcp`: `{ server, unusedTools, usedTools, defChars? }` with full `mcp__server__tool` names (see `src/analyzers/tool-usage.ts`).
 

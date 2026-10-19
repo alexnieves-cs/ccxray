@@ -110,12 +110,12 @@ function sessionRepeats(s: Session, subagents: readonly Session[]): Repeat[] {
   const add = (src: Session, own: boolean): void => {
     for (const turn of realTurns(src))
       for (const use of turn.toolUses)
-        ops.push({ ts: turn.ts.getTime(), seq: seq++, turn, use, own, cwd: src.cwd });
+        ops.push({ ts: turn.ts, seq: seq++, turn, use, own, cwd: src.cwd });
   };
   add(s, true);
   for (const sub of subagents) add(sub, false);
   for (const e of s.events)
-    if (e.kind === 'compaction') ops.push({ ts: e.ts.getTime(), seq: seq++, compaction: true });
+    if (e.kind === 'compaction') ops.push({ ts: e.ts, seq: seq++, compaction: true });
   // Stable: same-ts ops keep insertion order.
   ops.sort((a, b) => a.ts - b.ts || a.seq - b.seq);
 

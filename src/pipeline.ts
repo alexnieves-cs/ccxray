@@ -30,8 +30,8 @@ function summary(s: Session, totals: Report['totals']): SessionSummary {
     id: s.id,
     project: s.project,
     isSubagent: s.isSubagent,
-    firstTs: s.firstTs.toISOString(),
-    lastTs: s.lastTs.toISOString(),
+    firstTs: new Date(s.firstTs).toISOString(),
+    lastTs: new Date(s.lastTs).toISOString(),
     turns: s.turns.length,
     ccVersions: [...s.ccVersions],
     models: [...new Set(s.turns.filter((t) => !t.isSynthetic).map((t) => t.model))],
@@ -53,7 +53,7 @@ export function buildReport(input: BuildReportInput): Report {
     stats,
     totals,
     sessions: [...sessions]
-      .sort((a, b) => a.firstTs.getTime() - b.firstTs.getTime() || (a.id < b.id ? -1 : 1))
+      .sort((a, b) => a.firstTs - b.firstTs || (a.id < b.id ? -1 : 1))
       .map((s) => summary(s, totals)),
     findings: sortFindings(findings),
     calibration: calibrate(sessions),
