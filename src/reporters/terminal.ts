@@ -22,6 +22,8 @@ import {
   formatTokens,
   formatVersionRange,
   kindTag,
+  palette,
+  type Palette,
   padEnd,
   padStart,
   relSource,
@@ -44,31 +46,6 @@ export interface TerminalOptions {
 
 const MAX_WIDTH = 100;
 const MIN_WIDTH = 60;
-
-type Paint = (s: string) => string;
-interface Palette {
-  bold: Paint;
-  dim: Paint;
-  red: Paint;
-  yellow: Paint;
-  cyan: Paint;
-  green: Paint;
-}
-
-function palette(color: boolean): Palette {
-  const sgr =
-    (open: number, close: number): Paint =>
-    (s) =>
-      color && s ? `\x1b[${open}m${s}\x1b[${close}m` : s;
-  return {
-    bold: sgr(1, 22),
-    dim: sgr(2, 22),
-    red: sgr(31, 39),
-    yellow: sgr(33, 39),
-    cyan: sgr(36, 39),
-    green: sgr(32, 39),
-  };
-}
 
 /** Deep copy with every string passed through sanitizeText (no escapes or controls from data). */
 function sanitizeDeep<T>(v: T): T {

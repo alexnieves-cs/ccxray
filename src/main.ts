@@ -4,6 +4,7 @@ import { captureCommand } from './commands/capture.js';
 import { doctor } from './commands/doctor.js';
 import { fixCommand } from './commands/fix-mcp.js';
 import { sessionCommand } from './commands/session.js';
+import { watchCommand } from './commands/watch.js';
 import { VERSION } from './version.js';
 
 const HELP = `tknxray ${VERSION}: explain where your Claude Code tokens go (local only, no network)
@@ -12,6 +13,8 @@ Usage:
   tknxray [--since DATE] [--until DATE] [--project NAME] [--json] [--html FILE]
           [--include-content] [--threshold.KEY=VALUE]... [--no-color] [--root DIR]...
   tknxray session <id|prefix|latest> [--root DIR]... [--json] [--threshold.KEY=VALUE]...
+  tknxray watch [latest|<id|prefix>] [--project NAME] [--root DIR]... [--interval SECONDS]
+          [--once] [--no-color]   (live view of one session; q or Ctrl-C quits)
   tknxray doctor [--root DIR]... [--json]
   tknxray fix mcp [--settings FILE] [--apply]   (preview; see tknxray fix mcp --help)
   tknxray capture --i-understand-this-is-api-key-only   (opt-in; see docs/capture.md)
@@ -51,6 +54,7 @@ export async function main(
   }
   // Only argv[0] names a subcommand: in `--project doctor`, `doctor` is a flag value.
   if (argv[0] === 'session' && !values.help) return sessionCommand(argv, out);
+  if (argv[0] === 'watch' && !values.help) return watchCommand(argv, out);
   if (argv[0] === 'doctor' && !values.help) {
     const roots = (values.root as unknown[] | undefined)?.filter(
       (r): r is string => typeof r === 'string',

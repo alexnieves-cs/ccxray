@@ -1,0 +1,101 @@
+=== ttl-gap-rebuild ===
+tknxray watch · ~-ttl-gap-rebuild · dd8e370c · sonnet-4-5 · Claude Code 2.1.302
+  3 turns · started 2026-10-01 09:00 UTC · ● live · polled 09:10:00 UTC
+────────────────────────────────────────────────────────────────────────────────
+CONTEXT  latest turn #3 [M]
+  ▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  20,603 of 200,000 (assumed window) · 10% · session peak 20,603 at #3
+  █ cache read 0   ▓ cache write 20,600   ▒ uncached input 3
+
+CONTEXT PER TURN [M]  one column per turn
+  21k │▇██
+      │███
+      │███
+    0 │███
+         ↻
+       #3
+  ↻ cache rebuild (A2)
+────────────────────────────────────────────────────────────────────────────────
+LATEST TURN #3 · 09:06:35 UTC · sonnet-4-5 · gap 6m02s
+  cache read 0 · cache write 20,600 · input 3 · output 90 [M] · hit ratio 0% [M]
+  tools: none
+  ↻ rebuild: rewrote 20,600 [M]
+    likely cause ttl-expiry [E]: idle 6m 2s > 5m cache TTL
+
+SESSION SO FAR [M]
+  input 8 · cache write 41,100 · cache read 20,000 · output 270 · hit ratio 33%
+  rewritten by rebuilds 20,600 [M] · 1 rebuild · 0 compactions
+  subagents: none so far
+
+IDLE  last turn 3m25s ago · cache TTL 5m (no cache-write split logged) [E]
+────────────────────────────────────────────────────────────────────────────────
+[M] measured from usage fields · [E] estimate or assumption, never exact
+q or Ctrl-C to quit · local only, reads files, sends nothing
+
+=== nested-subagents-dir ===
+tknxray watch · ~-nested-subagents-dir · 0d25164f · sonnet-4-5
+  Claude Code 2.1.302 · 2 turns · started 2026-10-01 09:00 UTC
+  ● live · polled 09:10:00 UTC
+────────────────────────────────────────────────────────────────────────────────
+CONTEXT  latest turn #2 [M]
+  ███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  9,204 of 200,000 (assumed window) · 5% · session peak 9,204 at #2
+  █ cache read 9,000   ▓ cache write 200   ▒ uncached input 4
+
+CONTEXT PER TURN [M]  one column per turn
+  9.2k │▇█
+       │██
+       │██
+     0 │██
+        #2
+────────────────────────────────────────────────────────────────────────────────
+LATEST TURN #2 · 09:00:08 UTC · sonnet-4-5 · gap 7s
+  cache read 9,000 · cache write 200 · input 4 · output 30 [M]
+  hit ratio 98% [M]
+  tools: none
+  not a rebuild (A2)
+
+SESSION SO FAR [M]
+  input 9 · cache write 9,200 · cache read 9,000 · output 100 · hit ratio 49%
+  rewritten by rebuilds 0 [M] · 0 rebuilds · 0 compactions
+  subagents 2 · 12,455 tokens [M] · n1 (sonnet-4-5, 2 turns) 8.3k
+    n2 (sonnet-4-5, 1 turn) 4.1k
+
+IDLE  last turn 9m52s ago · cache TTL 5m (no cache-write split logged) [E]
+      cache has likely expired; the next turn will rebuild it [E]
+────────────────────────────────────────────────────────────────────────────────
+[M] measured from usage fields · [E] estimate or assumption, never exact
+q or Ctrl-C to quit · local only, reads files, sends nothing
+
+=== big-bash-output ===
+tknxray watch · ~-big-bash-output · 58a81984 · sonnet-4-5 · Claude Code 2.1.302
+  3 turns · started 2026-10-01 09:00 UTC · ● live · polled 09:10:00 UTC
+────────────────────────────────────────────────────────────────────────────────
+CONTEXT  latest turn #3 [M]
+  ███████████▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  37,202 of 200,000 (assumed window) · 19% · session peak 37,202 at #3
+  █ cache read 29,100   ▓ cache write 8,100   ▒ uncached input 2
+
+CONTEXT PER TURN [M]  one column per turn
+  37k │ ▁█
+      │ ██
+      │▇██
+    0 │███
+       #3
+────────────────────────────────────────────────────────────────────────────────
+LATEST TURN #3 · 09:00:05 UTC · sonnet-4-5 · gap 2s
+  cache read 29,100 · cache write 8,100 · input 2 · output 20 [M]
+  hit ratio 78% [M]
+  tools: none
+  not a rebuild (A2)
+
+SESSION SO FAR [M]
+  input 7 · cache write 22,200 · cache read 61,100 · output 95 · hit ratio 73%
+  rewritten by rebuilds 0 [M] · 0 rebuilds · 0 compactions
+  subagents: none so far
+
+IDLE  last turn 9m55s ago · cache TTL 5m (no cache-write split logged) [E]
+      cache has likely expired; the next turn will rebuild it [E]
+────────────────────────────────────────────────────────────────────────────────
+[M] measured from usage fields · [E] estimate or assumption, never exact
+q or Ctrl-C to quit · local only, reads files, sends nothing

@@ -2,7 +2,7 @@
 // bad input; everything odd is counted in ParseStats.
 
 import { readFile } from 'node:fs/promises';
-import { discover } from '../discover.js';
+import { discover, type Discovery } from '../discover.js';
 import type { ParseStats, Session } from '../model/index.js';
 import { dedupeAcrossFiles } from './dedupe.js';
 import { counter, inc, isRec, str } from './records.js';
@@ -46,7 +46,19 @@ export const emptyStats = (roots: string[] = []): ParseStats => ({
 export async function loadSessions(
   opts: LoadOptions = {},
 ): Promise<{ sessions: Session[]; stats: ParseStats }> {
-  const found = await discover(opts.roots);
+  const { sessions, stats } = await loadSessionFiles(await discover(opts.roots), opts);
+  return { sessions: filterSessions(sessions, opts), stats };
+}
+
+/**
+ * Parse exactly the files of `found` (e.g. one session's transcripts from `discoverSession`, which
+ * `tknxray watch` re-reads on every change). Cross-session dedupe (SPEC §4.3) only sees these
+ * files. No since/until/project filtering.
+ */
+export async function loadSessionFiles(
+  found: Discovery,
+  opts: Pick<LoadOptions, 'includeContent'> = {},
+): Promise<{ sessions: Session[]; stats: ParseStats }> {
   const stats = emptyStats(found.roots);
   for (let i = 0; i < found.errors; i++) inc(stats.warnings, 'unreadable file or directory');
   const counts = emptyCounts();
@@ -71,7 +83,9 @@ export async function loadSessions(
 
   const kept = dedupeAcrossFiles(files, stats);
   const sessions = buildSessions(files, kept, stats);
-  return { sessions: filterSessions(sessions, opts), stats };
+  // Before any window filter, so A3 sees the session's TTL even when its 1h writes are older.
+  for (const s of sessions) s.wrote1hCache = s.turns.some((t) => (t.usage.cacheWrite1h ?? 0) > 0);
+  return { sessions, stats };
 }
 
 /** `toolUseId` of a subagent's `agent-<id>.meta.json` ([M] 2.1.302). Only that key is read. */
@@ -93,8 +107,6 @@ function filterSessions(sessions: Session[], opts: LoadOptions): Session[] {
     (since === undefined || ms >= since) && (until === undefined || ms <= until);
   const out: Session[] = [];
   for (const s of sessions) {
-    // Before the window filter, so A3 sees the session's TTL even when its 1h writes are older.
-    s.wrote1hCache = s.turns.some((t) => (t.usage.cacheWrite1h ?? 0) > 0);
     if (
       needle !== undefined &&
       !s.project.toLowerCase().includes(needle) &&

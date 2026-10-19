@@ -1,0 +1,32 @@
+tknxray watch · ~-app · 017fbac0 · sonnet-4-5 · Claude Code 2.1.302 · 150 turns · started 2026-10-01 09:00 UTC
+  ● live · polled 11:30:00 UTC
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+CONTEXT  latest turn #150 [M]
+  ███████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  268,501 of 1,000,000 (assumed window) · 27% · session peak 268,501 at #150
+  █ cache read 266,500   ▓ cache write 2,000   ▒ uncached input 1
+
+CONTEXT PER TURN [M]  max of up to 2 turns per column
+  269k │                                                                                        ▁▁▁▂▂▂▃▃▃▃▄▄▄▅▅▅▆▆▆▇▇▇██
+       │                                                               ▁▁▁▁▂▂▂▃▃▃▄▄▄▅▅▅▆▆▆▇▇▇███████████████████████████
+       │                    ▁▁                ▁▁▁▂▂▂▃▃▃▄▄▄▄▅▅▅▆▆▆▇▇▇████████████████████████████████████████████████████
+     0 │▂▃▃▃▄▄▄▅▅▅▅▆▆▆▇▇▇█████▄▄▄▅▅▅▅▆▆▆▇▇▇█████████████████████████████████████████████████████████████████████████████
+                                      ↻
+                              ◆
+        #1                                                                                                          #150
+  ↻ cache rebuild (A2)   ◆ after a compaction
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+LATEST TURN #150 · 11:04:19 UTC · sonnet-4-5 · gap 22s
+  cache read 266,500 · cache write 2,000 · input 1 · output 30 [M] · hit ratio 99% [M]
+  tools (result ~tokens [E]): Bash ~5 · Read (no result yet)
+  not a rebuild (A2)
+
+SESSION SO FAR [M]
+  input 154 · cache write 394,500 · cache read 18,982,500 · output 4,540 · hit ratio 98%
+  rewritten by rebuilds 50,500 [M] · 1 rebuild · 1 compaction
+  subagents: none so far
+
+IDLE  last turn 25m41s ago · cache TTL 1h (from the cache-write split) [E]
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[M] measured from usage fields · [E] estimate or assumption, never exact
+q or Ctrl-C to quit · local only, reads files, sends nothing
