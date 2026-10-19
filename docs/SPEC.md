@@ -199,6 +199,9 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 **Watch assumptions added in M6 [UNVERIFIED]** (marked `// UNVERIFIED:` in `src/reporters/watch.ts`):
 - The context window is not logged. `watch` assumes 1,000,000 tokens once any main-chain turn's context (input + cache read + cache write) exceeded 200,000, else 200,000, and labels it "(assumed)".
 
+**Cost assumptions added in M7 [UNVERIFIED]** (marked `// UNVERIFIED:` in `src/cost/` and `src/analyzers/`):
+- A turn whose `usage` has no `cache_creation` 5m/1h split has its whole `cache_creation_input_tokens` priced at the 5-minute write rate (`writeSplit` in `src/cost/cost.ts`). When the split is present, the 1h part is priced at the 1h rate and the rest at the 5m rate.
+
 ### 4.5 Token estimator
 - Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.
 - Calibration (M2, `src/tokens/calibrate.ts`): for consecutive real turns *p → t* of one chain where *p* made exactly one tool call with one result, nothing else was logged in between (no prompt, no event), the model did not change and the result is ≥ 250 estimated tokens: `measured = ctx(t) − ctx(p) − output(p)` with `ctx = input + cache_write + cache_read`, and `ratio = estTokens / measured` (> 1 means chars/4 is high). The median ratio and sample count go into `Report.calibration` and one line of `doctor`. `cache_read` is included (the earlier draft said `input + cache_write` only) because a request's context is the sum of all three fields, and how it splits between them changes from turn to turn; only the growth of the sum is the added content.
@@ -234,6 +237,17 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 **M6 dogfood notes.**
 - A8 reports per session tree: at most one finding for the main session (with `data.curve`) and one aggregated finding for all flagged subagents of that session (`data.subagents`, `data.max` = largest subagent peak, which is also the finding's tokens; one evidence entry per subagent, named by agent id). Titles name subagents by the first 8 characters of their agent id, never by the parent session id (also in A6 and A10 titles).
 
+### 5.1 Cost model (M7)
+
+Token counts stay measured. On top of them, every turn is priced at **API list prices** from a bundled, dated table (`src/cost/prices.ts`, `PRICES_AS_OF = 2026-10-19`, source <https://platform.claude.com/docs/en/about-claude/pricing.md>). There is **no network call**: prices change only when the table is edited. Every $ figure is labeled **[E] API list-price equivalent**. Max/Pro subscribers do not pay per token, so each reporter's legend says once: "$ = what these tokens would cost at API list prices; subscription limits are not published, use it to compare, not as a bill".
+
+- **Price table** (USD per MTok: input, 5m cache write, 1h cache write, cache read, output). Fable 5.1 / Mythos 5.1 10, 12.5, 20, 0.25, 50 · Fable 5 / Mythos 5 10, 12.5, 20, 1, 50 · Opus 5.5 4, 5, 8, 0.20, 20 · Opus 5, 4.8, 4.7, 4.6, 4.5 5, 6.25, 10, 0.50, 25 · Opus 4.1, 4 15, 18.75, 30, 1.50, 75 · Sonnet 5.5 2, 2.5, 4, 0.10, 10 · Sonnet 5 2, 2.5, 4, 0.20, 10 · Sonnet 4.6, 4.5, 4 3, 3.75, 6, 0.30, 15 · Haiku 5.5 0.10, 0.125, 0.20, 0.01, 0.50 for prompts ≤ 100,000 tokens and 0.50, 0.625, 1, 0.05, 2.50 above (prompt length = input + cache read + cache write; each request priced on its own) · Haiku 4.5 1, 1.25, 2, 0.10, 5 · Haiku 3.5 0.80, 1, 1.60, 0.08, 4.
+- **Model matching.** A model id matches a table id exactly or followed by a date (`-20251101`, `@20251101`) and/or a bracketed variant (`[1m]`); the longest id is tried first, so `claude-opus-5-5` never matches `claude-opus-5`. Anything else (including `<synthetic>` and ids such as `claude-3-5-haiku-20241022` that use the older naming) is **unpriced**: never guessed, counted in `cost.unpricedTurns` and `Report.pricing.unpricedModels`, and left out of every $ sum.
+- **Turn cost** (`turnCost`, pure): input × input rate + 5m write × 5m rate + 1h write × 1h rate + cache read × read rate + output × output rate. Without a 5m/1h split the whole write uses the 5m rate (UNVERIFIED, §4.4).
+- **Report fields** (additive in report v1, `REPORT_SCHEMA_VERSION` stays 1): `cost` on every `TokenTotals` (all, per session, project, model, day; `{ input, write5m, write1h, read, output, total, unpricedTurns }`, USD rounded to 1e-6), `totals.byRole.{main, subagent}` (subagent = subagent transcripts and inline sidechain turns), and `pricing { asOf, source, unpricedModels, note }`.
+- **Not modeled** (limitations): `inference_geo` / data-residency multipliers, fast mode, the Batch API discount, long-context premiums other than Haiku 5.5's tier, and web search / fetch request fees.
+- **Validation [M]:** on the 17-session dogfood snapshot (1,066 turns, Opus 5.5 + Sonnet 5.5), the total is $93.1174, equal to `ccusage session --json` `totalCost` ($93.11739; ccusage also prices 1h writes at 2× input). Reproduce with `pnpm validate:real --root <projects> --ccusage ccusage.json` (§7), which gates the total at ±$0.01.
+
 ## 6. Milestones and acceptance tests
 
 | M | Scope | Acceptance (all automated unless noted) |
@@ -250,7 +264,7 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 - **Generator:** `scripts/make-fixture.ts` builds sessions from a compact DSL, so tests can declare the expected findings.
 - **Scrubber:** `scripts/scrub-fixture.ts` replaces text, paths and ids with deterministic hashes while keeping lengths and usage, so a real log can be turned into a shareable fixture.
 - **Unit tests** per analyzer; **snapshot tests** per reporter; **property tests** (fast-check) that the parser never throws.
-- **Real-log validation** (local only, never in CI): `pnpm validate:real [--root DIR] [--ccusage FILE]` runs on the default roots and prints parse stats, per-analyzer finding counts, A1 totals and, with a saved `npx ccusage@latest session --json` output, a per-session and total ±0.5% comparison. Counts only; session ids are hashed. The script never runs npx itself.
+- **Real-log validation** (local only, never in CI): `pnpm validate:real [--root DIR] [--ccusage FILE]` runs on the default roots and prints parse stats, per-analyzer finding counts, A1 totals and, with a saved `npx ccusage@latest session --json` output, a per-session and total ±0.5% comparison, plus a list-price cost comparison against ccusage's `totalCost` (total within ±$0.01, §5.1). Counts only; session ids are hashed. The script never runs npx itself.
 - **No-network test** in CI (see M0).
 
 ## 8. Benchmarks and performance targets

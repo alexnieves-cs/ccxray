@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { compareReport, oursBySession, parseCcusage, pctDiff } from '../scripts/validate-real.js';
+import {
+  compareCost,
+  compareReport,
+  oursBySession,
+  parseCcusage,
+  parseCcusageCost,
+  pctDiff,
+} from '../scripts/validate-real.js';
 import type { Session } from '../src/model/index.js';
 
 describe('validate:real helpers (no real logs)', () => {
@@ -122,5 +129,22 @@ describe('validate:real helpers (no real logs)', () => {
     expect(r.lines.join('\n')).toContain(
       '1 pass · 0 fail · 0 missing in tknxray · 0 only in tknxray',
     );
+  });
+
+  it('cross-checks list-price cost against ccusage totalCost within $0.01', () => {
+    const json = {
+      session: [
+        { period: 'p1', totalCost: 93.1173902 },
+        { period: 'p2', totalCost: 'x' },
+      ],
+      totals: { totalCost: 93.1173902 },
+    };
+    const theirs = parseCcusageCost(json);
+    expect([...theirs.sessions.keys()]).toEqual(['p1']);
+    expect(theirs.total).toBeCloseTo(93.1173902);
+    const ok = compareCost({ total: 93.11739, bySession: new Map([['p1', 93.11739]]) }, theirs);
+    expect(ok.pass).toBe(true);
+    expect(ok.lines.join('\n')).not.toMatch(/\bp1\b/);
+    expect(compareCost({ total: 93.2, bySession: new Map() }, theirs).pass).toBe(false);
   });
 });

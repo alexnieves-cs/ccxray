@@ -9,7 +9,9 @@
 // time (this script applies no --since unless you pass one, and neither should ccusage).
 //
 // Output is counts only: no prompt or file content, no paths, and session ids are hashed.
-// A1 passes when every total is within ±0.5% of ccusage (SPEC §6 M2).
+// A1 passes when every total is within ±0.5% of ccusage (SPEC §6 M2). The $ cross-check (M7,
+// SPEC §5.1) passes when the window's list-price cost is within ±$0.01 of ccusage's totalCost
+// (both price 1h cache writes at 2× input); per-session costs are printed, never gated.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -63,6 +65,63 @@ export function parseCcusage(json: unknown): { sessions: Map<string, Counts>; to
     if (typeof id === 'string' && c !== undefined) sessions.set(id, c);
   }
   return { sessions, totals: counts(root.totals) };
+}
+
+export const COST_TOLERANCE_USD = 0.01;
+
+/** `totalCost` of the ccusage report and of each session (same shapes as parseCcusage). */
+export function parseCcusageCost(json: unknown): { sessions: Map<string, number>; total?: number } {
+  const root = (typeof json === 'object' && json !== null ? json : {}) as Record<string, unknown>;
+  const sessions = new Map<string, number>();
+  for (const s of [
+    ...(Array.isArray(root.session) ? (root.session as unknown[]) : []),
+    ...(Array.isArray(root.sessions) ? (root.sessions as unknown[]) : []),
+  ]) {
+    const r = s as Record<string, unknown> | null;
+    const id = r?.sessionId ?? r?.period;
+    const c = num(r?.totalCost);
+    if (typeof id === 'string' && c !== undefined) sessions.set(id, c);
+  }
+  const totals = root.totals as Record<string, unknown> | undefined;
+  const total = num(totals?.totalCost);
+  return { sessions, ...(total !== undefined ? { total } : {}) };
+}
+
+/** Compare our list-price cost with ccusage's: total gated at ±COST_TOLERANCE_USD. */
+export function compareCost(
+  ours: { total: number; bySession: Map<string, number> },
+  theirs: ReturnType<typeof parseCcusageCost>,
+): { lines: string[]; pass: boolean } {
+  const total = theirs.total ?? [...theirs.sessions.values()].reduce((a, b) => a + b, 0);
+  const diff = ours.total - total;
+  const pass = Math.abs(diff) <= COST_TOLERANCE_USD;
+  const usd = (x: number) => `$${x.toFixed(4)}`;
+  const lines = [
+    '',
+    `cost cross-check [E] (list prices, ±$${COST_TOLERANCE_USD} on the total)`,
+    `  tknxray ${usd(ours.total)} · ccusage ${usd(total)} · diff ${diff >= 0 ? '+' : ''}${diff.toFixed(4)}`,
+    `  TOTAL: ${pass ? 'PASS' : 'FAIL'}`,
+  ];
+  for (const [id, c] of [...theirs.sessions].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    const o = ours.bySession.get(id);
+    lines.push(
+      `  ${hashId(id)}  tknxray ${o === undefined ? 'missing' : usd(o)} · ccusage ${usd(c)}`,
+    );
+  }
+  return { lines, pass };
+}
+
+/** Our cost per ccusage session key (subagents rolled into their parent, like oursBySession). */
+export function oursCostBySession(
+  sessions: readonly Session[],
+  bySession: Record<string, TokenTotals>,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const s of sessions) {
+    const key = s.isSubagent ? (s.parentSessionId ?? s.id) : s.id;
+    out.set(key, (out.get(key) ?? 0) + (bySession[s.id]?.cost?.total ?? 0));
+  }
+  return out;
 }
 
 const fromTotals = (t: TokenTotals): Counts => ({
@@ -236,6 +295,19 @@ async function mainScript(argv: string[]): Promise<number> {
       );
       lines.push(...cmp.lines);
       if (!cmp.pass) code = 1;
+      const cost = compareCost(
+        {
+          total: t.cost?.total ?? 0,
+          bySession: oursCostBySession(sessions, report.totals.bySession),
+        },
+        parseCcusageCost(JSON.parse(readFileSync(values.ccusage, 'utf8'))),
+      );
+      lines.push(...cost.lines);
+      if (t.cost !== undefined && t.cost.unpricedTurns > 0)
+        lines.push(
+          `  note: ${n(t.cost.unpricedTurns)} turns on unpriced models are not in tknxray's $`,
+        );
+      if (!cost.pass) code = 1;
     }
   }
   process.stdout.write(`${lines.join('\n')}\n`);
