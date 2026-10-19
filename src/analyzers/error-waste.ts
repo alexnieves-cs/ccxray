@@ -1,7 +1,7 @@
 // A10 error-waste (SPEC §5): API errors (synthetic turns and api-error events) with their
 // retries [M], and failed tool calls re-issued with the same input [E].
 
-import type { Analyzer, Finding, Session, Turn } from '../model/index.js';
+import type { Analyzer, Finding, Session, SourcePointer, Turn } from '../model/index.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
 import { chain, fmt, turnTokens } from './rules.js';
 import { sessionLabel } from './util.js';
@@ -17,6 +17,7 @@ interface ApiError {
   label: string;
   tokens: number;
   synthetic: boolean;
+  source: SourcePointer;
 }
 
 /**
@@ -41,7 +42,14 @@ export function apiErrors(s: Session): ApiError[] {
       continue;
     }
     const uuid = e.uuid ?? `${e.source.file}:${e.source.line}`;
-    standalone.push({ ts: e.ts, uuid, label: e.detail, tokens: 0, synthetic: false });
+    standalone.push({
+      ts: e.ts,
+      uuid,
+      label: e.detail,
+      tokens: 0,
+      synthetic: false,
+      source: e.source,
+    });
   }
   const out: ApiError[] = [];
   const linked = new Set<ApiError>();
@@ -58,6 +66,7 @@ export function apiErrors(s: Session): ApiError[] {
       label: labels.get(t.uuid) ?? ev?.label ?? 'synthetic turn',
       tokens: turnTokens(t.usage),
       synthetic: true,
+      source: t.source,
     });
   }
   out.push(...standalone.filter((e) => !linked.has(e)));
@@ -124,6 +133,7 @@ export const errorWaste: Analyzer = {
             sessionId: s.id,
             turnUuid: e.uuid,
             detail: `API error: ${e.label}`,
+            source: e.source,
           })),
           fix: {
             summary:
