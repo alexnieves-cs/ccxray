@@ -8,7 +8,7 @@ import { defaultRoots } from '../discover.js';
 import { applyThresholdOverrides, DEFAULT_THRESHOLDS, type Thresholds } from '../model/index.js';
 import { loadSessions } from '../parser/index.js';
 import { buildReport } from '../pipeline.js';
-import { render, shouldUseColor } from '../reporters/index.js';
+import { buildTimeline, render, shouldUseColor } from '../reporters/index.js';
 
 export interface AnalyzeEnv {
   now?: Date;
@@ -181,7 +181,12 @@ export async function analyze(
     // Overwrites an existing file at that path (documented in --help).
     const path = resolve(o.html);
     try {
-      writeFileSync(path, render(report, 'html'));
+      writeFileSync(
+        path,
+        render(report, 'html', {
+          timeline: buildTimeline(sessions, o.thresholds, report.findings),
+        }),
+      );
     } catch (x) {
       err(
         `tknxray: could not write the HTML report to ${path}: ` +

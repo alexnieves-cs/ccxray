@@ -13,7 +13,7 @@
 // they stay in unusedTools (they can still be denied) and are listed separately in the evidence.
 // Only main (non-subagent) sessions' snapshots are read.
 
-import type { Analyzer, Finding, Session } from '../model/index.js';
+import type { Analyzer, Finding, Session, SourcePointer } from '../model/index.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
 import { fmt, mainTurns, mcpServer } from './rules.js';
 
@@ -27,22 +27,25 @@ export const toolUsage: Analyzer = {
   description: 'Tool calls by name; tools and MCP servers defined but never called',
   run(sessions) {
     const calls = new Map<string, number>();
-    const firstCall = new Map<string, { s: Session; uuid: string }>();
+    const firstCall = new Map<string, { s: Session; uuid: string; source: SourcePointer }>();
     for (const s of sessions)
       for (const t of s.turns)
         for (const u of t.toolUses) {
           calls.set(u.name, (calls.get(u.name) ?? 0) + 1);
-          if (!firstCall.has(u.name)) firstCall.set(u.name, { s, uuid: t.uuid });
+          if (!firstCall.has(u.name)) firstCall.set(u.name, { s, uuid: t.uuid, source: t.source });
         }
     // Definitions: union over every snapshot; the latest snapshot wins for a tool's size.
     const defs = new Map<string, number>();
     let snapSession: Session | undefined;
+    /** Where the definitions were read: the latest snapshot, else a deferred_tools_record. */
+    let snapSource: SourcePointer | undefined;
     const snaps = sessions
       .filter((s) => !s.isSubagent)
       .flatMap((s) => s.events.flatMap((e) => (e.kind === 'tools-snapshot' ? [{ s, e }] : [])))
       .sort((a, b) => a.e.ts - b.e.ts);
     for (const { s, e } of snaps) {
       snapSession = s;
+      snapSource = e.source;
       for (const t of e.tools) defs.set(t.name, t.chars);
     }
     const deferred = new Set<string>();
@@ -50,7 +53,10 @@ export const toolUsage: Analyzer = {
       if (!s.isSubagent)
         for (const e of s.events)
           if (e.kind === 'deferred-tools') {
-            snapSession ??= s;
+            if (snapSession === undefined) {
+              snapSession = s;
+              snapSource = e.source;
+            }
             for (const t of e.tools) deferred.add(t);
           }
     const defined = new Set([...defs.keys(), ...deferred]);
@@ -81,6 +87,7 @@ export const toolUsage: Analyzer = {
           sessionId: firstCall.get(name)!.s.id,
           turnUuid: firstCall.get(name)!.uuid,
           detail: `first of ${count} ${name} calls`,
+          source: firstCall.get(name)!.source,
         })),
         fix: {
           summary:
@@ -109,16 +116,19 @@ export const toolUsage: Analyzer = {
       if (server !== undefined) servers.get(server)?.used.add(name);
     }
     const turnUuid = mainTurns(snapSession)[0]?.uuid ?? '';
+    const source = snapSource ?? mainTurns(snapSession)[0]?.source;
+    const at = source !== undefined ? { source } : {};
     const ev = (detail: string, unused: string[]) => {
       const lazy = unused.filter((n) => deferred.has(n));
       return [
-        { sessionId: snapSession!.id, turnUuid, detail },
+        { sessionId: snapSession!.id, turnUuid, detail, ...at },
         ...(lazy.length > 0
           ? [
               {
                 sessionId: snapSession!.id,
                 turnUuid,
                 detail: `deferred, 0 tokens/cold turn: ${lazy.join(', ')}`.slice(0, 200),
+                ...at,
               },
             ]
           : []),
@@ -149,8 +159,8 @@ export const toolUsage: Analyzer = {
         ),
         fix: {
           summary: none
-            ? `Disable the "${server}" MCP server, or scope it to a subagent (tknxray fix mcp, M5)`
-            : `Deny the unused "${server}" tools in permissions.deny (tknxray fix mcp, M5)`,
+            ? `Disable the "${server}" MCP server, or scope it to a subagent (run \`tknxray fix mcp\` to preview the change)`
+            : `Deny the unused "${server}" tools in permissions.deny (run \`tknxray fix mcp\` to preview the change)`,
         },
       });
     }

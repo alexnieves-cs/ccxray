@@ -3,7 +3,7 @@
 // consists of is inferred [E]. Tool definition sizes come from `prompt_snapshot` attachments
 // when Claude Code logs them ([M] CC 2.1.302, FORMAT.md Q3).
 
-import type { Analyzer, Finding, Session, SessionEvent } from '../model/index.js';
+import type { Analyzer, Finding, Session, SessionEvent, SourcePointer } from '../model/index.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
 import {
   chain,
@@ -25,6 +25,7 @@ type Snapshot = Extract<SessionEvent, { kind: 'tools-snapshot' }>;
 interface Baseline {
   session: Session;
   turnUuid: string;
+  source: SourcePointer;
   version: string;
   tokens: number;
 }
@@ -62,6 +63,7 @@ export const fixedOverhead: Analyzer = {
       baselines.push({
         session: s,
         turnUuid: first.uuid,
+        source: first.source,
         version: first.ccVersion ?? UNKNOWN,
         tokens: contextTokens(first.usage),
       });
@@ -102,6 +104,7 @@ export const fixedOverhead: Analyzer = {
           sessionId: b.session.id,
           turnUuid: b.turnUuid,
           detail: `first turn context ${b.tokens} tokens on ${b.version}`,
+          source: b.source,
         })),
         fix: {
           summary:
@@ -134,6 +137,7 @@ export const fixedOverhead: Analyzer = {
             sessionId: x.session.id,
             turnUuid: x.turnUuid,
             detail: `session ${short(x.session.id)} first turn ${x.tokens} tokens on ${x.version}`,
+            source: x.source,
           })),
           fix: {
             summary:

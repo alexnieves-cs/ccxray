@@ -27,7 +27,7 @@ import {
   MAX_EVIDENCE,
   normPath,
   realTurns,
-  shortSession,
+  sessionLabel,
 } from './util.js';
 import type { Evidence } from './util.js';
 
@@ -201,7 +201,7 @@ export const repeatedRead: Analyzer = {
         findings.push({
           analyzer: 'repeated-read',
           severity: tokens >= 20_000 ? 'warn' : 'info',
-          title: `${rel} re-read ${reps.length}× unchanged in session ${shortSession(s.id)}`,
+          title: `${rel} re-read ${reps.length}× unchanged in ${sessionLabel(s)}`,
           tokens: { value: tokens, kind: 'estimated' },
           data: { tool: 'Read', path: rel, rereads: reps.length },
           evidence,
