@@ -260,6 +260,24 @@ export interface ParseStats {
 export type Severity = 'info' | 'warn' | 'high';
 export type TokenKind = 'measured' | 'estimated';
 
+/**
+ * What a finding costs and what fixing it would plausibly have saved in this window, at API list
+ * prices (SPEC §5.2). Always estimated $ [E]; `confidence` says whether the tokens behind it are
+ * measured usage fields or estimates.
+ */
+export interface Impact {
+  /** USD the tokens behind the finding cost at list prices. */
+  costUsd: number;
+  /** USD the suggested fix would plausibly have saved in this window (≤ costUsd). */
+  savingsUsd: number;
+  /** One plain sentence: how the numbers were computed. */
+  basis: string;
+  confidence: 'measured-tokens' | 'estimated';
+  /** savingsUsd split by where it was spent: main conversations vs subagents (sums to it). */
+  savingsMainUsd: number;
+  savingsSubagentUsd: number;
+}
+
 export interface Finding {
   /** Analyzer id, e.g. `cache-rebuild`. */
   analyzer: string;
@@ -270,6 +288,8 @@ export interface Finding {
   data?: Record<string, unknown>;
   evidence: { sessionId: string; turnUuid: string; detail: string; source?: SourcePointer }[];
   fix: { summary: string; diff?: string; docsUrl?: string };
+  /** $ impact (SPEC §5.2), when the analyzer can price it. Optional (additive in report v1). */
+  impact?: Impact;
 }
 
 export interface TokenTotals {

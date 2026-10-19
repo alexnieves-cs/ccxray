@@ -85,11 +85,11 @@ describe('tknxray (default command)', () => {
     expect(report.totals.all.turns).toBe(3 + 3 + 3 + 4 + 5);
     expect(report.findings.map((f: { analyzer: string }) => f.analyzer)).toEqual([
       'cache-rebuild',
-      'fixed-overhead',
+      'big-tool-output',
       'subagent-cost',
       'big-tool-output',
-      'big-tool-output',
       'repeated-read',
+      'fixed-overhead',
       'tool-usage',
     ]);
     expect(report.calibration).toMatchObject({ samples: expect.any(Number) });

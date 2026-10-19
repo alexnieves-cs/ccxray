@@ -37,6 +37,14 @@ export function mainTurns(s: Session): Turn[] {
  */
 export function isRebuild(prev: Turn | undefined, cur: Turn, th: Thresholds): boolean {
   if (prev === undefined || cur.isSidechain || cur.isSynthetic) return false;
+  return meetsRebuildRule(prev, cur, th);
+}
+
+/**
+ * The A2 usage rule alone, for any chain (sidechains included): the cost model (src/cost/carry.ts)
+ * uses it to tell which turns rewrote their prefix. isRebuild adds the main-chain restriction.
+ */
+export function meetsRebuildRule(prev: Turn, cur: Turn, th: Thresholds): boolean {
   const minWrite = Math.max(
     th.rebuildMinCacheWrite,
     th.rebuildPrevContextFraction * contextTokens(prev.usage),

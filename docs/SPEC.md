@@ -201,6 +201,9 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 
 **Cost assumptions added in M7 [UNVERIFIED]** (marked `// UNVERIFIED:` in `src/cost/` and `src/analyzers/`):
 - A turn whose `usage` has no `cache_creation` 5m/1h split has its whole `cache_creation_input_tokens` priced at the 5-minute write rate (`writeSplit` in `src/cost/cost.ts`). When the split is present, the 1h part is priced at the 1h rate and the rest at the 5m rate.
+- Carry cost (§5.2): content stays in the cached prefix of every later request of its chain until a compaction, and a turn meeting the A2 usage rule rewrote all of it; the content's position in the prefix is not logged. A turn that wrote no cache tokens is given its session's TTL write rate (`sessionTtl`).
+- A4/A7 impact: tool definitions are part of the cached prefix of every main-chain request of the sessions whose `prompt_snapshot` lists them. Subagent requests are left out (whether they carry the same definitions is not logged), which makes the figure conservative.
+- A9 subagent type: the `subagent_type` of the parent Agent/Task tool_use (linked by `parentToolUseId`); an explicit `model` in that input overrides settings.
 
 ### 4.5 Token estimator
 - Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.
@@ -247,6 +250,25 @@ Token counts stay measured. On top of them, every turn is priced at **API list p
 - **Report fields** (additive in report v1, `REPORT_SCHEMA_VERSION` stays 1): `cost` on every `TokenTotals` (all, per session, project, model, day; `{ input, write5m, write1h, read, output, total, unpricedTurns }`, USD rounded to 1e-6), `totals.byRole.{main, subagent}` (subagent = subagent transcripts and inline sidechain turns), and `pricing { asOf, source, unpricedModels, note }`.
 - **Not modeled** (limitations): `inference_geo` / data-residency multipliers, fast mode, the Batch API discount, long-context premiums other than Haiku 5.5's tier, and web search / fetch request fees.
 - **Validation [M]:** on the 17-session dogfood snapshot (1,066 turns, Opus 5.5 + Sonnet 5.5), the total is $93.1174, equal to `ccusage session --json` `totalCost` ($93.11739; ccusage also prices 1h writes at 2× input). Reproduce with `pnpm validate:real --root <projects> --ccusage ccusage.json` (§7), which gates the total at ±$0.01.
+
+### 5.2 Impact per finding (M7)
+
+Raw token counts mix kinds that differ ~100× in price (on Opus 5.5 a cache read is $0.20/MTok, a 1h cache write $8, output $20), so findings also carry an optional **`impact { costUsd, savingsUsd, basis, confidence, savingsMainUsd, savingsSubagentUsd }`**: what the tokens behind the finding cost at list prices, what the suggested fix would plausibly have saved in this window (never more than the cost), one plain sentence saying how, and whether the tokens are measured (`measured-tokens`) or estimated. **TOP FINDINGS are ranked by `savingsUsd`**; findings without savings (unpriced models, cost-only findings) follow in the old order (severity, then tokens).
+
+**Carry cost** (`src/cost/carry.ts`). Content that enters the context is written to the cache once and then re-read on every later request of the same chain until a compaction drops it or the chain ends. For content of *T* tokens added by a tool result of turn *i*: `carry = T × (write(i+1) + Σ_{t=i+2..end−1} unit(t))`, where `unit(t)` is the read price, or the write price on a turn that rewrote its prefix (the chain's first turn, or a turn meeting the A2 usage rule, sidechains included), each at that turn's own model price; `end` is the first turn after the next compaction, else the chain's end; `turnsCarried = end − (i+1)`. A chain is a subagent transcript, a session's main conversation, or one agentId's inline sidechain turns. A turn that wrote nothing is given its session's TTL write rate.
+
+| Analyzer | costUsd | savingsUsd | confidence |
+|---|---|---|---|
+| A2 cache rebuild | Σ rebuild-turn cache writes at write price (5m/1h split) | Σ cacheWrite × (write − read price) per rebuild turn; per cause in `data.causes[].costUsd/savingsUsd` | measured-tokens |
+| A4 tool definitions | all definition tokens × Σ over main-chain requests of sessions with a snapshot (read price, write price on cold/rebuild turns) | 0 (A7 counts what can be removed) | estimated |
+| A5 big tool output | Σ carry of each output | carry of the part above `TRIMMED_OUTPUT_TOKENS` = 1,000 (≈ 100 lines kept); `data.turnsCarriedMax`, evidence says "stayed in context for N turns" | estimated |
+| A6 repeated read | Σ carry of each duplicate copy | = cost (reference the earlier read) | estimated |
+| A7 unused tools | unused (non-deferred) definition tokens × Σ over main-chain requests of the sessions whose snapshot lists them | = cost for MCP servers; 0 for built-ins | estimated |
+| A8 context growth | Σ over the chain's turns of max(0, context − `contextLargeTokens`) × read price | = cost (an upper bound: "starting fresh / /clear between tasks avoids most of this") | estimated |
+| A9 subagents | Σ subagent turn costs | cost − the same tokens re-priced one tier down (Opus / Fable / Mythos → `claude-sonnet-5-5`, Sonnet → `claude-haiku-5-5`, none for Haiku); `data.subagentTypes[]` groups by `subagent_type` of the parent Agent/Task tool_use (`(unknown)` when unlinked) with `explicitModel` = invocations that passed `model` | estimated, with the caveat that a cheaper model may need more or fewer tokens and may do worse |
+| A10 | none (falls back to tokens) | | |
+
+`savingsMainUsd` / `savingsSubagentUsd` split the savings by where the tokens were spent (subagent transcripts and inline sidechain turns count as subagent).
 
 ## 6. Milestones and acceptance tests
 

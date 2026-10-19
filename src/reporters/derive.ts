@@ -22,10 +22,22 @@ function finiteOr(n: number, fallback: number): number {
 
 const SEVERITY_RANK: Record<Severity, number> = { high: 0, warn: 1, info: 2 };
 
-/** Severity (high → info), then tokens descending, then analyzer and title for stability. */
+/** savingsUsd of a finding, when it has a positive, finite one. */
+export function savingsOf(f: Finding): number | undefined {
+  const v = f.impact?.savingsUsd;
+  return isFiniteNumber(v) && v > 0 ? v : undefined;
+}
+
+/**
+ * Cost impact first (SPEC §5.2): findings with $ savings, largest first. Then the rest (unpriced
+ * models, or nothing to save): severity (high → info), then tokens descending. Analyzer and title
+ * break ties for stability.
+ */
 export function sortFindings(findings: readonly Finding[]): Finding[] {
   return [...findings].sort(
     (a, b) =>
+      (savingsOf(a) === undefined ? 1 : 0) - (savingsOf(b) === undefined ? 1 : 0) ||
+      (savingsOf(b) ?? 0) - (savingsOf(a) ?? 0) ||
       (SEVERITY_RANK[a.severity] ?? 3) - (SEVERITY_RANK[b.severity] ?? 3) ||
       finiteOr(b.tokens.value, -1) - finiteOr(a.tokens.value, -1) ||
       a.analyzer.localeCompare(b.analyzer, 'en') ||

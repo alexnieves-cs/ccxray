@@ -58,6 +58,19 @@ export function formatTokens(value: number, kind: TokenKind): string {
   return kind === 'estimated' ? `~${formatCompact(value)}` : formatCompact(value);
 }
 
+/**
+ * US dollars at list prices: `$1,234`, `$93.12`, `$0.42`, `<$0.01`, `$0`. Always an estimate;
+ * callers add the [E] label.
+ */
+export function formatUsd(n: number): string {
+  if (!Number.isFinite(n)) return 'n/a';
+  if (n < 0) return `-${formatUsd(-n)}`;
+  if (n === 0) return '$0';
+  if (n < 0.005) return '<$0.01';
+  if (n >= 1_000) return `$${formatInt(n)}`;
+  return `$${n.toFixed(2)}`;
+}
+
 /** Short label shown next to a number: `[M]` measured, `[E]` estimated. */
 export function kindTag(kind: TokenKind): string {
   return kind === 'measured' ? '[M]' : '[E]';

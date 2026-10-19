@@ -12,8 +12,15 @@
 //   - with --since/--until, the first in-window turn has no in-window turn n-1 and is not checked.
 // Tokens are measured: the sum of cacheWrite of the rebuild turns. The per-cause split in
 // data.causes is estimated (tokensKind: 'estimated'): the cause is an attribution guess.
+//
+// Impact (SPEC §5.2): a rebuild paid the cache-write price for tokens a warm cache would have
+// served at the read price, so savings = Σ cacheWrite × (write price − read price) per rebuild
+// turn, by that turn's 5m/1h split and model. Tokens measured; $ at list prices [E].
+import { promptTokens, writeSplit } from '../cost/cost.js';
+import { impact } from '../cost/impact.js';
+import { priceFor } from '../cost/prices.js';
 import type { Analyzer, Finding, Session, Thresholds, Turn } from '../model/index.js';
-import { formatCompact, formatInt } from '../reporters/format.js';
+import { formatCompact, formatInt, formatUsd } from '../reporters/format.js';
 import { ChainState, rebuildCause, REBUILD_CAUSES, type RebuildCause } from './rebuild-cause.js';
 import { isRebuild } from './rules.js';
 import { evidenceFor, MAX_EVIDENCE, plural, realTurns, type Evidence } from './util.js';
@@ -45,6 +52,15 @@ export function findRebuilds(sessions: readonly Session[], th: Thresholds): Rebu
     }
   }
   return out;
+}
+
+/** $ of a rebuild turn's cache write, and what it would have cost as a cache read. */
+export function rebuildUsd(turn: Turn): { cost: number; savings: number } | null {
+  const p = priceFor(turn.model, promptTokens(turn.usage));
+  if (p === undefined) return null;
+  const { w5m, w1h } = writeSplit(turn.usage);
+  const cost = (w5m * p.write5m + w1h * p.write1h) / 1e6;
+  return { cost, savings: cost - ((w5m + w1h) * p.read) / 1e6 };
 }
 
 function fixFor(cause: RebuildCause, rebuilds: readonly Rebuild[], th: Thresholds): string {
@@ -92,6 +108,10 @@ export const cacheRebuild: Analyzer = {
     const rebuilds = findRebuilds(sessions, th);
     if (rebuilds.length === 0) return [];
     const tokens = rebuilds.reduce((a, r) => a + r.turn.usage.cacheWrite, 0);
+    const usd = new Map(rebuilds.map((r) => [r, rebuildUsd(r.turn)]));
+    const priced = rebuilds.filter((r) => usd.get(r) !== null);
+    const sumUsd = (rs: readonly Rebuild[], k: 'cost' | 'savings'): number =>
+      rs.reduce((a, r) => a + (usd.get(r)?.[k] ?? 0), 0);
     const causes = REBUILD_CAUSES.map((cause) => {
       const rs = rebuilds.filter((r) => r.cause === cause);
       return {
@@ -101,6 +121,12 @@ export const cacheRebuild: Analyzer = {
         // The total is measured; splitting it by cause is an attribution guess (CLAUDE.md rule 2).
         tokensKind: 'estimated' as const,
         fix: fixFor(cause, rs, th),
+        ...(priced.length > 0
+          ? {
+              costUsd: Math.round(sumUsd(rs, 'cost') * 1e6) / 1e6,
+              savingsUsd: Math.round(sumUsd(rs, 'savings') * 1e6) / 1e6,
+            }
+          : {}),
       };
     }).filter((c) => c.count > 0);
     const top = [...causes].sort((a, b) => b.tokens - a.tokens)[0]!;
@@ -127,6 +153,22 @@ export const cacheRebuild: Analyzer = {
         summary: `largest cause ${top.cause}: ${top.fix}`,
         ...(causes.some((c) => c.cause === 'cc-upgrade') ? { docsUrl: KNOWN_ISSUE } : {}),
       },
+      ...(priced.length > 0
+        ? {
+            impact: impact({
+              costUsd: sumUsd(priced, 'cost'),
+              savingsUsd: sumUsd(priced, 'savings'),
+              basis:
+                `${plural(priced.length, 'rebuild')} paid ${formatUsd(sumUsd(priced, 'cost'))} to ` +
+                `write the cache again; a warm cache would have read the same tokens for ` +
+                `${formatUsd(sumUsd(priced, 'cost') - sumUsd(priced, 'savings'))}` +
+                (priced.length < rebuilds.length
+                  ? ` (${rebuilds.length - priced.length} on unpriced models left out)`
+                  : ''),
+              confidence: 'measured-tokens',
+            }),
+          }
+        : {}),
     };
     return [finding];
   },

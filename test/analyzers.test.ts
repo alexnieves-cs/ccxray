@@ -167,8 +167,19 @@ describe('A2/A3 cache-rebuild', () => {
         tokens: 21000,
         tokensKind: 'estimated',
         fix: 'restart after upgrading; known issue: anthropics/claude-code#46917',
+        // Sonnet 4.5, no TTL split → 5m write $3.75/MTok, read $0.30/MTok:
+        // 21,000 × 3.75 = 78,750 µ$ written; a warm cache would have read them for 6,300 µ$.
+        costUsd: 0.07875,
+        savingsUsd: 0.07245,
       },
     ]);
+    expect(f[0]!.impact).toMatchObject({
+      costUsd: 0.07875,
+      savingsUsd: 0.07245,
+      savingsMainUsd: 0.07245,
+      savingsSubagentUsd: 0,
+      confidence: 'measured-tokens',
+    });
     expect(f[0]!.evidence[0]!.detail).toContain('Claude Code 2.1.300 → 2.1.302');
     expect(f[0]!.fix.docsUrl).toBe('https://github.com/anthropics/claude-code/issues/46917');
   });
@@ -182,6 +193,9 @@ describe('A2/A3 cache-rebuild', () => {
         tokens: 18400,
         tokensKind: 'estimated',
         fix: '/model mid-session invalidates the cache',
+        // The rebuild turn is on Opus 4.1: 18,400 × (18.75 − 1.50) $/MTok.
+        costUsd: 0.345,
+        savingsUsd: 0.3174,
       },
     ]);
     expect(f[0]!.evidence[0]!.detail).toContain('model claude-sonnet-4-5 → claude-opus-4-1');
@@ -261,6 +275,10 @@ describe('A2/A3 cache-rebuild', () => {
         tokens: 42000,
         tokensKind: 'estimated',
         fix: 'batch prompts; you had 1 gap of 5–15 min (5m TTL), 1 break over 1h (1h TTL)',
+        // The rebuild turns carry no TTL split, so even the 1h session's write is priced at the
+        // 5m rate (UNVERIFIED rule): 2 × 21,000 × 3.75 and × (3.75 − 0.30) $/MTok.
+        costUsd: 0.1575,
+        savingsUsd: 0.1449,
       },
       {
         cause: 'unknown',
@@ -268,6 +286,8 @@ describe('A2/A3 cache-rebuild', () => {
         tokens: 21000,
         tokensKind: 'estimated',
         fix: 'no known cause; check the evidence turns by hand',
+        costUsd: 0.07875,
+        savingsUsd: 0.07245,
       },
     ]);
     expect(f[0]!.evidence.map((e) => e.detail.split(';')[0]).sort()).toEqual([
@@ -372,6 +392,7 @@ describe('A5 big-tool-output', () => {
           persistedBytes: 0,
           errors: 0,
           persistedByClaudeCode: 0,
+          turnsCarriedMax: 2,
         },
       ],
       [
@@ -388,14 +409,25 @@ describe('A5 big-tool-output', () => {
           persistedBytes: 0,
           errors: 1,
           persistedByClaudeCode: 0,
+          turnsCarriedMax: 1,
         },
       ],
     ]);
+    // Carry [E]: `pnpm test` (12,000 est. tokens) is written by turn 2 ($3.75/MTok) and read by
+    // turn 3 ($0.30/MTok) = 48,600 µ$; trimmed to 1,000 tokens it would save 11/12 of that.
+    // `pnpm build` (8,000) is only written, by the last turn: 30,000 µ$, saving 7/8.
+    expect(f.map((x) => [x.impact?.costUsd, x.impact?.savingsUsd])).toEqual([
+      [0.0486, 0.04455],
+      [0.03, 0.02625],
+    ]);
+    expect(f[0]!.evidence[0]!.detail).toContain('stayed in context for 2 turns, ~$0.05 [E]');
+    expect(f[0]!.impact!.basis).toContain('stayed in context for 2 turns');
     expect(f[0]!.fix.summary).toBe(
       'pipe through `| tail -n 100`, or use --silent / --reporter=dot',
     );
     expect(f[1]!.evidence[0]!.detail).toBe(
-      'Bash result 32,000 chars inline (~8k tokens [E]), is_error',
+      'Bash result 32,000 chars inline (~8k tokens [E]), is_error; ' +
+        'stayed in context for 1 turn, ~$0.03 [E]',
     );
   });
 
@@ -572,6 +604,9 @@ describe('A6 repeated-read', () => {
           }),
         ],
         fix: { summary: 'reference the earlier read (cc-slim read-dedupe hook planned)' },
+        // Read #2 (1,000 est. tokens) is written by turn 3 and read by turn 4: 1,000 × (3.75 +
+        // 0.30) = 4,050 µ$; read #3 is written by turn 4 only: 3,750 µ$.
+        impact: expect.objectContaining({ costUsd: 0.0078, savingsUsd: 0.0078 }),
       },
     ]);
   });
@@ -691,14 +726,17 @@ describe('pipeline', () => {
       window: { since: '2026-09-01', until: null, project: null },
       includeContent: false,
     });
+    // Findings with $ savings first, largest first (SPEC §5.2), then the rest by severity.
     expect(report.findings.map((f) => f.analyzer)).toEqual([
       'cache-rebuild',
-      'fixed-overhead',
       'big-tool-output',
       'big-tool-output',
       'repeated-read',
+      'fixed-overhead',
       'tool-usage',
     ]);
+    const savings = report.findings.map((f) => f.impact?.savingsUsd ?? 0);
+    expect(savings.slice(0, 4).every((x, i) => i === 0 || x <= savings[i - 1]!)).toBe(true);
     expect(report.sessions).toHaveLength(3);
     expect(report.sessions.every((x) => x.totals === report.totals.bySession[x.id])).toBe(true);
     expect(report.generatedAt).toBe('2026-10-18T00:00:00.000Z');

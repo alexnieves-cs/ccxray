@@ -19,6 +19,12 @@
 //
 // One finding per (session, path), so each title names a file; repeats of different ranges of
 // one file are added together.
+//
+// Impact (SPEC §5.2): the carry cost of each duplicate copy (src/cost/carry.ts); referencing the
+// earlier read avoids all of it, so savings = cost. Estimated.
+import { carryIndex } from '../cost/carry.js';
+import { impact } from '../cost/impact.js';
+import { formatUsd } from '../reporters/format.js';
 import type { Analyzer, Finding, Session, ToolUse, Turn } from '../model/index.js';
 import {
   baseName,
@@ -27,6 +33,7 @@ import {
   MAX_EVIDENCE,
   normPath,
   realTurns,
+  plural,
   sessionLabel,
 } from './util.js';
 import type { Evidence } from './util.js';
@@ -182,8 +189,9 @@ export const repeatedRead: Analyzer = {
   id: 'repeated-read',
   spec: 'A6',
   description: 'Files read again, unchanged, in the same session.',
-  run(sessions) {
+  run(sessions, ctx) {
     const findings: Finding[] = [];
+    const carry = carryIndex(sessions, ctx.thresholds);
     for (const [s, repeats] of repeatsBySession(sessions)) {
       const byPath = new Map<string, Repeat[]>();
       for (const r of repeats) {
@@ -195,6 +203,12 @@ export const repeatedRead: Analyzer = {
       for (const [path, reps] of byPath) {
         const rel = displayPath(path, cwd);
         const tokens = reps.reduce((a, r) => a + r.estTokens, 0);
+        const carried = reps.map((r) => ({ r, c: carry.carry(r.turn, r.estTokens) }));
+        const costUsd = carried.reduce((a, x) => a + x.c.usd, 0);
+        const subUsd = carried
+          .filter((x) => s.isSubagent || x.r.turn.isSidechain)
+          .reduce((a, x) => a + x.c.usd, 0);
+        const longest = carried.reduce((m, x) => Math.max(m, x.c.turnsCarried), 0);
         const evidence: Evidence[] = reps
           .slice(0, MAX_EVIDENCE)
           .map((r) => evidenceFor(r.turn, `read #${r.readNo} of ${rel}, unchanged since read #1`));
@@ -208,6 +222,20 @@ export const repeatedRead: Analyzer = {
           fix: {
             summary: 'reference the earlier read (cc-slim read-dedupe hook planned)',
           },
+          ...(costUsd > 0
+            ? {
+                impact: impact({
+                  costUsd,
+                  savingsUsd: costUsd,
+                  savingsSubagentUsd: subUsd,
+                  basis:
+                    `each duplicate copy was written to the cache once and re-read until a ` +
+                    `compaction or the end of the session (up to ${plural(longest, 'turn')}), ` +
+                    `${formatUsd(costUsd)} in all; referencing the earlier read avoids it`,
+                  confidence: 'estimated',
+                }),
+              }
+            : {}),
         });
       }
     }

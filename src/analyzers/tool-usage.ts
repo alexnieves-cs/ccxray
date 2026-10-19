@@ -13,19 +13,76 @@
 // they stay in unusedTools (they can still be denied) and are listed separately in the evidence.
 // Only main (non-subagent) sessions' snapshots are read.
 
-import type { Analyzer, Finding, Session, SourcePointer } from '../model/index.js';
+//
+// Impact (SPEC §5.2): an unused definition is part of every request of the main sessions whose
+// prompt_snapshot lists it: read from the cache on most turns, written on cold/rebuild turns.
+// cost = definition tokens [E] × Σ over those turns of the read (or write) price; removing the
+// definitions saves all of it. Built-in tools cannot be removed: cost only, savings 0.
+// UNVERIFIED: that definitions sit in the cached prefix of every main-chain request; subagent
+// requests are left out (whether they carry the same definitions is not logged).
+import { carryIndex, everyTurnUnit, type CarryIndex } from '../cost/carry.js';
+import { impact } from '../cost/impact.js';
+import type { Analyzer, Finding, Impact, Session, SourcePointer } from '../model/index.js';
+import { formatUsd } from '../reporters/format.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
 import { fmt, mainTurns, mcpServer } from './rules.js';
 
 const TOP_CALLED = 8;
 
+/**
+ * Per-token $ of content sent with every main-chain request of `sessions` (Σ of read prices,
+ * write prices on cold/rebuild turns), with the turn count.
+ */
+export function everyRequestUnit(
+  idx: CarryIndex,
+  sessions: Iterable<Session>,
+): { perToken: number; turns: number; cold: number } {
+  let perToken = 0;
+  let turns = 0;
+  let cold = 0;
+  for (const s of sessions) {
+    const c = idx.mainChain(s);
+    if (c === undefined || s.isSubagent) continue;
+    perToken += everyTurnUnit(c);
+    turns += c.turns.length;
+    for (const x of c.cold) cold += x;
+  }
+  return { perToken, turns, cold };
+}
+
+/** Impact of `tokens` of definitions sent with every main-chain request of `sessions`. */
+export function definitionsImpact(
+  idx: CarryIndex,
+  sessions: Iterable<Session>,
+  tokens: number,
+  removable: boolean,
+  note = '; built-in definitions cannot be removed, so nothing to save',
+): Impact | undefined {
+  const u = everyRequestUnit(idx, sessions);
+  const costUsd = tokens * u.perToken;
+  if (!(costUsd > 0)) return undefined;
+  return impact({
+    costUsd,
+    savingsUsd: removable ? costUsd : 0,
+    basis:
+      `~${fmt(tokens)} tokens of definitions [E] were part of ${fmt(u.turns)} main-session ` +
+      `requests (written on ${fmt(u.cold)} cold or rebuild turns, read on the rest): ` +
+      `${formatUsd(costUsd)}` +
+      (removable ? '' : note),
+    confidence: 'estimated',
+  });
+}
+
 const byName = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+const withImpact = (i: Impact | undefined): { impact?: Impact } =>
+  i === undefined ? {} : { impact: i };
 
 export const toolUsage: Analyzer = {
   id: 'tool-usage',
   spec: 'A7',
   description: 'Tool calls by name; tools and MCP servers defined but never called',
-  run(sessions) {
+  run(sessions, ctx) {
     const calls = new Map<string, number>();
     const firstCall = new Map<string, { s: Session; uuid: string; source: SourcePointer }>();
     for (const s of sessions)
@@ -43,11 +100,20 @@ export const toolUsage: Analyzer = {
       .filter((s) => !s.isSubagent)
       .flatMap((s) => s.events.flatMap((e) => (e.kind === 'tools-snapshot' ? [{ s, e }] : [])))
       .sort((a, b) => a.e.ts - b.e.ts);
+    /** Tool names each main session's snapshots list (for the impact's affected sessions). */
+    const listedBy = new Map<Session, Set<string>>();
     for (const { s, e } of snaps) {
       snapSession = s;
       snapSource = e.source;
       for (const t of e.tools) defs.set(t.name, t.chars);
+      let names = listedBy.get(s);
+      if (names === undefined) listedBy.set(s, (names = new Set()));
+      for (const t of e.tools) names.add(t.name);
     }
+    const idx = carryIndex(sessions, ctx.thresholds);
+    /** Main sessions whose snapshots list any of `names`. */
+    const affected = (names: readonly string[]): Session[] =>
+      [...listedBy].filter(([, set]) => names.some((n) => set.has(n))).map(([s]) => s);
     const deferred = new Set<string>();
     for (const s of sessions)
       if (!s.isSubagent)
@@ -152,6 +218,7 @@ export const toolUsage: Analyzer = {
           `never called${lazyNote(unusedTools)} (~${fmt(est)} tokens/cold turn [E])`,
         tokens: { value: est, kind: 'estimated' },
         data: { server, unusedTools, usedTools: [...g.used].sort(byName), defChars },
+        ...withImpact(definitionsImpact(idx, affected(unusedTools), est, true)),
         evidence: ev(
           `${unusedTools.length} unused ${server} tools defined, ${fmt(defChars)} chars; ` +
             `${g.used.size} used`,
@@ -176,6 +243,7 @@ export const toolUsage: Analyzer = {
           `${lazyNote(builtinUnused)} (~${fmt(est)} tokens/cold turn [E])`,
         tokens: { value: est, kind: 'estimated' },
         data: { unusedTools: builtinUnused, deferredTools: lazy, defChars },
+        ...withImpact(definitionsImpact(idx, affected(builtinUnused), est, false)),
         evidence: ev(
           `${builtinUnused.length} unused built-in tools, ${fmt(defChars)} chars`,
           builtinUnused,
