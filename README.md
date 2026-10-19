@@ -11,9 +11,9 @@ tknxray (repo: ccxray; renamed because `ccxray` is taken on npm by an unrelated 
 
 <sub>The GIF runs against a synthetic corpus made by [`scripts/demo-corpus.ts`](scripts/demo-corpus.ts). Every number in it is made up; it shows the output format, not real usage. Recorded with [vhs](https://github.com/charmbracelet/vhs) from [`docs/demo.tape`](docs/demo.tape).</sub>
 
-Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** tokens you used. tknxray tries to tell you **why**: cache rebuilds and their likely cause, fixed overhead per fresh context, huge tool outputs, files read again unchanged (also across subagents), MCP tools you never call, subagent spend and wasted error turns. Each finding is priced at API list prices, and the report opens with **what to change first**: up to five concrete changes (a CLAUDE.md line, a settings snippet) ranked by what they would have saved in your own logs. Every finding points at the session and turn it came from, so you can check it by hand.
+Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** tokens you used. tknxray tries to tell you **why**: cache rebuilds and their likely cause, fixed overhead per fresh context, huge tool outputs, files read again unchanged (also across subagents), MCP tools you never call, subagent spend and wasted error turns. Each finding is priced at API list prices, and the report opens with **what to change first**: up to five concrete changes (a CLAUDE.md line, a settings snippet) ranked by what they would have saved in your own logs, with the exact setting or line to add. After you change something, `tknxray compare --at <that day>` shows whether it helped. Every finding points at the session and turn it came from, so you can check it by hand.
 
-> **Status: 0.1.0 preview.** Milestones M0–M5 are implemented and tested against synthetic fixtures. On real logs, only the parser has been checked so far: it read a 3.7 GB corpus with 0 malformed lines. Accuracy against ccusage and the false-positive review are still **pending**, and token estimates marked [E] may run low (see [FORMAT.md](docs/FORMAT.md)). See the [roadmap](#roadmap).
+> **Status: 0.1.0 preview.** Everything below is implemented and tested against synthetic fixtures. On real logs it has been run on one 3.7 GB corpus (parser only: 0 malformed lines) and on its own build logs, where its token totals and list-price cost matched ccusage. A false-positive review across many users' logs is still **pending**, and token estimates marked [E] may run low (see [FORMAT.md](docs/FORMAT.md)). See the [roadmap](#roadmap).
 
 ## Privacy
 
@@ -43,6 +43,16 @@ node dist/cli.js --help
 
 The examples below write `tknxray` for `node dist/cli.js`.
 
+### A typical loop
+
+```sh
+tknxray                          # what cost the most, and what to change first
+tknxray session latest           # check a finding turn by turn
+# apply the top change, e.g. the settings snippet it printed, and work as usual for a few days
+tknxray compare --at 2026-10-20  # the week before vs the week since: did it help?
+tknxray watch                    # optional: keep a live view of the current session open
+```
+
 ## Commands
 
 | Command | What it does |
@@ -54,7 +64,7 @@ The examples below write `tknxray` for `node dist/cli.js`.
 | `tknxray watch [latest\|<id\|prefix>]` | Live, full-screen view of one session (the most recently modified by default) that redraws as Claude Code writes the transcript: a context gauge for the latest turn against an assumed window, a per-turn context chart with rebuilds (↻) and compactions (◆), the latest turn's usage and tools, session totals, subagents, how long ago the last turn was vs the cache TTL, and $ at API list prices [E] for the latest turn and the session (main and subagents). Once the cache has likely expired it says what the next turn will cost to rewrite it; it never counts down while the cache is warm. Polls file size and mtime every `--interval` seconds (default 2); `--once` (or a pipe) prints one frame. Reads files only. `q` or Ctrl-C quits. |
 | `tknxray compare --at DATE` | Did a change help? Compares the N days before DATE with the N days from it (`--days`, default 7), or `--before A..B --after C..D`: $ per turn and per session [E], cache hit ratio, cache writes and peak context [M], compactions and rebuilds, and how much of each kind of waste the findings priced. Rates are normalized per turn or session; the verdict says what moved, not why. |
 | `tknxray doctor` | Discovered log dirs, Claude Code versions, parse stats, malformed lines and unknown record types. Run it first if numbers look off. |
-| `tknxray fix mcp` | **Preview.** Prints a `permissions.deny` diff for MCP tools never called in the analyzed sessions. Dry run by default; writes only with `--apply`, after a backup. See [docs/fix-mcp.md](docs/fix-mcp.md). |
+| `tknxray fix mcp` | **Preview.** Prints a `permissions.deny` diff for MCP tools never called in the analyzed sessions. Dry run by default; writes only with `--apply`, after a backup. A deny rule removes a definition only while MCP tool search is off; the action plan names the other documented options (`/mcp`, `disabledMcpjsonServers`, `"alwaysLoad": false`). See [docs/fix-mcp.md](docs/fix-mcp.md). |
 | `tknxray capture --i-understand-this-is-api-key-only` | **Opt-in, API key only.** See [below](#capture-opt-in-api-key-only). |
 | cc-slim hook | **Prototype.** A PostToolUse hook that shortens huge Bash outputs. See [below](#cc-slim-hook-prototype). |
 
@@ -125,7 +135,8 @@ From [SPEC §5](docs/SPEC.md#5-analyzers) and [`src/analyzers/`](src/analyzers).
 | A8 | context-growth | Sessions whose context grew past 150k tokens, or that compacted repeatedly. | measured |
 | A9 | subagent-cost | Usage of subagent transcripts vs their parent session, and the models they ran on. | measured |
 | A10 | error-waste | API error turns and retries, and failed tool calls repeated with the same input. | errors measured; repeated calls estimated |
-| A11 | cross-agent-read | The same file read by 3 or more agents (main session and subagents) of one session, each carrying its own copy. | estimated (chars/4) |
+| A11 | cross-agent-read | The same file read by 3 or more agents (main session and subagents) of one session, each carrying its own copy. Counts Read and plain `cat FILE`; the same relative path read from several git worktrees is one file. | estimated (chars/4) |
+| A12 | cache-ttl | Whether the other prompt-cache TTL would have cost less for the main conversations: 1h when 5–60 minute breaks keep forcing rebuilds, 5m when 1h was rarely needed. The fix is `"promptCacheTtl"` in settings.json. | measured tokens; $ estimated |
 
 ## Measured vs estimated
 
@@ -171,9 +182,11 @@ Benchmarks live in [`bench/`](bench) and run on synthetic corpora generated by [
 | M3 Reporters | terminal, JSON (schema v1), self-contained HTML | Implemented |
 | M4 More analyzers | A4, A7, A8, A9, A10, `session` view, thresholds | Implemented; real-log true/false-positive review **pending** |
 | M5 Fix modules (preview) | `fix mcp`, cc-slim prototype hook, opt-in `capture` | Implemented as previews; the hook's effect on Bash is **UNVERIFIED** |
+| M6 Live and replay | `watch` live view, session replay in the HTML report, dogfood fixes | Implemented |
 | M7 Impact | list-price cost, $ impact per finding, A11 cross-agent reads, action plan in every reporter | Implemented; total cost matches ccusage on the dogfood snapshot; savings are estimates |
+| M8 Close the loop | `compare`, A12 cache-ttl, documented settings in every change (MCP tool search, output caps, cache TTL), cost by project and day, `cat` and worktree reads in A11, $ in `watch` | Implemented |
 
-Not done yet: real-log validation of every analyzer, choosing an npm name and publishing, and any savings benchmark. This README will make no savings claim until a reproducible benchmark ([SPEC §8](docs/SPEC.md#8-benchmarks-and-performance-targets)) supports one.
+Not done yet: a false-positive review of every analyzer on other people's logs, publishing to npm, and any savings benchmark. This README will make no savings claim until a reproducible benchmark ([SPEC §8](docs/SPEC.md#8-benchmarks-and-performance-targets)) supports one.
 
 ## Contributing
 
