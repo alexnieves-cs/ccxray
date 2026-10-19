@@ -8,7 +8,8 @@
 // big outputs goes to data.persistedBytes. Fix advice depends on the command family (bashAdvice).
 // Grouped by tool name, and for Bash by the normalized command (normalizeCommand). All sessions
 // count, subagents included: their context is billed too. Reads that A6 reports as repeats are
-// left to A6, so WHERE IT WENT never counts one result twice. Estimated.
+// left to A6, and reads A11 reports as cross-agent copies to A11, so WHERE IT WENT never counts
+// one result twice. Estimated.
 //
 // Impact (SPEC §5.2): the CARRY cost of each output (src/cost/carry.ts): written to the cache
 // once, then re-read on every later turn of its chain until a compaction or the chain's end.
@@ -18,6 +19,7 @@ import { impact } from '../cost/impact.js';
 import type { Analyzer, Finding, Session, ToolResult, Turn } from '../model/index.js';
 import { CHARS_PER_TOKEN } from '../tokens/estimate.js';
 import { formatCompact, formatInt, formatUsd, shortCommand } from '../reporters/format.js';
+import { crossAgentReadToolUseIds } from './cross-agent-read.js';
 import { repeatedReadToolUseIds } from './repeated-read.js';
 import { displayPath, evidenceFor, maskHome, MAX_EVIDENCE, plural, type Evidence } from './util.js';
 
@@ -161,6 +163,8 @@ export const bigToolOutput: Analyzer = {
     const groups = new Map<string, Group>();
     // A Read that A6 reports as a repeat is counted there only, never in both.
     const repeats = repeatedReadToolUseIds(sessions);
+    // So is a Read that A11 reports as one agent's copy of a file several agents read.
+    for (const id of crossAgentReadToolUseIds(sessions, ctx.thresholds)) repeats.add(id);
     const carry = carryIndex(sessions, ctx.thresholds);
     // Outputs Claude Code externalized whose inline preview is under the threshold: already
     // handled, so not big outputs; counted per group as data.persistedByClaudeCode only.

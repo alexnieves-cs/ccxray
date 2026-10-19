@@ -21,6 +21,8 @@ export interface Thresholds {
   contextLargeTokens: number;
   /** A8: compactions per session worth flagging. */
   compactionsPerSession: number;
+  /** A11: agents of one session tree that must read the same file to flag it. */
+  crossAgentReadMinAgents: number;
 }
 
 export const DEFAULT_THRESHOLDS: Thresholds = {
@@ -34,6 +36,7 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   bigToolOutputTokens: 5_000,
   contextLargeTokens: 150_000,
   compactionsPerSession: 2,
+  crossAgentReadMinAgents: 3,
 };
 
 /**

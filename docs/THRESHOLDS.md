@@ -17,6 +17,7 @@ is listed here and used by the code.
 | `bigToolOutputTokens` | 5000 | A5 big-tool-output, `session` 📦 flag | Estimated tokens [E, chars/4] of the inline content for one `tool_result` to count as big (an output Claude Code already persisted counts by its inline preview). |
 | `contextLargeTokens` | 150000 | A8 context-growth | Peak context per turn [M] that flags a session. Flagged subagents of one session are reported together in one finding. |
 | `compactionsPerSession` | 2 | A8 context-growth | Compactions in one session that flag it (markers with no assistant turn between them count once). |
+| `crossAgentReadMinAgents` | 3 | A11 cross-agent-read | Agents of one session tree (the main session, its subagents and inline sidechain agents) that must each Read the same file (canonical path) to flag it. |
 
 ## Fixed constants (not configurable)
 
@@ -26,3 +27,4 @@ is listed here and used by the code.
 | `RECALL_LOOKAHEAD_TURNS` | 3 | A10 error-waste | Turns searched after a failed tool call for an identical re-call. |
 | `CURVE_POINTS` | 50 | A8 context-growth | Maximum points in `data.curve` (bucket maxima). |
 | prefix length | 4 | `session` | Shortest session-id prefix accepted. |
+| `TRIMMED_OUTPUT_TOKENS` | 1000 | A5 big-tool-output impact | Estimated tokens a trimmed output keeps (about 100 lines); A5 savings are the carry cost of the rest. |

@@ -229,9 +229,9 @@ describe('subagent classification (m2 repro: root one level above projects/ tree
     for (const name of readdirSync(FX))
       each.push(...(await loadSessions({ roots: [join(FX, name)] })).sessions);
     expect(summary(all.sessions)).toEqual(summary(each));
-    // Hand count (FORMAT.md "Fixtures"): 20 sessions, 3 of them subagents.
-    expect(all.sessions).toHaveLength(20);
-    expect(all.sessions.filter((s) => s.isSubagent)).toHaveLength(3);
+    // Hand count (FORMAT.md "Fixtures"): 24 sessions, 6 of them subagents.
+    expect(all.sessions).toHaveLength(24);
+    expect(all.sessions.filter((s) => s.isSubagent)).toHaveLength(6);
     expect(all.sessions.filter((s) => !s.isSubagent).every((s) => !s.id.includes(':'))).toBe(true);
     expect(all.sessions.every((s) => s.project.startsWith('-home-dev-'))).toBe(true);
   });

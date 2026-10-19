@@ -381,13 +381,15 @@ describe('loadSessions options', () => {
   it('all fixtures together: no cross-fixture dedupe, exact session and turn counts', async () => {
     const { readdirSync } = await import('node:fs');
     const roots = readdirSync(FX).map((n) => join(FX, n));
-    expect(roots).toHaveLength(16);
+    expect(roots).toHaveLength(17);
     const { sessions, stats } = await loadSessions({ roots });
-    expect(sessions).toHaveLength(20);
-    expect(sessions.reduce((a, s) => a + s.turns.length, 0)).toBe(47);
-    expect(stats.files).toBe(20);
+    // shared-spec-reads (M7, A11): 4 sessions (3 subagents), 3 + 3 + 2 + 2 turns, 4 extra block
+    // lines (2-, 3- and 2-block responses).
+    expect(sessions).toHaveLength(24);
+    expect(sessions.reduce((a, s) => a + s.turns.length, 0)).toBe(57);
+    expect(stats.files).toBe(24);
     expect(stats.dedupe).toEqual({
-      sameResponseLines: 7,
+      sameResponseLines: 11,
       sidechainReplays: 1,
       crossSessionCopies: 2,
     });

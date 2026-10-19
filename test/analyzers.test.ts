@@ -741,7 +741,17 @@ describe('pipeline', () => {
     expect(report.sessions.every((x) => x.totals === report.totals.bySession[x.id])).toBe(true);
     expect(report.generatedAt).toBe('2026-10-18T00:00:00.000Z');
     expect(report.calibration).toMatchObject({ samples: expect.any(Number) });
-    expect(ANALYZERS.map((a) => a.spec)).toEqual(['A2', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10']);
+    expect(ANALYZERS.map((a) => a.spec)).toEqual([
+      'A2',
+      'A4',
+      'A5',
+      'A6',
+      'A7',
+      'A8',
+      'A9',
+      'A10',
+      'A11',
+    ]);
   });
 
   it('displayPath is relative to the cwd for both separators', () => {

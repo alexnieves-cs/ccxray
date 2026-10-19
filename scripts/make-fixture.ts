@@ -580,6 +580,65 @@ export const FIXTURES: Record<string, () => SessionBuilder[]> = {
     return [p, n1, n2];
   },
 
+  'shared-spec-reads': () => {
+    // A11: docs/SPEC.md is read by the main session and two subagents (3 agents, one copy each,
+    // spelled three ways); a1's second read is A6's, a3's read failed, README.md has 2 readers.
+    const root = '/home/dev/shared-spec-reads';
+    const read = (file_path: string) => toolUse('Read', { file_path });
+    const p = fx('shared-spec-reads', 'main')
+      .prompt('plan the work')
+      .assistant({
+        usage: { input: 3, cacheWrite: 10000, output: 40 },
+        blocks: [read(`${root}/docs/SPEC.md`), read(`${root}/README.md`)],
+      })
+      .toolResult(20000)
+      .toolResult(4000)
+      .assistant({
+        usage: { input: 2, cacheWrite: 6100, cacheRead: 10000, output: 50 },
+        blocks: [
+          toolUse('Agent', { subagent_type: 'general-purpose', prompt: 'a' }, 'toolu_xa1'),
+          toolUse('Agent', { subagent_type: 'general-purpose', prompt: 'b' }, 'toolu_xa2'),
+          toolUse('Agent', { subagent_type: 'Explore', prompt: 'c' }, 'toolu_xa3'),
+        ],
+      });
+    const agent = (id: string) => p.agent(id, { meta: { toolUseId: `toolu_x${id}` } }).prompt(id);
+    const a1 = agent('a1')
+      .assistant({
+        usage: { input: 3, cacheWrite: 4000, output: 20 },
+        blocks: [read('docs/SPEC.md')],
+      })
+      .toolResult(20000)
+      .assistant({
+        usage: { input: 2, cacheWrite: 5100, cacheRead: 4000, output: 20 },
+        blocks: [read('docs/SPEC.md')],
+      })
+      .toolResult(20000)
+      .assistant({ usage: { input: 2, cacheWrite: 5100, cacheRead: 9100, output: 30 } });
+    const a2 = agent('a2')
+      .assistant({
+        usage: { input: 3, cacheWrite: 4000, output: 20 },
+        blocks: [read(`${root}/./docs/../docs/SPEC.md`)],
+      })
+      .toolResult(20000)
+      .assistant({ usage: { input: 2, cacheWrite: 5100, cacheRead: 4000, output: 30 } });
+    const a3 = agent('a3')
+      .assistant({
+        usage: { input: 3, cacheWrite: 4000, output: 20 },
+        blocks: [read('docs/SPEC.md'), read('README.md')],
+      })
+      .toolResult({ chars: 60, isError: true })
+      .toolResult(4000)
+      .assistant({ usage: { input: 2, cacheWrite: 1100, cacheRead: 4000, output: 30 } });
+    p.sync(a1)
+      .sync(a2)
+      .sync(a3)
+      .toolResult(200)
+      .toolResult(200)
+      .toolResult(200)
+      .assistant({ usage: { input: 2, cacheWrite: 700, cacheRead: 16100, output: 60 } });
+    return [p, a1, a2, a3];
+  },
+
   'persisted-tool-output': () => {
     const s = fx('persisted-tool-output', 'main');
     const id = 'toolu_persisted0001';
