@@ -48,7 +48,8 @@
     "bench:full": "pnpm build && tsx bench/perf.ts --sizes 10mb,100mb,1gb --clean",
     "bench:slim": "tsx bench/slim.ts",
     "my-sessions": "tsx bench/my-sessions.ts",
-    "validate:real": "pnpm build && tsx scripts/validate-real.ts"
+    "validate:real": "pnpm build && tsx scripts/validate-real.ts",
+    "fp-check": "tsx scripts/fp-check.ts"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
