@@ -24,10 +24,16 @@ REF=${CCXRAY_REF:-main}
 git clone -q --branch "$REF" https://github.com/alexnieves-cs/ccxray "$D" || exit 1
 cd "$D" || exit 1
 echo "commit $(git rev-parse --short HEAD) ($REF)"
+echo "node $(node -v 2>/dev/null || echo missing) · $(sw_vers -productVersion 2>/dev/null || uname -sr) · $(sysctl -n machdep.cpu.brand_string 2>/dev/null || uname -m)"
+NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
+if [ "$NODE_MAJOR" -lt 20 ]; then echo "tknxray needs Node 20 or newer; this is $(node -v 2>/dev/null || echo 'no node')"; exit 1; fi
 command -v pnpm >/dev/null || corepack enable >/dev/null 2>&1
-pnpm install --frozen-lockfile --silent >/dev/null 2>&1 || { echo "pnpm install failed"; exit 1; }
-pnpm -s build >/dev/null 2>&1 || { echo "build failed"; exit 1; }
-echo "node $(node -v) · $(sw_vers -productVersion 2>/dev/null || uname -sr) · $(sysctl -n machdep.cpu.brand_string 2>/dev/null || uname -m)"
+command -v pnpm >/dev/null || { echo "pnpm not found (and corepack could not enable it): npm i -g pnpm"; exit 1; }
+echo "pnpm $(pnpm -v 2>/dev/null)"
+# On failure, show the tail of the real output (home and temp paths stripped) instead of hiding it.
+fail() { echo "$1 failed; last lines:"; tail -n 40 "$OUT/$2" | sed -e "s#$HOME#~#g" -e "s#$TMP#<tmp>#g"; exit 1; }
+pnpm install --frozen-lockfile >"$OUT/install.log" 2>&1 || fail "pnpm install" install.log
+pnpm build >"$OUT/build.log" 2>&1 || fail "build" build.log
 
 step "doctor"
 run node dist/cli.js doctor
