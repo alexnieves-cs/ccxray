@@ -34,17 +34,20 @@ echo "pnpm $(pnpm -v 2>/dev/null)"
 fail() { echo "$1 failed; last lines:"; tail -n 40 "$OUT/$2" | sed -e "s#$HOME#~#g" -e "s#$TMP#<tmp>#g"; exit 1; }
 pnpm install --frozen-lockfile >"$OUT/install.log" 2>&1 || fail "pnpm install" install.log
 pnpm build >"$OUT/build.log" 2>&1 || fail "build" build.log
+# Scripts run through the local tsx, not `pnpm <script>`: some pnpm builds reject `-s`.
+TSX="$D/node_modules/.bin/tsx"
+[ -x "$TSX" ] || { echo "tsx missing after install"; exit 1; }
 
 step "doctor"
 run node dist/cli.js doctor
 
 step "format probe (counts only)"
-run pnpm -s probe
+run "$TSX" scripts/probe-format.ts
 
 if [ "${SKIP_CCUSAGE:-0}" != 1 ]; then
   step "ccusage cross-check (target ±0.5%)"
   npx -y ccusage@latest session --json > "$OUT/ccusage.json" 2>/dev/null \
-    && run pnpm -s validate:real --ccusage "$OUT/ccusage.json" \
+    && run "$TSX" scripts/validate-real.ts --ccusage "$OUT/ccusage.json" \
     || echo "ccusage run failed; skipped"
 fi
 
@@ -57,7 +60,11 @@ const by = {};
 for (const f of r.findings ?? []) {
   const k = f.analyzer ?? f.id ?? "?";
   by[k] ??= { findings: 0, tokens: 0, kind: f.tokens?.kind ?? "?" };
-  by[k].findings++; by[k].tokens += f.tokens?.value ?? f.tokens?.count ?? 0;
+  by[k].findings++;
+  // subagent-cost adds a window-wide summary (data.parents) over its per-parent findings; skip
+  // its tokens so the sum is not doubled.
+  if (!(k === "subagent-cost" && f.data?.parents !== undefined))
+    by[k].tokens += f.tokens?.value ?? f.tokens?.count ?? 0;
 }
 // No per-project or per-session keys: those are paths and ids. Counts and model names only.
 const t = r.totals ?? {};
@@ -67,11 +74,10 @@ console.log(JSON.stringify({ totals, calibration: r.calibration, byAnalyzer: by 
 ' "$OUT/report.json"
 
 step "false-positive spot check, last 30 days (mechanical evidence check)"
-run pnpm -s fp-check --since "$SINCE"
+run "$TSX" scripts/fp-check.ts --since "$SINCE"
 
 step "my-sessions (aggregate)"
-run pnpm -s my-sessions --out "$OUT/MY_SESSIONS.md"
-cat "$OUT/MY_SESSIONS.md"
+run "$TSX" bench/my-sessions.ts --out "$OUT/MY_SESSIONS.md"
 
 step "timing + peak RSS"
 WEEK=$(date -u -v-7d +%Y-%m-%d 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%d)
