@@ -52,6 +52,45 @@ describe('validate:real helpers (no real logs)', () => {
     expect(text).not.toMatch(/\bs1\b|\bs2\b/);
   });
 
+  it('drops other coding CLIs from multi-agent ccusage output and sums Claude rows only', () => {
+    const row = (period: string, agent: string | undefined, n: number) => ({
+      period,
+      ...(agent !== undefined ? { agent } : {}),
+      inputTokens: n,
+      outputTokens: n,
+      cacheCreationTokens: n,
+      cacheReadTokens: n,
+      totalCost: n,
+    });
+    const json = {
+      session: [row('c1', 'claude', 10), row('x1', 'codex', 999), row('c2', undefined, 5)],
+      totals: {
+        inputTokens: 1014,
+        outputTokens: 1014,
+        cacheCreationTokens: 1014,
+        cacheReadTokens: 1014,
+        totalCost: 1014,
+      },
+    };
+    const p = parseCcusage(json);
+    expect([...p.sessions.keys()]).toEqual(['c1', 'c2']);
+    expect(p.droppedOtherAgents).toBe(1);
+    expect(p.totals).toBeUndefined(); // ccusage's totals include codex
+    const c = parseCcusageCost(json);
+    expect([...c.sessions.keys()]).toEqual(['c1', 'c2']);
+    expect(c.total).toBeUndefined();
+    const ours = new Map([
+      ['c1', { input: 10, output: 10, cacheCreate: 10, cacheRead: 10 }],
+      ['c2', { input: 5, output: 5, cacheCreate: 5, cacheRead: 5 }],
+    ]);
+    const all = { input: 15, output: 15, cacheCreate: 15, cacheRead: 15 };
+    expect(compareReport({ all, bySession: ours }, p).pass).toBe(true);
+    // Claude-only output (`ccusage claude session`) keeps ccusage's own totals.
+    expect(
+      parseCcusage({ sessions: [row('c1', undefined, 1)], totals: row('t', undefined, 1) }).totals,
+    ).toBeDefined();
+  });
+
   it('parses the confirmed ccusage shape (`session[]`, id under `period`)', () => {
     const json = {
       session: [

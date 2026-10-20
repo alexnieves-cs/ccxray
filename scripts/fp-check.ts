@@ -181,7 +181,7 @@ function responses(recs: readonly RawRec[]): RawResponse[] {
         ts: r.ts,
         ...(r.usage !== undefined ? { usage: { ...r.usage } } : {}),
         tools: [...r.tools],
-        synthetic: r.error,
+        synthetic: r.error || r.model === '<synthetic>',
       };
       by.set(key, n);
       out.push(n);
@@ -199,13 +199,24 @@ const responseOf = (all: readonly RawResponse[], uuid: string): RawResponse | un
   all.find((g) => g.first.uuid === uuid);
 
 /** Previous response of the same chain (main: non-sidechain) before `cur`, by timestamp. */
+/**
+ * The previous real response of the same chain, as the analyzers see it: same session id and
+ * sidechain flag, synthetic responses (no API call) skipped, earlier timestamp (line order breaks
+ * ties).
+ */
 function prevInChain(all: readonly RawResponse[], cur: RawResponse): RawResponse | undefined {
   let best: RawResponse | undefined;
   for (const g of all) {
-    if (g === cur || g.first.isSidechain !== cur.first.isSidechain) continue;
+    if (g === cur || g.synthetic || g.first.isSidechain !== cur.first.isSidechain) continue;
     if (g.first.sessionId !== cur.first.sessionId) continue;
-    if (!(g.ts < cur.ts)) continue;
-    if (best === undefined || g.ts > best.ts) best = g;
+    const before = g.ts < cur.ts || (g.ts === cur.ts && g.first.line < cur.first.line);
+    if (!before) continue;
+    if (
+      best === undefined ||
+      g.ts > best.ts ||
+      (g.ts === best.ts && g.first.line > best.first.line)
+    )
+      best = g;
   }
   return best;
 }
@@ -298,7 +309,15 @@ export const INVARIANTS: Record<string, Invariant> = {
       p.cacheRead > 0 &&
       u.cacheRead <= (1 - th.rebuildReadDropFraction) * p.cacheRead &&
       u.cacheWrite >= Math.max(th.rebuildMinCacheWrite, th.rebuildPrevContextFraction * ctx(p));
-    return ok ? { v: 'pass' } : { v: 'fail', note: 'rebuild rule not met on raw usage' };
+    // Token counts only (no content): enough to tell a real miss from a chain mismatch.
+    return ok
+      ? { v: 'pass' }
+      : {
+          v: 'fail',
+          note:
+            `rebuild rule not met on raw usage: prev read ${p.cacheRead} → read ${u.cacheRead}, ` +
+            `write ${u.cacheWrite}, prev context ${ctx(p)}, gap ${Math.round((cur.ts - prev.ts) / 1000)}s`,
+        };
   },
   // The gap to the previous response is 5–60 min; 1h advice: it wrote; 5m advice: it read.
   'cache-ttl': ({ f, cur, all, th }) => {
