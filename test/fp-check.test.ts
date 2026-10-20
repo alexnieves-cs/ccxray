@@ -120,6 +120,33 @@ describe('fp-check', () => {
     expect(c.usage).toBe('fail');
   });
 
+  it('skips synthetic responses when finding the previous turn, as the analyzer does', async () => {
+    const s = session('fp/synth');
+    s.prompt('p1').assistant({ usage: { input: 3, cacheWrite: 20_000, output: 50 } });
+    s.prompt('p2').assistant({
+      usage: { input: 2, cacheWrite: 1_100, cacheRead: 20_000, output: 40 },
+    });
+    // A synthetic error turn (no API call, zero usage) right before the rebuild.
+    s.prompt('p3').assistant({ model: '<synthetic>', usage: { input: 0, output: 0 } });
+    s.gap('10m').prompt('p4');
+    s.assistant({ usage: { input: 3, cacheWrite: 22_000, cacheRead: 0, output: 45 } });
+    const { sessions, report } = await analyze([s]);
+    const rebuild = by(report.findings, 'cache-rebuild');
+    expect(checkFinding(rebuild, { sessions }).invariant).toBe('pass');
+  });
+
+  it('a failed rebuild invariant names the raw token counts it saw', async () => {
+    const { sessions, report } = await analyze([rebuildAndRereads()]);
+    const rebuild = by(report.findings, 'cache-rebuild');
+    const file = rebuild.evidence[0]!.source!.file;
+    const lines = readFileSync(file, 'utf8').split('\n');
+    const i = rebuild.evidence[0]!.source!.line - 1;
+    lines[i] = lines[i]!.replace('"cache_read_input_tokens":0', '"cache_read_input_tokens":20000');
+    writeFileSync(file, lines.join('\n'));
+    const out = formatChecks([checkFinding(rebuild, { sessions })], 1).join('\n');
+    expect(out).toMatch(/prev read 20000 → read 20000, write 22000, prev context \d+, gap \d+s/);
+  });
+
   it('fails repeated-read when the raw Reads do not repeat the path', async () => {
     const { sessions, report } = await analyze([rebuildAndRereads()]);
     const reads = by(report.findings, 'repeated-read');

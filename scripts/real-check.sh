@@ -46,7 +46,9 @@ run "$TSX" scripts/probe-format.ts
 
 if [ "${SKIP_CCUSAGE:-0}" != 1 ]; then
   step "ccusage cross-check (target ±0.5%)"
-  npx -y ccusage@latest session --json > "$OUT/ccusage.json" 2>/dev/null \
+  # `ccusage claude session`: Claude Code only. Plain `session` also counts other coding CLIs.
+  { npx -y ccusage@latest claude session --json > "$OUT/ccusage.json" 2>/dev/null \
+    || npx -y ccusage@latest session --json > "$OUT/ccusage.json" 2>/dev/null; } \
     && run "$TSX" scripts/validate-real.ts --ccusage "$OUT/ccusage.json" \
     || echo "ccusage run failed; skipped"
 fi
