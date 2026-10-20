@@ -15,7 +15,7 @@ import { hashId } from '../scripts/validate-real.js';
 import { DEFAULT_THRESHOLDS, type Finding } from '../src/model/index.js';
 import { loadSessions } from '../src/parser/index.js';
 import { buildReport } from '../src/pipeline.js';
-import { cleanup, tree } from './helpers/analyze.js';
+import { cleanup, toolDef, tree } from './helpers/analyze.js';
 
 afterAll(cleanup);
 
@@ -131,6 +131,57 @@ describe('fp-check', () => {
       raw.replace(/secret-name\.ts/g, (m) => (n++ === 0 ? m : `other-${n}.ts`)),
     );
     expect(checkFinding(reads, { sessions }).invariant).toBe('fail');
+  });
+
+  it("strict pointer: fails when the evidence line is not the uuid record's own line", async () => {
+    const { sessions, report } = await analyze([rebuildAndRereads()]);
+    const rebuild = by(report.findings, 'cache-rebuild');
+    const ev = rebuild.evidence[0]!;
+    expect(checkFinding(rebuild, { sessions }).evidence).toBe('pass');
+    const moved: Finding = {
+      ...rebuild,
+      evidence: [{ ...ev, source: { ...ev.source!, line: ev.source!.line - 1 } }],
+    };
+    const c = checkFinding(moved, { sessions });
+    expect(c.evidence).toBe('fail');
+    expect(c.notes).toContain('evidence line pointer off');
+  });
+
+  it('snapshot pointer: fixed-overhead and tool-usage may point at a prompt_snapshot in the same file', async () => {
+    const s = session('fp/snap')
+      .attachment({
+        type: 'prompt_snapshot',
+        systemPrompt: ['x'.repeat(50)],
+        tools: [toolDef('Bash', 200), toolDef('mcp__github__create_issue', 700)],
+      })
+      .prompt('hi')
+      .assistant({ usage: { input: 4, cacheWrite: 15_000 }, blocks: [toolUse('Bash', {})] });
+    s.toolResult(10);
+    s.assistant({ usage: { input: 1, cacheWrite: 100, cacheRead: 15_000 } });
+    const { sessions, report } = await analyze([s]);
+    for (const a of ['fixed-overhead', 'tool-usage']) {
+      const fs = report.findings.filter((x) => x.analyzer === a);
+      const snapEv = fs.flatMap((x) => x.evidence).find((e) => e.source?.line === 1);
+      expect(snapEv, a).toBeDefined(); // line 1 is the prompt_snapshot attachment
+      const f = fs.find((x) => x.evidence.includes(snapEv!))!;
+      expect(checkFinding(f, { sessions }).evidence, a).toBe('pass');
+      // The same pointer moved to a non-snapshot line (the prompt) fails.
+      const off: Finding = {
+        ...f,
+        evidence: [{ ...snapEv!, source: { ...snapEv!.source!, line: 2 } }],
+      };
+      expect(checkFinding(off, { sessions }).evidence, a).toBe('fail');
+    }
+    // Any other analyzer pointing at the snapshot instead of the turn's own line fails.
+    const tu = report.findings.find((x) => x.analyzer === 'tool-usage')!;
+    const other: Finding = {
+      ...tu,
+      analyzer: 'cache-rebuild',
+      evidence: [tu.evidence.find((e) => e.source?.line === 1)!],
+    };
+    const c = checkFinding(other, { sessions });
+    expect(c.evidence).toBe('fail');
+    expect(c.notes).toContain('evidence line pointer off');
   });
 
   it('samples round-robin by analyzer, highest impact first, deterministically', () => {

@@ -8,8 +8,8 @@
 // samples up to --max findings spread across analyzers (round-robin in registry order, highest
 // $ impact then tokens first), and re-checks each finding's evidence pointers against the RAW
 // JSONL lines, read again here without the parser:
-//   evidence   the record with the evidence turn's uuid exists, and the file:line pointer holds
-//              a record (it may be a supporting record, e.g. a prompt_snapshot, not the turn)
+//   evidence   the record with the evidence turn's uuid exists and the file:line pointer is its
+//              own line (fixed-overhead / tool-usage: or a prompt_snapshot in the same file)
 //   usage      measured findings only: the parser's usage for that turn, which the finding's
 //              numbers come from, equals the raw `message.usage` fields; numbers the evidence
 //              detail quotes exactly (`cache_write N`, `rewrote N tokens`) match too
@@ -74,6 +74,8 @@ export interface RawRec {
   tools: { name: string; filePath?: string }[];
   error: boolean;
   cwd?: string;
+  /** `attachment.type` of an attachment record. */
+  attachmentType?: string;
 }
 
 export interface RawFile {
@@ -142,6 +144,7 @@ export function indexRaw(text: string): RawFile {
         model === '<synthetic>' ||
         (r.type === 'system' && /error/i.test(s(r.subtype) ?? '')),
       cwd: s(r.cwd),
+      attachmentType: s(obj(r.attachment)?.type),
     });
   }
   const byUuid = new Map<string, RawRec>();
@@ -359,6 +362,25 @@ function toolCalled(f: Finding, cur: RawResponse | undefined): { v: Verdict; not
     : { v: 'fail', note: 'evidence response has no such tool_use' };
 }
 
+/** Analyzers whose evidence pointer names the prompt_snapshot behind the finding. */
+export const SNAPSHOT_POINTER_ANALYZERS: ReadonlySet<string> = new Set([
+  'fixed-overhead',
+  'tool-usage',
+]);
+
+function pointerOk(
+  analyzer: string,
+  source: { file: string; line: number },
+  found: RawRec,
+  foundFile: string,
+  raw: (file: string) => RawFile | null,
+): boolean {
+  if (source.file === foundFile && source.line === found.line) return true;
+  if (!SNAPSHOT_POINTER_ANALYZERS.has(analyzer) || source.file !== foundFile) return false;
+  const at = raw(source.file)?.byLine.get(source.line);
+  return at?.type === 'attachment' && at.attachmentType === 'prompt_snapshot';
+}
+
 /** Re-check one finding's evidence against raw lines. */
 export function checkFinding(f: Finding, input: CheckInput): FindingCheck {
   const readText = input.readText ?? ((p: string) => readFileSync(p, 'utf8'));
@@ -388,22 +410,38 @@ export function checkFinding(f: Finding, input: CheckInput): FindingCheck {
     const files = [...new Set([...(ev.source ? [ev.source.file] : []), ...(session?.files ?? [])])];
     const recs = files.flatMap((p) => raw(p)?.recs ?? []);
     const all = responses(recs);
-    // (a) the record exists, and the pointer's line holds it
+    // (a) the record exists, and the file:line pointer is that record's own line. Exception:
+    // A4 fixed-overhead and A7 tool-usage name the first turn's uuid but point at the
+    // prompt_snapshot they sized; for them the pointer may instead hold a prompt_snapshot
+    // attachment in the same transcript file as the uuid's record.
     if (ev.turnUuid !== '') {
       let found: RawRec | undefined;
+      let foundFile: string | undefined;
       for (const p of files) {
         found = raw(p)?.byUuid.get(ev.turnUuid);
-        if (found !== undefined) break;
+        if (found !== undefined) {
+          foundFile = p;
+          break;
+        }
       }
       // Standalone events without a uuid are keyed `${file}:${line}` by the analyzers.
-      if (found === undefined && ev.source && ev.turnUuid === `${ev.source.file}:${ev.source.line}`)
+      if (
+        found === undefined &&
+        ev.source &&
+        ev.turnUuid === `${ev.source.file}:${ev.source.line}`
+      ) {
         found = raw(ev.source.file)?.byLine.get(ev.source.line);
-      // The pointer may name a supporting record (e.g. a prompt_snapshot) other than the turn:
-      // it must hold a valid record, not necessarily the one with turnUuid.
-      const pointerOk = ev.source === undefined || raw(ev.source.file)?.byLine.has(ev.source.line);
+        foundFile = ev.source.file;
+      }
       if (found === undefined) notes.add('evidence record not found');
-      if (pointerOk !== true) notes.add('evidence line pointer has no record');
-      evs.push(found !== undefined && pointerOk === true ? 'pass' : 'fail');
+      else if (
+        ev.source !== undefined &&
+        !pointerOk(f.analyzer, ev.source, found, foundFile!, raw)
+      ) {
+        notes.add('evidence line pointer off');
+        found = undefined;
+      }
+      evs.push(found !== undefined ? 'pass' : 'fail');
     } else evs.push('n.a.');
     const cur = ev.turnUuid !== '' ? responseOf(all, ev.turnUuid) : undefined;
 
