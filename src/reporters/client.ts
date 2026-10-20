@@ -44,6 +44,50 @@ export function reportClient(): void {
     d.forEach((x) => (x.open = open));
   });
 
+  // ---- overview: per-day tooltip on hover and keyboard focus ----
+  const ovPlot = $('#ov-plot');
+  const ovTip = $('#ov-tip');
+  if (ovPlot && ovTip) {
+    let onHit: Element | null = null;
+    const hide = (): void => {
+      ovTip.style.display = 'none';
+      onHit?.classList.remove('on');
+      onHit = null;
+    };
+    const show = (hit: Element): void => {
+      onHit?.classList.remove('on');
+      onHit = hit;
+      hit.classList.add('on');
+      const d = (k: string): string => hit.getAttribute('data-' + k) || '';
+      // textContent only: the values are already formatted strings, never HTML.
+      ovTip.textContent = '';
+      const line = (txt: string, bold = false): void => {
+        const el = doc.createElement(bold ? 'b' : 'div');
+        el.textContent = txt;
+        ovTip.appendChild(el);
+        if (bold) ovTip.appendChild(doc.createElement('br'));
+      };
+      line(d('d'));
+      line(d('v'), true);
+      line(d('t') + ' turns' + (d('h') ? ' · cache hit ' + d('h') : ''));
+      ovTip.style.display = 'block';
+      const pr = ovPlot.getBoundingClientRect();
+      const hr = hit.getBoundingClientRect();
+      const tw = ovTip.offsetWidth;
+      // Beside the day's column, on the side with more room, so it never covers the bar.
+      const l = hr.left - pr.left;
+      const left = l + hr.width / 2 > pr.width / 2 ? l - tw - 6 : l + hr.width + 6;
+      ovTip.style.left = Math.max(0, Math.min(pr.width - tw, left)) + 'px';
+      ovTip.style.top = '0px';
+    };
+    ovPlot.querySelectorAll('.hit').forEach((h) => {
+      h.addEventListener('mouseenter', () => show(h));
+      h.addEventListener('focus', () => show(h));
+      h.addEventListener('blur', hide);
+    });
+    ovPlot.addEventListener('mouseleave', hide);
+  }
+
   const dataEl = $('#tl-data');
   if (!dataEl) return;
 

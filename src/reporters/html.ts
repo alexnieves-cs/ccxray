@@ -66,11 +66,13 @@ function badge(kind: TokenKind): string {
 const LIGHT = `--bg:#f9f9f7;--surface:#fcfcfb;--card:#ffffff;--fg:#0b0b0b;--fg2:#52514e;--mut:#6f6d68;
 --grid:#e1e0d9;--axis:#c3c2b7;--ring:rgba(11,11,11,.10);--read:#2a78d6;--write:#eb6834;--input:#1baf7a;
 --output:#6250d6;--crit:#d03b3b;--warn:#a86a00;--good:#006300;--info:#256abf;--accent:#2a78d6;
---wash:rgba(42,120,214,.08);color-scheme:light`;
+--wash:rgba(42,120,214,.08);--shadow:0 1px 2px rgba(11,11,11,.04),0 4px 16px rgba(11,11,11,.04);
+--navbg:rgba(249,249,247,.86);color-scheme:light`;
 const DARK = `--bg:#0d0d0d;--surface:#1a1a19;--card:#151514;--fg:#f0efec;--fg2:#c3c2b7;--mut:#9a988f;
 --grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);--read:#3987e5;--write:#d95926;--input:#199e70;
 --output:#9085e9;--crit:#e66767;--warn:#fab219;--good:#0ca30c;--info:#86b6ef;--accent:#3987e5;
---wash:rgba(57,135,229,.12);color-scheme:dark`;
+--wash:rgba(57,135,229,.12);--shadow:inset 0 1px 0 rgba(255,255,255,.04),0 8px 24px rgba(0,0,0,.35);
+--navbg:rgba(13,13,13,.82);color-scheme:dark`;
 
 const CSS = `
 :root{${LIGHT}}
@@ -89,7 +91,7 @@ button:hover,select:hover{border-color:var(--axis)}
 button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .b{display:inline-block;font:700 9px/14px system-ui,sans-serif;font-style:normal;border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:1px;border:1px solid currentColor}
 .b.m{color:var(--good)}.b.e{color:var(--warn)}
-header.top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--grid)}
+header.top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;padding-bottom:12px}
 header.top p{margin:4px 0 0;color:var(--fg2)}
 .pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .pill{font-size:12px;color:var(--fg2);border:1px solid var(--ring);border-radius:999px;padding:3px 10px;background:var(--card)}
@@ -202,6 +204,31 @@ th{color:var(--fg2);font-weight:600}td.n,th.n{text-align:right;font-variant-nume
 .card .sv{font-size:12px;color:var(--fg2);text-align:right;font-variant-numeric:tabular-nums}
 .card .basis{margin:4px 0 0;font-size:12px;color:var(--mut)}
 @media (max-width:640px){.comps{grid-template-columns:1fr}}
+.tile,.card,.panelbox,.ov{box-shadow:var(--shadow)}
+nav.toc{position:sticky;top:0;z-index:20;display:flex;gap:2px;overflow-x:auto;margin:0 -16px;padding:8px 16px;background:var(--navbg);
+backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--grid);scrollbar-width:none}
+nav.toc a{flex:none;color:var(--fg2);text-decoration:none;font-size:13px;padding:4px 10px;border-radius:999px}
+nav.toc a:hover{color:var(--fg);background:var(--wash)}
+section[id],h2[id]{scroll-margin-top:56px}
+.ov{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:8px 28px;margin-top:20px;padding:20px 22px;border-radius:16px;
+background:linear-gradient(180deg,var(--wash),transparent 60%),var(--card);border:1px solid var(--ring)}
+.ov-big{font-size:44px;font-weight:700;letter-spacing:-.03em;line-height:1.05}.ov-big .b{vertical-align:12px}
+.ov-cap{color:var(--fg2);margin-top:4px}.ov-cap a{text-decoration:none;font-weight:600}.ov-cap a:hover{text-decoration:underline}
+.ov-stats{display:grid;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--grid)}
+.ov-s .v{font-size:20px;font-weight:650;letter-spacing:-.01em;line-height:1.2}.ov-s .l{color:var(--mut);font-size:12px}
+.ov-h{font-size:13px;font-weight:600;color:var(--fg2);margin-bottom:6px}
+#ov-plot{position:relative}#ov-plot svg{display:block;width:100%;height:auto;overflow:visible}
+#ov-plot .grid{stroke:var(--grid);stroke-width:1}#ov-plot .base{stroke:var(--axis);stroke-width:1}
+#ov-plot .tick{fill:var(--mut);font-size:11px;font-variant-numeric:tabular-nums}
+#ov-plot .bar{fill:var(--accent);opacity:.78;transition:opacity .12s}#ov-plot .bar.peak{opacity:1}
+#ov-plot .hit{fill:transparent;cursor:default;outline:none}
+#ov-plot .hit.on{fill:var(--wash)}#ov-plot .hit:focus-visible{stroke:var(--accent);stroke-width:1.5}
+#ov-tip{display:none;position:absolute;z-index:5;pointer-events:none;background:var(--card);color:var(--fg);border:1px solid var(--ring);
+box-shadow:0 6px 24px rgba(0,0,0,.18);border-radius:8px;padding:6px 10px;font-size:12px;line-height:1.5;white-space:nowrap;font-variant-numeric:tabular-nums}
+#ov-tip b{font-size:14px}
+.ov-tbl{margin-top:6px;font-size:12px;color:var(--fg2)}.ov-tbl summary{cursor:pointer;color:var(--mut)}
+.ov-tbl table{margin-top:6px}
+@media (max-width:820px){.ov{grid-template-columns:1fr}.ov-big{font-size:36px}.ov-stats{grid-template-columns:repeat(3,minmax(0,1fr))}#ov-plot .tick{font-size:19px}}
 footer{margin-top:40px;color:var(--mut);font-size:12px;border-top:1px solid var(--grid);padding-top:10px}
 @media (max-width:640px){.hero{grid-template-columns:1fr 1fr}.tile{padding:12px}.tile .v{font-size:22px}#rp-log .w{min-width:0;display:block}}
 `;
@@ -406,30 +433,32 @@ function projectsTable(report: Report, home: string): string {
 }
 
 function dailyChart(report: Report): string {
-  const days = Object.entries(report.totals.byDay).sort((a, b) => (a[0] < b[0] ? -1 : 1));
-  if (days.length < 2) return '';
+  const active = Object.keys(report.totals.byDay).sort();
+  if (active.length < 2) return '';
+  const days = dayRange(active[0]!, active[active.length - 1]!).map(
+    (d) => [d, report.totals.byDay[d]] as const,
+  );
   const W = 1000;
   const H = 220;
   const padL = 52;
   const padB = 22;
   const plotH = H - padB - 8;
-  const max = Math.max(...days.map(([, t]) => sumTotals(t)));
-  const nice = (v: number): number => {
-    const p = Math.pow(10, Math.floor(Math.log10(v)));
-    return ([1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((m) => m * p >= v) ?? 10) * p;
-  };
-  const yMax = max > 0 ? nice(max) : 1;
+  const ticks = niceTicks(Math.max(...days.map(([, t]) => (t ? sumTotals(t) : 0))));
+  const yMax = ticks[ticks.length - 1]!;
   const slot = (W - padL) / days.length;
   const bw = Math.min(24, Math.max(2, slot - 4));
   let g = '';
-  for (let k = 0; k <= 4; k++) {
-    const y = 8 + plotH - (plotH * k) / 4;
-    g += `<line class="grid" x1="${padL}" x2="${W}" y1="${y}" y2="${y}"/><text class="tick" x="${padL - 6}" y="${y + 4}" text-anchor="end">${e(formatCompact((yMax * k) / 4))}</text>`;
+  for (const tv of ticks) {
+    const y = 8 + plotH - (plotH * tv) / yMax;
+    g += `<line class="grid" x1="${padL}" x2="${W}" y1="${y}" y2="${y}"/><text class="tick" x="${padL - 6}" y="${y + 4}" text-anchor="end">${e(formatCompact(tv))}</text>`;
   }
   const every = Math.ceil(days.length / 10);
   days.forEach(([day, t], i) => {
     const x = padL + slot * i + (slot - bw) / 2;
     let y = 8 + plotH;
+    if (i % every === 0)
+      g += `<text class="tick" x="${(x + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${e(day.slice(5))}</text>`;
+    if (t === undefined) return;
     const segs: [string, number][] = [
       ['read', t.cacheRead],
       ['write', t.cacheWrite],
@@ -442,13 +471,153 @@ function dailyChart(report: Report): string {
       y -= h;
       g += `<rect class="c-${k}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0.5, h - 1).toFixed(1)}"><title>${e(day)} · ${e(k)} ${formatInt(v)}</title></rect>`;
     }
-    if (i % every === 0)
-      g += `<text class="tick" x="${(x + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${e(day.slice(5))}</text>`;
   });
   return (
-    `<section id="days"><h2>Tokens per day (measured)</h2><p class="sub">UTC days, stacked by kind. Hover a column for exact numbers; the sessions table below has them too.</p>` +
+    `<section id="days"><h2>Tokens per day (measured)</h2><p class="sub">UTC days, stacked by kind; days without activity stay empty. Hover a column for exact numbers; the sessions table below has them too.</p>` +
     `<div class="panelbox"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="tokens per day">${g}</svg></div></section>`
   );
+}
+
+/** Every UTC day from the first to the last active one, so the chart's time axis has no holes. */
+function dayRange(from: string, to: string): string[] {
+  const out: string[] = [];
+  const end = Date.parse(to + 'T00:00:00Z');
+  for (let t = Date.parse(from + 'T00:00:00Z'); t <= end && out.length < 400; t += 86_400_000)
+    out.push(new Date(t).toISOString().slice(0, 10));
+  return out;
+}
+
+/** Axis ticks: a round step (1, 2, 2.5 or 5 × 10^k) and as many steps (at most 5) as cover v. */
+function niceTicks(v: number): number[] {
+  if (!(v > 0)) return [0, 1];
+  const raw = v / 5;
+  const p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = ([1, 2, 2.5, 5, 10].find((m) => m * p >= raw) ?? 10) * p;
+  const n = Math.max(1, Math.ceil(v / step - 1e-9));
+  return Array.from({ length: n + 1 }, (_, k) => k * step);
+}
+
+/**
+ * The overview band: the window's headline numbers next to one bar per UTC day. Bars show $ at
+ * list prices [E] when every day is priced, otherwise tokens [M]. Each day has a full-height,
+ * focusable hit target that the client turns into a tooltip; the table below is the text view.
+ */
+function overview(report: Report): string {
+  const t = report.totals.all;
+  const usd = t.cost !== undefined && t.cost.total > 0 ? t.cost.total : undefined;
+  const plan = report.actionPlan;
+  const planPct =
+    usd !== undefined && plan !== undefined && plan.actions.length > 0 && plan.windowCostUsd > 0
+      ? formatPct(plan.combinedSavingsUsd, plan.windowCostUsd)
+      : undefined;
+  const subagents = report.sessions.filter((s) => s.isSubagent).length;
+  const stat = (v: string, l: string, kind: TokenKind): string =>
+    `<div class="ov-s"><div class="v num">${e(v)}${badge(kind)}</div><div class="l">${e(l)}</div></div>`;
+  const head =
+    usd !== undefined
+      ? `<div class="ov-big num">${e(formatUsd(usd))}${badge('estimated')}</div><div class="ov-cap">at API list prices` +
+        (planPct !== undefined
+          ? ` · <a href="#plan">${plan!.combinedUpperBound === true ? 'up to' : '~'}${e(planPct)} avoidable with the plan below</a>`
+          : '') +
+        `</div>`
+      : `<div class="ov-big num">${e(formatCompact(sumTotals(t)))}${badge('measured')}</div><div class="ov-cap">tokens processed</div>`;
+  const stats =
+    `<div class="ov-stats">` +
+    (usd !== undefined ? stat(formatCompact(sumTotals(t)), 'tokens processed', 'measured') : '') +
+    stat(formatRatio(t.cacheHitRatio), 'cache hit ratio', 'measured') +
+    stat(
+      formatInt(t.turns),
+      `turns in ${formatInt(report.sessions.length)} sessions${subagents ? ` (${subagents} subagent)` : ''}`,
+      'measured',
+    ) +
+    `</div>`;
+
+  const active = Object.keys(report.totals.byDay).sort();
+  let chart = '';
+  if (active.length >= 2) {
+    const days = dayRange(active[0]!, active[active.length - 1]!);
+    const allPriced = active.every(
+      (d) => (report.totals.byDay[d]!.cost?.total ?? 0) > 0 || report.totals.byDay[d]!.turns === 0,
+    );
+    const byCost = usd !== undefined && allPriced;
+    const val = (d: string): number => {
+      const x = report.totals.byDay[d];
+      if (x === undefined) return 0;
+      return byCost ? (x.cost?.total ?? 0) : sumTotals(x);
+    };
+    const fmt = byCost ? formatUsd : formatCompact;
+    const W = 640;
+    const H = 200;
+    const padL = 48;
+    const top = 10;
+    const padB = 22;
+    const plotH = H - top - padB;
+    const ticks = niceTicks(Math.max(...days.map(val)));
+    const yMax = ticks[ticks.length - 1]!;
+    const slot = (W - padL) / days.length;
+    const bw = Math.max(2, Math.min(28, slot - 2));
+    const base = top + plotH;
+    let g = '';
+    ticks.forEach((tv, k) => {
+      const y = base - (plotH * tv) / yMax;
+      g +=
+        `<line class="${k === 0 ? 'base' : 'grid'}" x1="${padL}" x2="${W}" y1="${y}" y2="${y}"/>` +
+        `<text class="tick" x="${padL - 6}" y="${y + 4}" text-anchor="end">${e(fmt(tv))}</text>`;
+    });
+    const every = Math.ceil(days.length / 8);
+    let peak = 0;
+    days.forEach((d, i) => (val(d) > val(days[peak]!) ? (peak = i) : 0));
+    days.forEach((d, i) => {
+      const v = val(d);
+      const x0 = padL + slot * i;
+      const x = x0 + (slot - bw) / 2;
+      const h = (v / yMax) * plotH;
+      if (h >= 0.5) {
+        const r = Math.min(4, bw / 2, h);
+        const y = base - h;
+        g +=
+          `<path class="bar${i === peak ? ' peak' : ''}" d="M${x.toFixed(1)} ${base}V${(y + r).toFixed(1)}` +
+          `Q${x.toFixed(1)} ${y.toFixed(1)} ${(x + r).toFixed(1)} ${y.toFixed(1)}H${(x + bw - r).toFixed(1)}` +
+          `Q${(x + bw).toFixed(1)} ${y.toFixed(1)} ${(x + bw).toFixed(1)} ${(y + r).toFixed(1)}V${base}Z"/>`;
+      }
+      const x2 = report.totals.byDay[d];
+      const label =
+        `${d}: ${fmt(v)}${byCost ? ' at list prices' : ' tokens'}, ${formatInt(x2?.turns ?? 0)} turns` +
+        (x2 && x2.turns > 0 ? `, cache hit ${formatRatio(x2.cacheHitRatio)}` : '');
+      g +=
+        `<rect class="hit" x="${x0.toFixed(1)}" y="${top}" width="${slot.toFixed(1)}" height="${plotH}" tabindex="0" ` +
+        `data-d="${e(d)}" data-v="${e(fmt(v))}" data-t="${x2?.turns ?? 0}" data-h="${x2 && x2.turns > 0 ? e(formatRatio(x2.cacheHitRatio)) : ''}" aria-label="${e(label)}"/>`;
+      if (i % every === 0)
+        g += `<text class="tick" x="${(x0 + slot / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${e(d.slice(5))}</text>`;
+    });
+    const rows = days
+      .map((d) => {
+        const x = report.totals.byDay[d];
+        return `<tr><td>${e(d)}</td><td class="n">${e(fmt(val(d)))}</td><td class="n">${formatInt(x?.turns ?? 0)}</td><td class="n">${x && x.turns > 0 ? e(formatRatio(x.cacheHitRatio)) : '–'}</td></tr>`;
+      })
+      .join('');
+    chart =
+      `<div class="ov-chart"><div class="ov-h">${byCost ? `Cost per day${badge('estimated')}` : `Tokens per day${badge('measured')}`}<span class="mut"> · UTC · peak ${e(days[peak]!)}</span></div>` +
+      `<div id="ov-plot"><svg viewBox="0 0 ${W} ${H}" role="group" aria-label="${byCost ? 'cost' : 'tokens'} per UTC day">${g}</svg><div id="ov-tip" role="status"></div></div>` +
+      `<details class="ov-tbl"><summary>table view</summary><table><tr><th>day (UTC)</th><th class="n">${byCost ? '$ [E]' : 'tokens [M]'}</th><th class="n">turns</th><th class="n">cache hit</th></tr>${rows}</table></details></div>`;
+  }
+  return `<section id="overview" class="ov"><h2 class="sr">Overview</h2><div class="ov-lead">${head}${stats}</div>${chart}</section>`;
+}
+
+/** A compact in-page nav; it sticks to the top so long reports stay easy to move around. */
+function nav(report: Report, replay: boolean): string {
+  const plan = report.actionPlan;
+  const links: [string, string][] = [
+    ['overview', 'Overview'],
+    ...(plan !== undefined && plan.actions.length > 0 && plan.windowCostUsd > 0
+      ? [['plan', 'Plan'] as [string, string]]
+      : []),
+    ...(replay ? [['replay', 'Replay'] as [string, string]] : []),
+    ['findings', `Findings (${report.findings.length})`],
+    ...(Object.keys(report.totals.byDay).length >= 2 ? [['days', 'Days'] as [string, string]] : []),
+    ['sessions', 'Sessions'],
+  ];
+  return `<nav class="toc" aria-label="sections">${links.map(([id, l]) => `<a href="#${id}">${e(l)}</a>`).join('')}</nav>`;
 }
 
 function docsLink(url: string): string {
@@ -582,6 +751,8 @@ export function renderHtml(report: Report, opts: HtmlOptions = {}): string {
       `<div class="pills"><span class="pill">local only · nothing loaded from the network</span>` +
       `<span class="pill">prompt and file contents: ${report.includeContent ? 'included (--include-content)' : 'not included'}</span>` +
       `<button type="button" id="theme" class="pill">theme: auto</button></div></header>`,
+    nav(report, tl !== undefined),
+    overview(report),
     planSection(report),
     hero(report),
     `<h2 class="sr">Token breakdown (measured) and cost (estimated)</h2>`,
@@ -602,7 +773,7 @@ export function renderHtml(report: Report, opts: HtmlOptions = {}): string {
           .join('') +
         `</table></div>`
       : '',
-    `<h2>Findings</h2>`,
+    `<h2 id="findings">Findings</h2>`,
     findings.length
       ? `<p class="sub">${report.findings.some((f) => (f.impact?.savingsUsd ?? 0) > 0) ? 'Largest savings first, then the rest by severity' : 'Most severe first'}. Each one points at the session and log line it came from` +
         `${tl ? '; ▶ replay jumps to that turn' : ''}. <button id="toggle" type="button">expand / collapse all evidence</button></p>` +
@@ -610,7 +781,7 @@ export function renderHtml(report: Report, opts: HtmlOptions = {}): string {
       : '<p class="mut">No findings in this window.</p>',
     projectsTable(report, home),
     dailyChart(report),
-    `<h2>Sessions (measured)</h2>`,
+    `<h2 id="sessions">Sessions (measured)</h2>`,
     report.sessions.length ? sessionsTable(report, home) : '<p class="mut">No sessions found.</p>',
     `<h2>Parse stats</h2>`,
     parseStatsSection(report, home),

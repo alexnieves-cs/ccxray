@@ -166,7 +166,11 @@ These are estimates for *your* logs and window, not a product claim. How each nu
 
 ![HTML report of the synthetic demo corpus](docs/report.png)
 
-<sub>Rendered from the same synthetic corpus as the GIF. The numbers are made up.</sub>
+It opens with the window's cost and a per-day chart you can hover or tab through, then the action plan, a session replay that plays the context filling up and stops at cache rebuilds, and every finding with its evidence:
+
+![Hovering the per-day cost chart, then replaying a session until it hits a cache rebuild](docs/report.gif)
+
+<sub>Rendered from the same synthetic corpus as the terminal GIF. The numbers are made up. The report GIF is recorded with Playwright from [`scripts/record-report-gif.cjs`](scripts/record-report-gif.cjs).</sub>
 
 ## Performance
 

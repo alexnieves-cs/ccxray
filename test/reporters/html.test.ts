@@ -52,6 +52,31 @@ describe('html reporter', () => {
     expect(html.indexOf('~-big')).toBeLessThan(html.indexOf('~-small'));
   });
 
+  it('overview: one focusable day per UTC day, gaps included, $ [E] when priced and tokens [M] otherwise', () => {
+    const costed = renderHtml(costedSampleReport());
+    // The sample is active on 10-11, 10-14 and 10-18: eight calendar days, five of them empty.
+    expect(costed.match(/<rect class="hit"[^>]*tabindex="0"/g)?.length).toBe(8);
+    expect(costed).toContain('data-d="2026-10-12"');
+    expect(costed).toMatch(/Cost per day<i class="b e"/);
+    expect(costed).toMatch(
+      /aria-label="2026-10-11: \$[\d.,]+ at list prices, \d+ turns, cache hit/,
+    );
+    expect(costed).toContain('<summary>table view</summary>');
+    expect(costed).toContain('avoidable with the plan below');
+    const plain = renderHtml(sampleReport());
+    expect(plain).toMatch(/Tokens per day<i class="b m"/);
+    expect(plain).not.toContain('avoidable with the plan');
+    expect(plain).not.toContain('href="#plan"');
+  });
+
+  it('overview: no chart for a single day, and the nav links only to sections that exist', () => {
+    const html = renderHtml(emptyReport());
+    expect(html).not.toContain('id="ov-plot"');
+    const nav = /<nav class="toc"[^]*?<\/nav>/.exec(html)![0];
+    for (const id of [...nav.matchAll(/href="#([a-z]+)"/g)].map((m) => m[1]))
+      expect(html).toMatch(new RegExp(`id="${id}"`));
+  });
+
   it('the remote-load detector catches what it should (self-test)', () => {
     expect(remoteLoads('<script src="https://cdn.example/x.js"></script>')).toHaveLength(1);
     expect(remoteLoads('<link rel="stylesheet" href="//cdn.example/x.css">')).toHaveLength(1);
