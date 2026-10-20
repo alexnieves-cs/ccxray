@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/alexnieves-cs/ccxray/main/scripts/real-check.sh | bash
 #   # or, from a checkout:  bash scripts/real-check.sh
 #
-# It clones `main` into a temp dir, builds it, reads ~/.claude/projects and prints AGGREGATE
+# It clones `main` (or the branch in CCXRAY_REF) into a temp dir, builds it, reads ~/.claude/projects and prints AGGREGATE
 # counts only (no paths, project names, ids, prompts or file contents), then deletes the clone.
 # Nothing is uploaded anywhere. The only network use: git clone, pnpm install, and `npx ccusage`
 # for the cross-check (skip that with SKIP_CCUSAGE=1).
@@ -20,9 +20,10 @@ step() { printf '\n===== %s =====\n' "$1"; }
 run() { "$@" 2>&1 | sed -e "s#$HOME#~#g" -e "s#$TMP#<tmp>#g"; }
 
 step "setup"
-git clone -q --branch main https://github.com/alexnieves-cs/ccxray "$D" || exit 1
+REF=${CCXRAY_REF:-main}
+git clone -q --branch "$REF" https://github.com/alexnieves-cs/ccxray "$D" || exit 1
 cd "$D" || exit 1
-echo "commit $(git rev-parse --short HEAD) (main)"
+echo "commit $(git rev-parse --short HEAD) ($REF)"
 command -v pnpm >/dev/null || corepack enable >/dev/null 2>&1
 pnpm install --frozen-lockfile --silent >/dev/null 2>&1 || { echo "pnpm install failed"; exit 1; }
 pnpm -s build >/dev/null 2>&1 || { echo "build failed"; exit 1; }
