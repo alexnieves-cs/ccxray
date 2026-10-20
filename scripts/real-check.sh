@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Read-only real-log check for tknxray. Run it yourself in a terminal on your own machine:
 #
-#   curl -fsSL https://raw.githubusercontent.com/alexnieves-cs/ccxray/docs-readme/scripts/real-check.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/alexnieves-cs/ccxray/main/scripts/real-check.sh | bash
 #   # or, from a checkout:  bash scripts/real-check.sh
 #
-# It clones the repo into a temp dir, builds it, reads ~/.claude/projects and prints AGGREGATE
+# It clones `main` (or the branch in CCXRAY_REF) into a temp dir, builds it, reads ~/.claude/projects and prints AGGREGATE
 # counts only (no paths, project names, ids, prompts or file contents), then deletes the clone.
 # Nothing is uploaded anywhere. The only network use: git clone, pnpm install, and `npx ccusage`
 # for the cross-check (skip that with SKIP_CCUSAGE=1).
@@ -20,11 +20,10 @@ step() { printf '\n===== %s =====\n' "$1"; }
 run() { "$@" 2>&1 | sed -e "s#$HOME#~#g" -e "s#$TMP#<tmp>#g"; }
 
 step "setup"
-git clone -q https://github.com/alexnieves-cs/ccxray "$D" || exit 1
+REF=${CCXRAY_REF:-main}
+git clone -q --branch "$REF" https://github.com/alexnieves-cs/ccxray "$D" || exit 1
 cd "$D" || exit 1
-git checkout -q docs-readme
-git -c user.name=x -c user.email=x@x merge -q --no-edit origin/m1-perf-timestamps >/dev/null 2>&1 \
-  || { git merge --abort >/dev/null 2>&1; echo "note: perf-timestamps merge skipped (conflict)"; }
+echo "commit $(git rev-parse --short HEAD) ($REF)"
 command -v pnpm >/dev/null || corepack enable >/dev/null 2>&1
 pnpm install --frozen-lockfile --silent >/dev/null 2>&1 || { echo "pnpm install failed"; exit 1; }
 pnpm -s build >/dev/null 2>&1 || { echo "build failed"; exit 1; }
@@ -54,8 +53,15 @@ for (const f of r.findings ?? []) {
   by[k] ??= { findings: 0, tokens: 0, kind: f.tokens?.kind ?? "?" };
   by[k].findings++; by[k].tokens += f.tokens?.value ?? f.tokens?.count ?? 0;
 }
-console.log(JSON.stringify({ totals: r.totals, calibration: r.calibration, byAnalyzer: by }, null, 2));
+// No per-project or per-session keys: those are paths and ids. Counts and model names only.
+const t = r.totals ?? {};
+const totals = { all: t.all, byModel: t.byModel, byRole: t.byRole,
+  days: Object.keys(t.byDay ?? {}).length, projects: Object.keys(t.byProject ?? {}).length };
+console.log(JSON.stringify({ totals, calibration: r.calibration, byAnalyzer: by }, null, 2));
 ' "$OUT/report.json"
+
+step "false-positive spot check, last 30 days (mechanical evidence check)"
+run pnpm -s fp-check --since "$SINCE"
 
 step "my-sessions (aggregate)"
 run pnpm -s my-sessions --out "$OUT/MY_SESSIONS.md"
