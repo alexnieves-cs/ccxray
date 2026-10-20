@@ -52,7 +52,11 @@ for (const f of r.findings ?? []) {
   by[k] ??= { findings: 0, tokens: 0, kind: f.tokens?.kind ?? "?" };
   by[k].findings++; by[k].tokens += f.tokens?.value ?? f.tokens?.count ?? 0;
 }
-console.log(JSON.stringify({ totals: r.totals, calibration: r.calibration, byAnalyzer: by }, null, 2));
+// No per-project or per-session keys: those are paths and ids. Counts and model names only.
+const t = r.totals ?? {};
+const totals = { all: t.all, byModel: t.byModel, byRole: t.byRole,
+  days: Object.keys(t.byDay ?? {}).length, projects: Object.keys(t.byProject ?? {}).length };
+console.log(JSON.stringify({ totals, calibration: r.calibration, byAnalyzer: by }, null, 2));
 ' "$OUT/report.json"
 
 step "false-positive spot check, last 30 days (mechanical evidence check)"
