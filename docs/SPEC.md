@@ -376,6 +376,7 @@ The report's headline: `buildActionPlan(report)` (`src/cost/plan.ts`, pure) turn
 - Reads files only. No network calls, no telemetry, no account. Enforced in CI. The single exception is the opt-in `tknxray capture` bundle (`dist/capture.js`), which only *listens* on 127.0.0.1 and never connects out; CI checks that too ([capture.md](capture.md)).
 - Reports contain token counts, tool names, file paths (relative) and commands (first tokens only) by default. Prompt and output text appears only with `--include-content`.
 - HTML reports are self-contained and load nothing remote.
+- The HTML report opens with an overview band: the window's cost at list prices [E] (or tokens [M] when nothing is priced), the share the action plan could avoid, and one bar per UTC day from the first active day to the last. Days without activity are empty slots, not skipped, so the time axis stays honest. Each day is a focusable hit target with a tooltip, and a table view lists the same numbers. Per-day bars show $ only when every active day is priced; otherwise they show tokens.
 - No features for multi-account rotation, limit evasion, subscription-OAuth reuse in other harnesses, or cache keep-alive pings. `capture` mode is API-key only and opt-in.
 - Not affiliated with Anthropic. Mention this in the README.
 
