@@ -6,6 +6,7 @@ import {
   parseCcusage,
   parseCcusageCost,
   pctDiff,
+  regroupedFiles,
 } from '../scripts/validate-real.js';
 import type { Session } from '../src/model/index.js';
 
@@ -185,5 +186,38 @@ describe('validate:real helpers (no real logs)', () => {
     expect(ok.pass).toBe(true);
     expect(ok.lines.join('\n')).not.toMatch(/\bp1\b/);
     expect(compareCost({ total: 93.2, bySession: new Map() }, theirs).pass).toBe(false);
+  });
+
+  it('explains a missing ccusage session whose file tknxray grouped under another session', () => {
+    const sessions = [
+      { id: 'old', isSubagent: false, files: ['/p/old.jsonl', '/p/new.jsonl'] },
+      {
+        id: 'old:agent-a',
+        isSubagent: true,
+        parentSessionId: 'old',
+        files: ['/p/old/agent-a.jsonl'],
+      },
+    ] as unknown as Session[];
+    const regrouped = regroupedFiles(sessions);
+    expect([...regrouped]).toEqual([['new', 'old']]);
+    const c = { input: 1, output: 1, cacheCreate: 0, cacheRead: 0 };
+    const r = compareReport(
+      { all: c, bySession: new Map([['old', c]]) },
+      parseCcusage({
+        sessions: [
+          {
+            sessionId: 'new',
+            inputTokens: 1,
+            outputTokens: 1,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0,
+          },
+        ],
+      }),
+      regrouped,
+    );
+    const text = r.lines.join('\n');
+    expect(text).toContain('its file is grouped under');
+    expect(text).not.toMatch(/\bnew\b|\bold\b/);
   });
 });

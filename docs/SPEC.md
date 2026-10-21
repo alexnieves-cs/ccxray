@@ -224,6 +224,7 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - A3 tool-set-change: a new `prompt_snapshot` is logged when the tool set changes (Q3).
 - Calibration: request *n* carries all of turn *n-1*'s output tokens and nothing unlogged besides the tool_result.
 - `scripts/validate-real.ts`: the older `ccusage session --json` shape `{ sessions: [{ sessionId, … }] }`. *(Resolved 2026-10-19 against real ccusage output [M]: the current shape is `{ session: [{ period: <sessionId>, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, … }], totals }`, and ccusage folds subagent transcripts into their parent session; both shapes are accepted.)*
+- `scripts/validate-real.ts` (2026-10-21): per-session mismatches with ccusage on one real corpus (860 of 868 match; totals exact) come from resumed or continued transcripts whose first record carries an earlier session's `sessionId`: tknxray groups such a file under that earlier session, ccusage under the file name. `validate:real` reports each such regrouped file; results in [bench/REVIEW.md](../bench/REVIEW.md).
 
 **Analyzer assumptions added in M4 [UNVERIFIED]** (marked `// UNVERIFIED:` in `src/analyzers/`):
 - A7: a `prompt_snapshot`'s `tools[]` lists every tool sent on a cold turn (deferred tools may be missing), so a tool counts as defined only when some snapshot lists it (Q3).

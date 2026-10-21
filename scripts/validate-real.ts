@@ -188,6 +188,25 @@ export function oursBySession(
   return out;
 }
 
+/**
+ * Files whose name (a session UUID) differs from the tknxray session they were grouped under,
+ * keyed by file stem -> our grouping key. tknxray keys a main file by its first envelope
+ * `sessionId`; ccusage appears to key by the file name. UNVERIFIED: a resumed or continued
+ * transcript starts with records carrying the earlier session's id, so the two tools can put the
+ * same turns under different sessions while totals still match.
+ */
+export function regroupedFiles(sessions: readonly Session[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const s of sessions) {
+    const key = s.isSubagent ? (s.parentSessionId ?? s.id) : s.id;
+    for (const f of s.files) {
+      const stem = (f.split(/[\\/]/).pop() ?? f).replace(/\.jsonl$/, '');
+      if (!s.isSubagent && stem !== key) out.set(stem, key);
+    }
+  }
+  return out;
+}
+
 const fmt = (x: number): string =>
   Number.isFinite(x) ? `${x >= 0 ? '+' : ''}${x.toFixed(2)}%` : 'n/a';
 const n = (x: number): string => x.toLocaleString('en-US');
@@ -195,6 +214,7 @@ const n = (x: number): string => x.toLocaleString('en-US');
 export function compareReport(
   ours: { all: Counts; bySession: Map<string, Counts> },
   theirs: ReturnType<typeof parseCcusage>,
+  regrouped: ReadonlyMap<string, string> = new Map(),
 ): { lines: string[]; pass: boolean } {
   const lines: string[] = ['', `ccusage cross-check (±${TOLERANCE_PCT}% per metric)`];
   const total = theirs.totals ?? sumCounts([...theirs.sessions.values()]);
@@ -216,7 +236,13 @@ export function compareReport(
     const o = ours.bySession.get(id);
     if (o === undefined) {
       missing++;
-      lines.push(`  ${hashId(id)}  not found in tknxray`);
+      const owner = regrouped.get(id);
+      lines.push(
+        `  ${hashId(id)}  not found in tknxray` +
+          (owner !== undefined
+            ? ` (its file is grouped under ${hashId(owner)}: first record carries that session id)`
+            : ''),
+      );
       continue;
     }
     const good = within(o, t);
@@ -317,6 +343,7 @@ async function mainScript(argv: string[]): Promise<number> {
       const cmp = compareReport(
         { all: fromTotals(t), bySession: oursBySession(sessions, report.totals.bySession) },
         theirs,
+        regroupedFiles(sessions),
       );
       lines.push(...cmp.lines);
       if (!cmp.pass) code = 1;
