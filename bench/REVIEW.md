@@ -1,13 +1,88 @@
-# False-positive review (SPEC §6 M4)
+# Real-log validation (SPEC §6 M1, M2, M4, M7)
 
-**Status: PENDING Alex's local run.** Nothing below has been filled in. Pick 20 random findings
-from `tknxray --json` on real logs, check each by hand against the transcript, and record only
-hashes and a verdict here: never prompt, file or command content. Acceptance: ≤ 2 FP out of 20,
-and ≥ 1 true positive per analyzer type (or "none present").
+One maintainer corpus, run locally with `scripts/real-check.sh` at commit `ae7f6e1` on
+2026-10-21 (macOS, Apple M1 Pro, Node 25.8.1). The script prints counts and hashed ids only;
+nothing below contains prompts, paths, project names or session ids. Dollar amounts from this
+corpus are deliberately not recorded here. Re-run with `bash scripts/real-check.sh`.
 
-Known false-positive risk to check first: **A8 counts `summary` records as compaction markers**
-(FORMAT.md Q5, UNVERIFIED). If Claude Code writes `summary` records for other reasons (e.g. session
-titles), A8 may flag sessions as compacted that never were.
+## Corpus [M]
 
-| # | analyzer | session hash | turn uuid hash | verdict TP/FP | note |
-|---|---|---|---|---|---|
+| metric | value |
+|---|---:|
+| JSONL files | 1,495 (3,154.5 MB) |
+| lines / malformed / blank | 398,301 / 0 / 0 |
+| sessions (of which subagent) | 1,491 (539) |
+| assistant turns after dedupe | 45,412 |
+| dedupe drops: same response / sidechain replay / cross-session | 46,063 / 7 / 0 |
+| unknown record types (ignored) | 22 kinds, 27,339 records |
+| Claude Code versions seen | 34 |
+
+## ccusage cross-check (M2, M7)
+
+`ccusage@latest claude session --json` on the same logs, compared by `pnpm validate:real --ccusage`.
+
+| check | target | result |
+|---|---|---|
+| input / output / cache create / cache read totals | ±0.5% | **+0.00% on all four: PASS** |
+| list-price cost total vs ccusage `totalCost` | ±$0.01 | **identical to the cent: PASS** |
+| per-session token match | ±0.5% | 860 of 868 ccusage sessions pass; 3 fail, 5 not found (below) |
+
+The 8 per-session mismatches are a grouping difference, not a counting one: the totals match
+exactly, and the 5 "not found" ccusage sessions add up, to the cent, to the excess on the 3
+"fail" sessions. UNVERIFIED cause: tknxray keys a main transcript by its first record's
+`sessionId`, ccusage by the file name; a resumed or continued transcript seems to start with
+records carrying the earlier session's id, so both tools count the same turns under different
+session keys. `validate:real` now prints, for each "not found" session, whether its file was
+grouped under another session, so the next run confirms or refutes this. 89 sessions exist only
+in tknxray; UNVERIFIED: they are sessions ccusage omits (likely ones with no usage of their own).
+
+## False-positive spot check (M4)
+
+`scripts/fp-check.ts`, 20 findings sampled round-robin by analyzer from the last 30 days
+(542 findings), each checked mechanically against the raw logs: the evidence pointer resolves,
+the measured numbers match `usage`, and the analyzer's invariant holds (for example, a cache
+rebuild really reads less cache than the turn before).
+
+| # | analyzer | session hash | evidence | usage [M] | invariant |
+|---:|---|---|---|---|---|
+| 1 | cache-rebuild | 162663a306 | pass | pass | pass |
+| 2 | fixed-overhead | e096e05783 | pass | pass | n.a. |
+| 3 | big-tool-output | ca952c2810 | pass | n.a. | pass |
+| 4 | repeated-read | 9b5bdbb913 | pass | n.a. | pass |
+| 5 | tool-usage | c8592e965f | pass | n.a. | n.a. |
+| 6 | context-growth | e60c19f4d1 | pass | pass | pass |
+| 7 | subagent-cost | 5089d7e575 | pass | pass | pass |
+| 8 | error-waste | a8694b6417 | pass | n.a. | pass |
+| 9 | cross-agent-read | 05c4196ed3 | pass | n.a. | n.a. |
+| 10 | fixed-overhead | 72d7c6a66b | pass | pass | n.a. |
+| 11 | big-tool-output | 69453b7d1e | pass | n.a. | pass |
+| 12 | repeated-read | e2293a1f00 | pass | n.a. | pass |
+| 13 | tool-usage | c8592e965f | pass | n.a. | n.a. |
+| 14 | context-growth | f34e9399c4 | pass | pass | pass |
+| 15 | subagent-cost | f34e9399c4 | pass | pass | pass |
+| 16 | error-waste | fc0aceb2a5 | pass | n.a. | pass |
+| 17 | cross-agent-read | b6428b7c4a | pass | n.a. | n.a. |
+| 18 | fixed-overhead | c8592e965f | pass | n.a. | n.a. |
+| 19 | big-tool-output | e2293a1f00 | pass | n.a. | pass |
+| 20 | repeated-read | e2293a1f00 | pass | n.a. | pass |
+
+**20 of 20 pass every mechanical check; 0 fail.** At least one finding per analyzer type was
+present in the window (9 of 10 types; cache-ttl had none on this corpus). This shows the findings point at real
+records with the stated numbers. It does **not** judge whether each piece of advice is right:
+that human TP/FP verdict, the SPEC's "≤ 2 wrong of 20", is still **pending**.
+
+## Estimator calibration [E]
+
+Median ratio of the chars/4 estimate to measured tokens: 0.548 over 16,090 samples, so [E]
+token figures run about 45% low on this corpus (see FORMAT.md).
+
+## Performance [M]
+
+Wall time and peak RSS of a full `tknxray --json` run, 3 runs each.
+
+| window | wall time | peak RSS |
+|---|---|---|
+| last 7 days | 8.9 s, 9.0 s, 13.8 s | 428 to 460 MB |
+| all time (3.15 GB) | 16.8 s, 14.8 s, 14.8 s | 436 to 469 MB |
+
+Aggregate per-analyzer counts for the whole corpus are in [MY_SESSIONS.md](MY_SESSIONS.md).
