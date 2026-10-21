@@ -5,7 +5,7 @@
 //   pnpm validate:real --ccusage ccusage.json   # also cross-check A1 totals against ccusage
 //
 // For the cross-check, run ccusage yourself first (this script never runs npx and makes no
-// network call): `npx ccusage@latest session --json > ccusage.json`. Both sides then cover all
+// network call): `npx ccusage@latest claude session --json > ccusage.json`. Both sides then cover all
 // time (this script applies no --since unless you pass one, and neither should ccusage).
 //
 // Output is counts only: no prompt or file content, no paths, and session ids are hashed.
@@ -33,6 +33,25 @@ const num = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 
 /**
+ * ccusage's rows that belong to Claude Code. Newer ccusage `session` (no agent subcommand) also
+ * reports other coding CLIs (Codex, Gemini, ...) and tags each row with `agent`; tknxray only
+ * reads Claude Code, so other agents' rows are dropped. Rows without `agent` are kept (older
+ * output, or `ccusage claude session`). When a row is dropped, ccusage's own totals cover the
+ * other agents too, so callers sum the kept rows instead.
+ */
+function claudeRows(root: Record<string, unknown>): { rows: unknown[]; dropped: number } {
+  const all = [
+    ...(Array.isArray(root.session) ? (root.session as unknown[]) : []),
+    ...(Array.isArray(root.sessions) ? (root.sessions as unknown[]) : []),
+  ];
+  const rows = all.filter((s) => {
+    const a = (s as Record<string, unknown> | null)?.agent;
+    return typeof a !== 'string' || a === 'claude';
+  });
+  return { rows, dropped: all.length - rows.length };
+}
+
+/**
  * The shape of `ccusage session --json`. Two shapes are accepted; anything else is ignored.
  * - Confirmed against real ccusage output on 2026-10-19 (ccusage latest): `{ session: [{ period:
  *   <sessionId>, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, totalTokens,
@@ -41,7 +60,11 @@ const num = (v: unknown): number | undefined =>
  * - UNVERIFIED (older, as remembered from ccusage's docs): `{ sessions: [{ sessionId, … }],
  *   totals }`. Alternative token key spellings are accepted for both.
  */
-export function parseCcusage(json: unknown): { sessions: Map<string, Counts>; totals?: Counts } {
+export function parseCcusage(json: unknown): {
+  sessions: Map<string, Counts>;
+  totals?: Counts;
+  droppedOtherAgents: number;
+} {
   const counts = (o: unknown): Counts | undefined => {
     if (typeof o !== 'object' || o === null) return undefined;
     const r = o as Record<string, unknown>;
@@ -54,17 +77,15 @@ export function parseCcusage(json: unknown): { sessions: Map<string, Counts>; to
   };
   const root = (typeof json === 'object' && json !== null ? json : {}) as Record<string, unknown>;
   const sessions = new Map<string, Counts>();
-  const rows = [
-    ...(Array.isArray(root.session) ? (root.session as unknown[]) : []),
-    ...(Array.isArray(root.sessions) ? (root.sessions as unknown[]) : []),
-  ];
+  const { rows, dropped } = claudeRows(root);
   for (const s of rows) {
     const r = s as Record<string, unknown> | null;
     const id = r?.sessionId ?? r?.period;
     const c = counts(s);
     if (typeof id === 'string' && c !== undefined) sessions.set(id, c);
   }
-  return { sessions, totals: counts(root.totals) };
+  const totals = dropped > 0 ? undefined : counts(root.totals);
+  return { sessions, ...(totals !== undefined ? { totals } : {}), droppedOtherAgents: dropped };
 }
 
 export const COST_TOLERANCE_USD = 0.01;
@@ -73,17 +94,15 @@ export const COST_TOLERANCE_USD = 0.01;
 export function parseCcusageCost(json: unknown): { sessions: Map<string, number>; total?: number } {
   const root = (typeof json === 'object' && json !== null ? json : {}) as Record<string, unknown>;
   const sessions = new Map<string, number>();
-  for (const s of [
-    ...(Array.isArray(root.session) ? (root.session as unknown[]) : []),
-    ...(Array.isArray(root.sessions) ? (root.sessions as unknown[]) : []),
-  ]) {
+  const { rows, dropped } = claudeRows(root);
+  for (const s of rows) {
     const r = s as Record<string, unknown> | null;
     const id = r?.sessionId ?? r?.period;
     const c = num(r?.totalCost);
     if (typeof id === 'string' && c !== undefined) sessions.set(id, c);
   }
   const totals = root.totals as Record<string, unknown> | undefined;
-  const total = num(totals?.totalCost);
+  const total = dropped > 0 ? undefined : num(totals?.totalCost);
   return { sessions, ...(total !== undefined ? { total } : {}) };
 }
 
@@ -289,6 +308,12 @@ async function mainScript(argv: string[]): Promise<number> {
       lines.push('', 'ccusage file: no sessions or totals recognized (format changed?)');
       code = 1;
     } else {
+      if (theirs.droppedOtherAgents > 0)
+        lines.push(
+          '',
+          `ccusage: ignored ${theirs.droppedOtherAgents} session(s) from other coding CLIs ` +
+            '(not Claude Code); totals are summed over the Claude Code sessions only',
+        );
       const cmp = compareReport(
         { all: fromTotals(t), bySession: oursBySession(sessions, report.totals.bySession) },
         theirs,

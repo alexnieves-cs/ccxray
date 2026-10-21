@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Read-only real-log check for tknxray. Run it yourself in a terminal on your own machine:
 #
-#   curl -fsSL https://raw.githubusercontent.com/alexnieves-cs/ccxray/docs-readme/scripts/real-check.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/alexnieves-cs/ccxray/main/scripts/real-check.sh | bash
 #   # or, from a checkout:  bash scripts/real-check.sh
 #
-# It clones the repo into a temp dir, builds it, reads ~/.claude/projects and prints AGGREGATE
+# It clones `main` (or the branch in CCXRAY_REF) into a temp dir, builds it, reads ~/.claude/projects and prints AGGREGATE
 # counts only (no paths, project names, ids, prompts or file contents), then deletes the clone.
 # Nothing is uploaded anywhere. The only network use: git clone, pnpm install, and `npx ccusage`
 # for the cross-check (skip that with SKIP_CCUSAGE=1).
@@ -20,26 +20,36 @@ step() { printf '\n===== %s =====\n' "$1"; }
 run() { "$@" 2>&1 | sed -e "s#$HOME#~#g" -e "s#$TMP#<tmp>#g"; }
 
 step "setup"
-git clone -q https://github.com/alexnieves-cs/ccxray "$D" || exit 1
+REF=${CCXRAY_REF:-main}
+git clone -q --branch "$REF" https://github.com/alexnieves-cs/ccxray "$D" || exit 1
 cd "$D" || exit 1
-git checkout -q docs-readme
-git -c user.name=x -c user.email=x@x merge -q --no-edit origin/m1-perf-timestamps >/dev/null 2>&1 \
-  || { git merge --abort >/dev/null 2>&1; echo "note: perf-timestamps merge skipped (conflict)"; }
+echo "commit $(git rev-parse --short HEAD) ($REF)"
+echo "node $(node -v 2>/dev/null || echo missing) · $(sw_vers -productVersion 2>/dev/null || uname -sr) · $(sysctl -n machdep.cpu.brand_string 2>/dev/null || uname -m)"
+NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
+if [ "$NODE_MAJOR" -lt 20 ]; then echo "tknxray needs Node 20 or newer; this is $(node -v 2>/dev/null || echo 'no node')"; exit 1; fi
 command -v pnpm >/dev/null || corepack enable >/dev/null 2>&1
-pnpm install --frozen-lockfile --silent >/dev/null 2>&1 || { echo "pnpm install failed"; exit 1; }
-pnpm -s build >/dev/null 2>&1 || { echo "build failed"; exit 1; }
-echo "node $(node -v) · $(sw_vers -productVersion 2>/dev/null || uname -sr) · $(sysctl -n machdep.cpu.brand_string 2>/dev/null || uname -m)"
+command -v pnpm >/dev/null || { echo "pnpm not found (and corepack could not enable it): npm i -g pnpm"; exit 1; }
+echo "pnpm $(pnpm -v 2>/dev/null)"
+# On failure, show the tail of the real output (home and temp paths stripped) instead of hiding it.
+fail() { echo "$1 failed; last lines:"; tail -n 40 "$OUT/$2" | sed -e "s#$HOME#~#g" -e "s#$TMP#<tmp>#g"; exit 1; }
+pnpm install --frozen-lockfile >"$OUT/install.log" 2>&1 || fail "pnpm install" install.log
+pnpm build >"$OUT/build.log" 2>&1 || fail "build" build.log
+# Scripts run through the local tsx, not `pnpm <script>`: some pnpm builds reject `-s`.
+TSX="$D/node_modules/.bin/tsx"
+[ -x "$TSX" ] || { echo "tsx missing after install"; exit 1; }
 
 step "doctor"
 run node dist/cli.js doctor
 
 step "format probe (counts only)"
-run pnpm -s probe
+run "$TSX" scripts/probe-format.ts
 
 if [ "${SKIP_CCUSAGE:-0}" != 1 ]; then
   step "ccusage cross-check (target ±0.5%)"
-  npx -y ccusage@latest session --json > "$OUT/ccusage.json" 2>/dev/null \
-    && run pnpm -s validate:real --ccusage "$OUT/ccusage.json" \
+  # `ccusage claude session`: Claude Code only. Plain `session` also counts other coding CLIs.
+  { npx -y ccusage@latest claude session --json > "$OUT/ccusage.json" 2>/dev/null \
+    || npx -y ccusage@latest session --json > "$OUT/ccusage.json" 2>/dev/null; } \
+    && run "$TSX" scripts/validate-real.ts --ccusage "$OUT/ccusage.json" \
     || echo "ccusage run failed; skipped"
 fi
 
@@ -52,14 +62,24 @@ const by = {};
 for (const f of r.findings ?? []) {
   const k = f.analyzer ?? f.id ?? "?";
   by[k] ??= { findings: 0, tokens: 0, kind: f.tokens?.kind ?? "?" };
-  by[k].findings++; by[k].tokens += f.tokens?.value ?? f.tokens?.count ?? 0;
+  by[k].findings++;
+  // subagent-cost adds a window-wide summary (data.parents) over its per-parent findings; skip
+  // its tokens so the sum is not doubled.
+  if (!(k === "subagent-cost" && f.data?.parents !== undefined))
+    by[k].tokens += f.tokens?.value ?? f.tokens?.count ?? 0;
 }
-console.log(JSON.stringify({ totals: r.totals, calibration: r.calibration, byAnalyzer: by }, null, 2));
+// No per-project or per-session keys: those are paths and ids. Counts and model names only.
+const t = r.totals ?? {};
+const totals = { all: t.all, byModel: t.byModel, byRole: t.byRole,
+  days: Object.keys(t.byDay ?? {}).length, projects: Object.keys(t.byProject ?? {}).length };
+console.log(JSON.stringify({ totals, calibration: r.calibration, byAnalyzer: by }, null, 2));
 ' "$OUT/report.json"
 
+step "false-positive spot check, last 30 days (mechanical evidence check)"
+run "$TSX" scripts/fp-check.ts --since "$SINCE"
+
 step "my-sessions (aggregate)"
-run pnpm -s my-sessions --out "$OUT/MY_SESSIONS.md"
-cat "$OUT/MY_SESSIONS.md"
+run "$TSX" bench/my-sessions.ts --out "$OUT/MY_SESSIONS.md"
 
 step "timing + peak RSS"
 WEEK=$(date -u -v-7d +%Y-%m-%d 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%d)
