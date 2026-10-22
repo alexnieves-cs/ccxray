@@ -67,9 +67,43 @@ rebuild really reads less cache than the turn before).
 | 20 | repeated-read | e2293a1f00 | pass | n.a. | pass |
 
 **20 of 20 pass every mechanical check; 0 fail.** At least one finding per analyzer type was
-present in the window (9 of 10 types; cache-ttl had none on this corpus). This shows the findings point at real
-records with the stated numbers. It does **not** judge whether each piece of advice is right:
-that human TP/FP verdict, the SPEC's "≤ 2 wrong of 20", is still **pending**.
+present in the window (9 of 10 types; cache-ttl had none on this corpus). This shows the findings
+point at real records with the stated numbers; whether the advice is right is reviewed below.
+
+## Advice review: is each finding right? (M4)
+
+Reviewed 2026-10-22 by Claude (the project's coding agent, not a human) on the only real logs
+readable in the cloud: this project's own build session (1 main session, 24 subagents, 60 MB,
+CC 2.1.302). 35 findings; 20 picked round-robin by analyzer, each read against the transcript.
+Alex's corpus was not re-read by hand: its transcripts never leave his Mac.
+
+| # | analyzer | verdict | note |
+|---:|---|---|---|
+| 1 | subagent-cost | right | 45% of the session's tokens were Opus subagents doing exploration |
+| 2 | context-growth | right | one long session, 7 compactions; /clear between tasks applies |
+| 3 | cache-rebuild | **advice wrong** | rebuilds real (breaks of 1h to 39h), but "batch prompts" cannot bridge a 1h+ break. **Fixed:** now says /compact before a long break, or /clear for a new task |
+| 4 | big-tool-output | right | 83k-char tool results; the "narrow it" advice is weak for a tool with no arguments |
+| 5 | tool-usage | right | 16 of 31 MCP tools never called |
+| 6 | cross-agent-read | right | 9 subagents each read docs/SPEC.md |
+| 7 | fixed-overhead | right | 124k-token first turn |
+| 8 | error-waste | **wrong** | the "re-call" passed a corrected argument of the same length. **Fixed:** inputs are now compared by hash, not size |
+| 9 | repeated-read | right | an image re-read unchanged (0 tokens [E]: image size is not estimated) |
+| 10 | context-growth | right | a subagent peaked at 383k tokens |
+| 11 | big-tool-output | right | whole-file Reads of up to 41k chars |
+| 12 | tool-usage | right | an MCP server with 0 of 10 tools used |
+| 13 | cross-agent-read | right | docs/FORMAT.md read by 3 subagents |
+| 14 | fixed-overhead | right | 64 tool definitions, MCP 48% of their size |
+| 15 | error-waste | **wrong** | the same command was re-run after the user granted permission. **Fixed:** a re-call after a new prompt is not counted |
+| 16 | big-tool-output | right | `cat` of a 26k-char file |
+| 17 | tool-usage | right, title off | "2 of 2 tools never called" next to "1 used" (a tool loaded later). **Fixed:** "2 of 3" |
+| 18 | big-tool-output | right | `sed -n` printing 21k chars |
+| 19 | tool-usage | right | an MCP server with 0 of 3 tools used |
+| 20 | big-tool-output | right | `cat` of a 29k-char file |
+
+**Before the fixes: 3 of 20 wrong (#3 advice, #8, #15), above the SPEC's limit of 2.** After the
+fixes, a re-run on the same logs no longer produces #8 or #15, #3 gives the new advice and #17 the
+right count; each fix has a regression test. Limits: one corpus, one reviewer, and the reviewer
+wrote the code. A review on other people's logs is still worth doing.
 
 ## Estimator calibration [E]
 
