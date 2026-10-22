@@ -59,9 +59,8 @@ describe('A10 error-waste', () => {
     expect(rest).toEqual([]);
     // failed result 400 chars → 100 [E]; re-call input {"command":"pnpm tset"} 23 chars → 6 [E].
     expect(f!.tokens).toEqual({ value: 106, kind: 'estimated' });
-    expect(f!.data).toEqual({ tool: 'Bash', recalls: 1, sessions: 1, match: 'same-size' });
-    expect(f!.title).toContain('same tool, same input size [E]');
-    expect(f!.title).not.toContain('identical');
+    expect(f!.data).toEqual({ tool: 'Bash', recalls: 1, sessions: 1, match: 'identical' });
+    expect(f!.title).toContain('(same input)');
     expect(f!.evidence[0]!.detail).not.toContain('tset');
   });
 
@@ -78,6 +77,30 @@ describe('A10 error-waste', () => {
     expect(apiFindings(fs)[0]!.data?.retries).toBe(0);
   });
 
+  it('negative: a failed MCP call retried with a different argument of the same length', async () => {
+    // Real-log FP (2026-10-22 review): the slim input of an MCP tool is `{}`, so the old
+    // size-only match counted a corrected retry as a waste.
+    const mcp = (id: string) => ({ blocks: [toolUse('mcp__x__start', { message_id: id })] });
+    const s = session('a10/n3')
+      .prompt('go')
+      .assistant(mcp('msg_aaaa'))
+      .toolResult({ chars: 300, isError: true })
+      .assistant(mcp('msg_bbbb'))
+      .toolResult(100);
+    expect(recallFindings(await run(errorWaste, [s]))).toEqual([]);
+  });
+
+  it('negative: the same call re-issued after a new prompt (e.g. a permission granted)', async () => {
+    const s = session('a10/n4')
+      .prompt('merge it')
+      .assistant(bash('git merge main'))
+      .toolResult({ chars: 300, isError: true })
+      .prompt('approved, go ahead')
+      .assistant(bash('git merge main'))
+      .toolResult(100);
+    expect(recallFindings(await run(errorWaste, [s]))).toEqual([]);
+  });
+
   it('negative: an identical call 4 turns later is outside the lookahead; no errors', async () => {
     const s = session('a10/n2')
       .prompt('test it')
@@ -88,7 +111,7 @@ describe('A10 error-waste', () => {
     expect(await run(errorWaste, [s])).toEqual([]);
   });
 
-  it('review: says "identical" only when raw inputs were compared (--include-content)', async () => {
+  it('review: --include-content matches the same calls', async () => {
     const s = session('a10/r1')
       .prompt('test it')
       .assistant(bash('pnpm tset'))
@@ -98,7 +121,7 @@ describe('A10 error-waste', () => {
     const { sessions } = await loadSessions({ roots: [tree([s])], includeContent: true });
     const [f] = errorWaste.run(sessions, { ...ctx(), includeContent: true });
     expect(f!.data?.match).toBe('identical');
-    expect(f!.title).toContain('(identical input)');
+    expect(f!.title).toContain('(same input)');
   });
 
   it('review: a system api_error and its synthetic turn are one error', async () => {

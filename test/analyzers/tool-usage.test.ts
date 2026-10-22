@@ -153,4 +153,14 @@ describe('A7 tool-usage', () => {
     const fs = await run(toolUsage, [p, a]);
     expect(servers(fs)).toEqual([]);
   });
+
+  it('review: a called tool missing from the snapshot still counts in "N of M tools"', async () => {
+    // Real-log review 2026-10-22: a tool loaded later (not in prompt_snapshot) was called, and the
+    // title said "2 of 2 tools never called" next to "1 used".
+    const s = calls('r9', 'mcp__gh__late').attachment(
+      snapshot(toolDef('mcp__gh__a', 100), toolDef('mcp__gh__b', 100)),
+    );
+    const [gh] = servers(await run(toolUsage, [s]));
+    expect(gh!.title).toContain('2 of 3 tools from MCP server "gh"');
+  });
 });

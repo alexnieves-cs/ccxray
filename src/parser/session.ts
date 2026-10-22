@@ -39,6 +39,8 @@ const EPOCH = 0;
 export interface FileData {
   file: DiscoveredFile;
   sessionId?: string;
+  /** Some record's envelope `sessionId` equals the file stem (see sessionIdentity). */
+  stemIsSessionId?: boolean;
   agentId?: string;
   cwd?: string;
   versions: string[];
@@ -87,6 +89,7 @@ export class FileParser {
   private readonly merger: ResponseMerger;
   private lastTs: number | undefined;
   private rawLength = 0;
+  private readonly stem: string;
 
   constructor(
     file: DiscoveredFile,
@@ -94,6 +97,7 @@ export class FileParser {
     private readonly includeContent: boolean,
   ) {
     this.merger = new ResponseMerger({ stats, warn: this.warn, includeContent });
+    this.stem = fileStem(file);
     this.data = {
       file,
       versions: [],
@@ -121,7 +125,9 @@ export class FileParser {
       inc(stats.ccVersions, version);
       if (!d.versions.includes(version)) d.versions.push(version);
     }
-    d.sessionId ??= str(r.sessionId);
+    const sid = str(r.sessionId);
+    d.sessionId ??= sid;
+    if (sid === this.stem) d.stemIsSessionId = true;
     d.agentId ??= str(r.agentId);
     if (type === 'user' || type === 'assistant')
       d.allSidechain =
@@ -263,8 +269,11 @@ export class FileParser {
 }
 
 /**
- * Session identity of a file. Main transcripts use the first envelope `sessionId` (else the file
- * stem); UNVERIFIED: every record in a file belongs to that one session.
+ * Session identity of a file. A main transcript is keyed by its file stem when some record's
+ * envelope `sessionId` equals it, else by the first envelope `sessionId` (else the stem).
+ * UNVERIFIED: a resumed or continued transcript can start with records carrying the earlier
+ * session's id (SPEC §4.4); keying by the stem keeps it its own session, as ccusage does and as
+ * the `{sessionId}/subagents/` layout expects. Every record in a file belongs to that one session.
  * A file is a subagent transcript when its path is a subagent layout (`DiscoveredFile.subagentOf`:
  * [M] CC 2.1.302 `{sessionId}/subagents/agent-<id>.jsonl`, with the parent's sessionId and
  * envelope `agentId` = `<id>`), or, UNVERIFIED, when every user/assistant record has
@@ -279,7 +288,7 @@ export function sessionIdentity(
   const stem = fileStem(f.file);
   const byLayout = f.file.subagentOf;
   if (byLayout === undefined && f.allSidechain !== true)
-    return { id: f.sessionId ?? stem, isSubagent: false };
+    return { id: f.stemIsSessionId === true ? stem : (f.sessionId ?? stem), isSubagent: false };
   const parentSessionId = byLayout ?? f.sessionId;
   const agentId = stem.startsWith('agent-') ? stem.slice('agent-'.length) : f.agentId;
   const suffix = agentId !== undefined ? `agent-${agentId}` : stem;

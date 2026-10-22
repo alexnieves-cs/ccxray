@@ -1,5 +1,5 @@
 // A10 error-waste (SPEC §5): API errors (synthetic turns and api-error events) with their
-// retries [M], and failed tool calls re-issued with the same input [E].
+// retries [M], and failed tool calls re-issued with the same input, with no prompt between [E].
 
 import type { Analyzer, Finding, Session, SourcePointer, Turn } from '../model/index.js';
 import { estimateTokensFromChars } from '../tokens/estimate.js';
@@ -74,13 +74,14 @@ export function apiErrors(s: Session): ApiError[] {
 }
 
 /**
- * Same tool, same input. With --include-content the input is raw; otherwise it is the parser's
- * slim input (only a few primitive fields, `{}` for most tools) plus the raw input size, so two
- * calls of an unknown tool with equal-length inputs look identical. Heuristic, hence [E].
+ * Same tool, same input: equal name, raw input size and raw input hash (32-bit FNV-1a, so a
+ * collision is possible but rare), plus equal input as kept (raw with --include-content, else the
+ * slim input). A retry with a changed argument of the same length is not a re-call.
  */
 const sameCall = (a: Turn['toolUses'][number], b: Turn['toolUses'][number]): boolean =>
   a.name === b.name &&
   a.inputChars === b.inputChars &&
+  a.inputHash === b.inputHash &&
   JSON.stringify(a.input ?? null) === JSON.stringify(b.input ?? null);
 
 interface Recall {
@@ -94,7 +95,7 @@ export const errorWaste: Analyzer = {
   id: 'error-waste',
   spec: 'A10',
   description: 'API errors and retries; failed tool calls re-issued with the same input',
-  run(sessions, ctx) {
+  run(sessions) {
     const findings: Finding[] = [];
     const recalls = new Map<string, Recall[]>();
     for (const s of sessions) {
@@ -149,6 +150,9 @@ export const errorWaste: Analyzer = {
           if (u === undefined) continue;
           const later = real.slice(i + 1, i + 1 + RECALL_LOOKAHEAD_TURNS);
           for (const again of later) {
+            // A prompt in between (e.g. the user granting a permission) can fix the cause, so a
+            // re-call after it is not counted (real-log review 2026-10-22).
+            if (s.prompts.some((p) => p.ts > t.ts && p.ts <= again.ts)) break;
             const v = again.toolUses.find((x) => sameCall(u, x));
             if (v === undefined) continue;
             const tokens = r.estTokens + estimateTokensFromChars(v.inputChars);
@@ -161,7 +165,7 @@ export const errorWaste: Analyzer = {
     for (const [tool, rs] of [...recalls.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
       const tokens = rs.reduce((a, r) => a + r.tokens, 0);
       // Raw inputs are compared only with --include-content; otherwise the match is weaker.
-      const same = ctx.includeContent ? 'identical input' : 'same tool, same input size [E]';
+      const same = 'same input';
       findings.push({
         analyzer: 'error-waste',
         severity: 'info',
@@ -171,12 +175,12 @@ export const errorWaste: Analyzer = {
           tool,
           recalls: rs.length,
           sessions: new Set(rs.map((r) => r.s.id)).size,
-          match: ctx.includeContent ? 'identical' : 'same-size',
+          match: 'identical',
         },
         evidence: rs.slice(0, 5).map((r) => ({
           sessionId: r.s.id,
           turnUuid: r.again.uuid,
-          detail: `${ctx.includeContent ? 'identical' : 'same-size'} ${tool} call after a failed one at turn ${r.failed.index + 1}`,
+          detail: `identical ${tool} call after a failed one at turn ${r.failed.index + 1}`,
           source: r.again.source,
         })),
         fix: {
