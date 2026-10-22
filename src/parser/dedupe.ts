@@ -33,6 +33,22 @@ export function jsonLength(v: unknown, fallback: number): number {
   }
 }
 
+/**
+ * 32-bit FNV-1a of `JSON.stringify(v)` plus its length, so equal tool inputs can be recognized
+ * without keeping their content. `hash` is undefined when stringify throws.
+ */
+export function jsonDigest(v: unknown, fallback: number): { chars: number; hash?: number } {
+  let s: string;
+  try {
+    s = JSON.stringify(v ?? null);
+  } catch {
+    return { chars: fallback };
+  }
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+  return { chars: s.length, hash: h >>> 0 };
+}
+
 /** One assistant line, as handed over by the file parser. */
 export interface AssistantLine {
   r: AssistantRecord;
@@ -217,11 +233,13 @@ export class ResponseMerger {
         if (!isToolUseBlock(b)) continue;
         if (t.toolUses.some((u) => u.id === b.id)) continue;
         const name = intern(b.name);
+        const digest = jsonDigest(b.input, line.rawLength);
         const use: ToolUse = {
           id: b.id,
           name,
           input: this.opts.includeContent ? b.input : slimToolInput(name, b.input),
-          inputChars: jsonLength(b.input, line.rawLength),
+          inputChars: digest.chars,
+          inputHash: digest.hash,
         };
         // Exact-size arrays: push() and spread grow a 17-slot backing store per turn (~150 B); concat is exact.
         t.toolUses = t.toolUses.length === 0 ? [use] : t.toolUses.concat(use);

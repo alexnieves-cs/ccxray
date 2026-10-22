@@ -314,4 +314,33 @@ describe('subagent classification (m2 repro: root one level above projects/ tree
     expect(sessions[0]!.lastTs).toBe(20_000);
     expect(sessions[0]!.turns.map((t) => t.ts)).toEqual([10_000, 20_000]);
   });
+
+  it('a resumed transcript that starts with the earlier session id stays its own session', async () => {
+    const root = freshRoot();
+    const turn = (sid: string, id: string, input: number) => ({
+      type: 'assistant',
+      sessionId: sid,
+      requestId: `req_${id}`,
+      uuid: `u-${id}`,
+      timestamp: '2026-10-01T09:00:00.000Z',
+      message: {
+        id: `msg_${id}`,
+        model: 'm',
+        content: [text('a')],
+        usage: { input_tokens: input },
+      },
+    });
+    const OLD = '11111111-1111-4111-8111-111111111111';
+    const NEW = '22222222-2222-4222-8222-222222222222';
+    writeLines(root, join('-p', `${OLD}.jsonl`), [turn(OLD, 'a', 1)]);
+    // UNVERIFIED shape: the first record carries the earlier session's id, later ones the file's.
+    writeLines(root, join('-p', `${NEW}.jsonl`), [turn(OLD, 'b', 10), turn(NEW, 'c', 100)]);
+    // A file whose stem is not any record's sessionId is still keyed by its first sessionId.
+    writeLines(root, join('-p', 'renamed.jsonl'), [turn(OLD, 'd', 1000)]);
+    const { sessions } = await loadSessions({ roots: [root] });
+    const input = Object.fromEntries(
+      sessions.map((s) => [s.id, s.turns.reduce((a, t) => a + t.usage.input, 0)]),
+    );
+    expect(input).toEqual({ [OLD]: 1001, [NEW]: 110 });
+  });
 });

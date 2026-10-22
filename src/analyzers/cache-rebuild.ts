@@ -70,11 +70,19 @@ function fixFor(cause: RebuildCause, rebuilds: readonly Rebuild[], th: Threshold
       const five = rebuilds.filter((r) => r.ttl === '5m');
       const hour = rebuilds.length - five.length;
       const short = five.filter((r) => r.gapMs > th.ttl5mMs && r.gapMs <= FIFTEEN_MIN).length;
+      // A 1h-TTL break cannot be bridged by batching: the lever is a smaller prefix to rewrite.
       const parts = [
-        ...(five.length > 0 ? [`you had ${plural(short, 'gap')} of 5–15 min (5m TTL)`] : []),
-        ...(hour > 0 ? [`${plural(hour, 'break')} over 1h (1h TTL)`] : []),
+        ...(five.length > 0
+          ? [`batch prompts; you had ${plural(short, 'gap')} of 5–15 min (5m TTL)`]
+          : []),
+        ...(hour > 0
+          ? [
+              `${plural(hour, 'break')} over 1h (1h TTL): /compact before a long break, ` +
+                'or /clear when you come back to a new task',
+            ]
+          : []),
       ];
-      return `batch prompts; ${parts.join(', ')}`;
+      return parts.join('; ');
     }
     case 'cc-upgrade':
       return 'restart after upgrading; known issue: anthropics/claude-code#46917';

@@ -274,7 +274,7 @@ describe('A2/A3 cache-rebuild', () => {
         count: 2,
         tokens: 42000,
         tokensKind: 'estimated',
-        fix: 'batch prompts; you had 1 gap of 5–15 min (5m TTL), 1 break over 1h (1h TTL)',
+        fix: 'batch prompts; you had 1 gap of 5–15 min (5m TTL); 1 break over 1h (1h TTL): /compact before a long break, or /clear when you come back to a new task',
         // The rebuild turns carry no TTL split, so even the 1h session's write is priced at the
         // 5m rate (UNVERIFIED rule): 2 × 21,000 × 3.75 and × (3.75 − 0.30) $/MTok.
         costUsd: 0.1575,

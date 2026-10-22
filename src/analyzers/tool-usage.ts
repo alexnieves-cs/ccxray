@@ -214,7 +214,7 @@ export const toolUsage: Analyzer = {
         analyzer: 'tool-usage',
         severity: est > 0 ? 'warn' : 'info',
         title:
-          `${unusedTools.length} of ${g.defined.length} tools from MCP server "${server}" ` +
+          `${unusedTools.length} of ${new Set([...g.defined, ...g.used]).size} tools from MCP server "${server}" ` +
           `never called${lazyNote(unusedTools)} (~${fmt(est)} tokens/cold turn [E])`,
         tokens: { value: est, kind: 'estimated' },
         data: { server, unusedTools, usedTools: [...g.used].sort(byName), defChars },

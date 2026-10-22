@@ -50,6 +50,8 @@ export interface ToolUse {
   input: unknown;
   /** `JSON.stringify(input).length` of the raw input (raw line length if it cannot be stringified). */
   inputChars: number;
+  /** 32-bit FNV-1a of `JSON.stringify(input)` of the raw input; equal inputs, not their content. */
+  inputHash?: number;
 }
 
 export interface ToolResult {
