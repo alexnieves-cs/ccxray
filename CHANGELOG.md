@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-11-12)
 
-First public release. tknxray reads the transcripts Claude Code writes under `~/.claude/projects`
+First public release, tagged as [v0.1.0](https://github.com/alexnieves-cs/ccxray/releases/tag/v0.1.0) on GitHub. Not yet published to npm; see [docs/RELEASE.md](docs/RELEASE.md). tknxray reads the transcripts Claude Code writes under `~/.claude/projects`
 and explains where the tokens went. It runs locally and makes no network calls.
 
 **Reports**
