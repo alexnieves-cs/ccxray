@@ -5,6 +5,7 @@ import { captureCommand } from './commands/capture.js';
 import { doctor } from './commands/doctor.js';
 import { fixCommand } from './commands/fix-mcp.js';
 import { sessionCommand } from './commands/session.js';
+import { shareCommand } from './commands/share.js';
 import { watchCommand } from './commands/watch.js';
 import { VERSION } from './version.js';
 
@@ -17,6 +18,8 @@ Usage:
   tknxray watch [latest|<id|prefix>] [--project NAME] [--root DIR]... [--interval SECONDS]
           [--once] [--no-color]   (live view of one session; q or Ctrl-C quits)
   tknxray compare --at DATE [--days N] | --before A..B --after C..D   (did a change help?)
+  tknxray share [--since DATE] [--until DATE] [--out FILE]   (a report you can share without
+          transcripts; see tknxray share --help)
   tknxray doctor [--root DIR]... [--json]
   tknxray fix mcp [--settings FILE] [--apply]   (preview; see tknxray fix mcp --help)
   tknxray capture --i-understand-this-is-api-key-only   (opt-in; see docs/capture.md)
@@ -66,6 +69,7 @@ export async function main(
   if (argv[0] === 'compare') return compareCommand(argv.slice(1), out);
   if (argv[0] === 'fix') return fixCommand(argv, out);
   if (argv[0] === 'capture') return captureCommand(argv, out);
+  if (argv[0] === 'share') return shareCommand(argv.slice(1), out);
   if (!values.help) return analyze(argv, out);
   out(HELP);
   return 0;

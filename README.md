@@ -21,6 +21,7 @@ Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** t
 - **What it reads:** Claude Code's transcripts under `~/.claude/projects` (also `~/.config/claude/projects` and `CLAUDE_CONFIG_DIR`, comma-separated). `--root DIR` points it somewhere else.
 - **What reports contain:** token counts, tool names, file paths relative to the project, and the first two words of Bash commands. **Prompt and file contents are not embedded** unless you pass `--include-content`.
 - The HTML report is a single self-contained file that loads nothing remote.
+- **To share results without sharing transcripts**, use [`tknxray share`](#share-help-check-the-findings): a file of numbers, analyzer ids, built-in tool names and model ids, with no paths, commands, titles or session ids.
 - The one command that opens a socket is the opt-in [`capture`](#capture-opt-in-api-key-only), which only **listens** on `127.0.0.1` and never connects anywhere.
 
 ## Install and usage
@@ -68,12 +69,19 @@ tknxray watch                    # optional: keep a live view of the current ses
 | `tknxray session <id\|prefix\|latest>` | Per-turn view of one session: gap since the previous turn, model, input, cache write/read, output, tools called, flags for rebuilds (🔁), repeated reads (📄) and big outputs (📦), and its subagents. |
 | `tknxray watch [latest\|<id\|prefix>]` | Live, full-screen view of one session (the most recently modified by default) that redraws as Claude Code writes the transcript: a context gauge for the latest turn against an assumed window, a per-turn context chart with rebuilds (↻) and compactions (◆), the latest turn's usage and tools, session totals, subagents, how long ago the last turn was vs the cache TTL, and $ at API list prices [E] for the latest turn and the session (main and subagents). Once the cache has likely expired it says what the next turn will cost to rewrite it; it never counts down while the cache is warm. Polls file size and mtime every `--interval` seconds (default 2); `--once` (or a pipe) prints one frame. Reads files only. `q` or Ctrl-C quits. |
 | `tknxray compare --at DATE` | Did a change help? Compares the N days before DATE with the N days from it (`--days`, default 7), or `--before A..B --after C..D`: $ per turn and per session [E], cache hit ratio, cache writes and peak context [M], compactions and rebuilds, and how much of each kind of waste the findings priced. Rates are normalized per turn or session; the verdict says what moved, not why. |
+| `tknxray share` | Writes `tknxray-share.json`, a report you can share without sending transcripts, for checking the findings on other people's logs. See [below](#share-help-check-the-findings). |
 | `tknxray doctor` | Discovered log dirs, Claude Code versions, parse stats, malformed lines and unknown record types. Run it first if numbers look off. |
 | `tknxray fix mcp` | **Preview.** Prints a `permissions.deny` diff for MCP tools never called in the analyzed sessions. Dry run by default; writes only with `--apply`, after a backup. A deny rule removes a definition only while MCP tool search is off; the action plan names the other documented options (`/mcp`, `disabledMcpjsonServers`, `"alwaysLoad": false`). See [docs/fix-mcp.md](docs/fix-mcp.md). |
 | `tknxray capture --i-understand-this-is-api-key-only` | **Opt-in, API key only.** See [below](#capture-opt-in-api-key-only). |
 | cc-slim hook | **Prototype.** A PostToolUse hook that shortens huge Bash outputs. See [below](#cc-slim-hook-prototype). |
 
 Other options: `--include-content`, `--threshold.KEY=VALUE` (see [docs/THRESHOLDS.md](docs/THRESHOLDS.md)), `--no-color`, `--root DIR` (repeatable).
+
+### `share` (help check the findings)
+
+`tknxray share` writes `tknxray-share.json` (`--out FILE` to change it; an existing file is left alone unless `--force`). The file holds numbers (token totals [M], each finding's tokens and $ [E], its data), analyzer ids, built-in tool names, `claude-*` model ids and Claude Code versions. It holds **no prompts, outputs, file paths, commands, project names, finding titles or session ids**: sessions appear as salted hashes, and the salt is random per file and never saved. MCP tools read `mcp`, custom subagent types `(custom)` and any other string `(other)`. [`schema/share.v1.json`](schema/share.v1.json) is closed, so you can check that a file holds nothing else.
+
+The command prints each finding's title on your terminal, never in the file, next to its number and sessions, so you can check it (`tknxray session <id>`). Then set its `review.verdict` in the file to `"real"`, `"false-positive"` or `"unsure"`, with an optional `note`, and send the file to whoever asked you to run it. Nothing is sent by tknxray. See [docs/share.md](docs/share.md).
 
 ### `capture` (opt-in, API key only)
 

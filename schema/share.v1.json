@@ -1,0 +1,336 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ccxray:schema:share:v1",
+  "title": "tknxray share file v1",
+  "description": "Output of `tknxray share`: a report a volunteer can share without sending transcripts. Mirrors ShareReport in src/reporters/share.ts. It holds numbers, analyzer ids, built-in tool names, claude-* model ids, Claude Code versions, enum values the analyzers set and salted hashes of session ids (the salt is not saved). Strings outside those lists read \"(other)\". The only free text is what the volunteer writes in review.note and notes. Closed: no other properties are allowed, so a reviewer can check that a file holds nothing else.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "kind",
+    "tool",
+    "generatedOn",
+    "window",
+    "privacy",
+    "stats",
+    "totals",
+    "sessions",
+    "findings",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "tknxray-share" },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "tknxray" },
+        "version": { "type": "string", "pattern": "^[0-9A-Za-z.+-]{1,40}$" }
+      }
+    },
+    "generatedOn": { "$ref": "#/$defs/day" },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["since", "until", "projectFilter"],
+      "properties": {
+        "since": { "oneOf": [{ "$ref": "#/$defs/day" }, { "type": "null" }] },
+        "until": { "oneOf": [{ "$ref": "#/$defs/day" }, { "type": "null" }] },
+        "projectFilter": {
+          "type": "boolean",
+          "description": "true when --project limited the window; the project name is not written."
+        }
+      }
+    },
+    "privacy": { "type": "string" },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roots",
+        "files",
+        "bytes",
+        "lines",
+        "blankLines",
+        "malformedLines",
+        "recordTypes",
+        "unknownRecordTypes",
+        "attachmentTypes",
+        "dedupe",
+        "syntheticTurns",
+        "ccVersions",
+        "warnings"
+      ],
+      "properties": {
+        "roots": { "$ref": "#/$defs/count", "description": "How many log directories were read." },
+        "files": { "$ref": "#/$defs/count" },
+        "bytes": { "$ref": "#/$defs/count" },
+        "lines": { "$ref": "#/$defs/count" },
+        "blankLines": { "$ref": "#/$defs/count" },
+        "malformedLines": { "$ref": "#/$defs/count" },
+        "recordTypes": { "$ref": "#/$defs/typeCounts" },
+        "unknownRecordTypes": { "$ref": "#/$defs/typeCounts" },
+        "attachmentTypes": { "$ref": "#/$defs/typeCounts" },
+        "dedupe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sameResponseLines", "sidechainReplays", "crossSessionCopies"],
+          "properties": {
+            "sameResponseLines": { "$ref": "#/$defs/count" },
+            "sidechainReplays": { "$ref": "#/$defs/count" },
+            "crossSessionCopies": { "$ref": "#/$defs/count" }
+          }
+        },
+        "syntheticTurns": { "$ref": "#/$defs/count" },
+        "ccVersions": {
+          "type": "object",
+          "propertyNames": { "pattern": "^([0-9]{1,4}\\.[0-9]{1,4}\\.[0-9]{1,6}|\\(other\\))$" },
+          "additionalProperties": { "$ref": "#/$defs/count" }
+        },
+        "warnings": {
+          "type": "object",
+          "propertyNames": { "pattern": "^([A-Za-z][A-Za-z0-9 ._()-]{0,79}|\\(other\\))$" },
+          "additionalProperties": { "$ref": "#/$defs/count" }
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["all", "byModel", "activeDays"],
+      "properties": {
+        "all": { "$ref": "#/$defs/tokenTotals" },
+        "byModel": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/model" },
+          "additionalProperties": { "$ref": "#/$defs/tokenTotals" }
+        },
+        "byRole": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["main", "subagent"],
+          "properties": {
+            "main": { "$ref": "#/$defs/tokenTotals" },
+            "subagent": { "$ref": "#/$defs/tokenTotals" }
+          }
+        },
+        "activeDays": { "$ref": "#/$defs/count", "description": "UTC days with at least one turn." }
+      }
+    },
+    "sessions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "main", "subagents"],
+      "properties": {
+        "count": { "$ref": "#/$defs/count" },
+        "main": { "$ref": "#/$defs/count" },
+        "subagents": { "$ref": "#/$defs/count" }
+      }
+    },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["samples", "medianRatio"],
+      "properties": {
+        "samples": { "$ref": "#/$defs/count" },
+        "medianRatio": { "type": ["number", "null"] }
+      }
+    },
+    "pricing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asOf", "unpricedModels"],
+      "properties": {
+        "asOf": { "$ref": "#/$defs/day" },
+        "unpricedModels": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/model" },
+          "additionalProperties": { "$ref": "#/$defs/count" }
+        }
+      }
+    },
+    "actionPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["windowCostUsd", "combinedSavingsUsd", "combinedSharePct", "actions"],
+      "properties": {
+        "windowCostUsd": { "$ref": "#/$defs/usd" },
+        "combinedSavingsUsd": { "$ref": "#/$defs/usd" },
+        "combinedSharePct": { "type": "number", "minimum": 0 },
+        "combinedUpperBound": { "const": true },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "category",
+              "savingsUsd",
+              "sharePct",
+              "savingsMainUsd",
+              "savingsSubagentUsd",
+              "confidence",
+              "findings"
+            ],
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "category": { "$ref": "#/$defs/id" },
+              "savingsUsd": { "$ref": "#/$defs/usd" },
+              "sharePct": { "type": "number", "minimum": 0 },
+              "savingsMainUsd": { "$ref": "#/$defs/usd" },
+              "savingsSubagentUsd": { "$ref": "#/$defs/usd" },
+              "confidence": { "enum": ["measured-tokens", "estimated"] },
+              "findings": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
+              "upperBound": { "const": true }
+            }
+          }
+        }
+      }
+    },
+    "notes": { "type": "string", "description": "Free text for the volunteer." }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "usd": { "type": "number", "minimum": 0 },
+    "day": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "id": { "type": "string", "pattern": "^([a-z][a-z0-9_-]{0,39}|\\(other\\))$" },
+    "model": {
+      "type": "string",
+      "pattern": "^(claude-[a-z0-9][a-z0-9.-]{0,62}|<synthetic>|\\(other\\))$"
+    },
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{12}(:[0-9a-f]{8})?$" },
+    "typeCounts": {
+      "type": "object",
+      "propertyNames": { "pattern": "^([A-Za-z][A-Za-z0-9_-]{0,39}|\\(other\\))$" },
+      "additionalProperties": { "$ref": "#/$defs/count" }
+    },
+    "tokenTotals": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Measured token sums over deduped, non-synthetic assistant turns, as in report v1.",
+      "required": [
+        "input",
+        "cacheWrite",
+        "cacheWrite5m",
+        "cacheWrite1h",
+        "cacheRead",
+        "output",
+        "cacheHitRatio",
+        "turns"
+      ],
+      "properties": {
+        "input": { "$ref": "#/$defs/count" },
+        "cacheWrite": { "$ref": "#/$defs/count" },
+        "cacheWrite5m": { "$ref": "#/$defs/count" },
+        "cacheWrite1h": { "$ref": "#/$defs/count" },
+        "cacheRead": { "$ref": "#/$defs/count" },
+        "output": { "$ref": "#/$defs/count" },
+        "cacheHitRatio": {
+          "oneOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }]
+        },
+        "turns": { "$ref": "#/$defs/count" },
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "USD at API list prices. Estimated: a comparison unit, not a bill.",
+          "required": ["input", "write5m", "write1h", "read", "output", "total", "unpricedTurns"],
+          "properties": {
+            "input": { "$ref": "#/$defs/usd" },
+            "write5m": { "$ref": "#/$defs/usd" },
+            "write1h": { "$ref": "#/$defs/usd" },
+            "read": { "$ref": "#/$defs/usd" },
+            "output": { "$ref": "#/$defs/usd" },
+            "total": { "$ref": "#/$defs/usd" },
+            "unpricedTurns": { "$ref": "#/$defs/count" }
+          }
+        }
+      }
+    },
+    "dataValue": {
+      "description": "A finding's data value: a number, a boolean, a short string from the fixed lists (no slashes), or a list of such objects. Never prompt, output or file content, a path or a command.",
+      "oneOf": [
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "string", "pattern": "^[A-Za-z0-9<>()._:, -]{0,200}$" },
+        { "type": "array", "items": { "$ref": "#/$defs/data" } }
+      ]
+    },
+    "data": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9]{0,39}$" },
+      "additionalProperties": { "$ref": "#/$defs/dataValue" }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["n", "analyzer", "severity", "tokens", "data", "evidence", "review"],
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The finding's number, as `tknxray share` lists it on the volunteer's machine."
+        },
+        "analyzer": { "$ref": "#/$defs/id" },
+        "severity": { "enum": ["info", "warn", "high"] },
+        "tokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "kind"],
+          "properties": {
+            "value": { "type": "number", "minimum": 0 },
+            "kind": { "enum": ["measured", "estimated"] }
+          }
+        },
+        "impact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "costUsd",
+            "savingsUsd",
+            "savingsMainUsd",
+            "savingsSubagentUsd",
+            "confidence"
+          ],
+          "properties": {
+            "costUsd": { "$ref": "#/$defs/usd" },
+            "savingsUsd": { "$ref": "#/$defs/usd" },
+            "savingsMainUsd": { "$ref": "#/$defs/usd" },
+            "savingsSubagentUsd": { "$ref": "#/$defs/usd" },
+            "confidence": { "enum": ["measured-tokens", "estimated"] },
+            "upperBound": { "const": true }
+          }
+        },
+        "data": { "$ref": "#/$defs/data" },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["turns", "sessions"],
+          "properties": {
+            "turns": { "$ref": "#/$defs/count" },
+            "sessions": {
+              "type": "array",
+              "description": "Salted hashes of the evidence sessions. A subagent's hash is its parent's, a colon, then its own.",
+              "items": { "$ref": "#/$defs/hash" }
+            }
+          }
+        },
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verdict", "note"],
+          "properties": {
+            "verdict": {
+              "description": "The volunteer's call: is this a real problem in their sessions?",
+              "oneOf": [{ "enum": ["real", "false-positive", "unsure"] }, { "type": "null" }]
+            },
+            "note": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

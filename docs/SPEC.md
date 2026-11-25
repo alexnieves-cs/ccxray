@@ -51,6 +51,7 @@ npx tknxray doctor                # show discovered log dirs, CC versions, parse
 npx tknxray watch [latest|<id>]   # live full-screen view of one session (polls its files; --once prints one frame)
 npx tknxray compare --at 2026-10-12            # the 7 days before vs the 7 days from that day
 npx tknxray compare --before A..B --after C..D # explicit windows (inclusive UTC days)
+npx tknxray share                 # tknxray-share.json: numbers and fixed vocabularies only (§3.2)
 ```
 
 ### 3.1 compare
@@ -79,6 +80,34 @@ thin. Turns on a model with no list price are left out of the $ rows: $ per turn
 priced turns only, $ per main session is blank unless every turn is priced, and the window is
 flagged. The two windows may not share an instant. Exit 1 when either window has no sessions. `--json` prints the comparison object
 (`src/compare.ts` `Comparison`); it is not part of report.v1.
+
+### 3.2 share
+
+`share` writes a file a volunteer can send so their findings can be checked for false positives
+(and counted for the launch stats of §11) without sending transcripts. Shape:
+`schema/share.v1.json` (closed: `additionalProperties: false` everywhere except count maps),
+built by `shareReport` in `src/reporters/share.ts` from the same Report as `--json`.
+
+- **Kept:** token totals (all, by model, by role) [M] and their $ [E]; `activeDays`; session counts;
+  parse stats with record, attachment and warning types as keys; each finding's analyzer id,
+  severity, tokens, impact numbers, the numbers and booleans in its data, and the number of
+  evidence turns; calibration and the action plan's numbers and ids.
+- **Vocabularies:** a string is kept only when it is a built-in tool name (one PascalCase word;
+  `mcp__…` becomes `mcp`), a `claude-*` model id or `<synthetic>`, a Claude Code version
+  (`N.N.N`), a built-in subagent type (others become `(custom)`), or an analyzer enum value
+  (`cause`, `match`, `ttl`, `tokensKind`). Anything else becomes `(other)` or is dropped.
+- **Dropped:** titles, evidence details and source files, fix text, `basis` sentences, paths,
+  commands, project names, root paths, the `--project` value (only `projectFilter: true`), and
+  bySession / byProject / byDay.
+- **Sessions:** HMAC-SHA256 of the session id with a random 16-byte salt per file, first 12 hex
+  characters; a subagent key (`<sessionId>:agent-<id>`) hashes its two parts apart, so its hash
+  starts with its parent's. The salt is never written, so hashes cannot be joined across files.
+- **Review:** every finding has `review: { verdict: null, note: "" }` and the file has `notes`.
+  The terminal (never the file) lists each finding's number, title and sessions (short id and
+  hash) so the volunteer can check it with `tknxray session` and set `verdict` to `real`,
+  `false-positive` or `unsure`.
+- Never writes `--include-content` data. Exit 0 written, 1 no sessions (nothing written), 2 bad
+  args or the file exists without `--force` or cannot be written.
 
 Config dir discovery: `CLAUDE_CONFIG_DIR` (comma-separated allowed), `~/.config/claude/projects`, `~/.claude/projects` (same rules as ccusage **[M: ccusage docs]**).
 
@@ -390,7 +419,7 @@ The report's headline: `buildActionPlan(report)` (`src/cost/plan.ts`, pure) turn
 - Later: Homebrew tap, Claude Code plugin wrapper for the slim/diet modules.
 
 ## 11. Launch plan (all posts need Alex's approval)
-1. Run on Alex's sessions (and volunteers' scrubbed JSON reports), then write "I analyzed N Claude Code sessions: X% of tokens were cache rebuilds", using only measured numbers.
+1. Run on Alex's sessions (and volunteers' `tknxray share` files, §3.2), then write "I analyzed N Claude Code sessions: X% of tokens were cache rebuilds", using only measured numbers.
 2. README with a demo GIF (vhs/asciinema), a screenshot of the HTML report, and a privacy section up top.
 3. Show HN, r/ClaudeAI, r/ClaudeCode, X replies in usage-limit threads, a helpful comment on #16157/#46917 with a JSON report, and a PR to [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code).
 4. Respond to issues fast in week 1; add support for format changes as they appear.
