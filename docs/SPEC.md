@@ -412,10 +412,10 @@ The report's headline: `buildActionPlan(report)` (`src/cost/plan.ts`, pure) turn
 - Not affiliated with Anthropic. Mention this in the README.
 
 ## 10. Distribution
-- npm package **`tknxray`** with the `tknxray` bin and `npx tknxray` usage. Not published yet: `package.json` stays `"private": true` until Alex approves a release.
+- npm package **`tknxray`** with the `tknxray` bin and `npx tknxray` usage. Not published yet: 0.2.0 is the first release prepared for npm; only Alex publishes (docs/RELEASE.md).
 - **Name decision (2026-10-19): Alex picked `tknxray`.** `cctknxray` was the alternative; both were free on npm when checked on 2026-10-19. The project was called ccxray, but **`ccxray` is taken on npm** (checked 2026-10-18: v2.3.1, "X-ray vision for AI agent sessions — a transparent HTTP proxy and dashboard for Claude Code", an unrelated project with a different approach and a similar pitch). Earlier candidates were `tokenxray`, `cclens`, `cc-xray` (confusingly close to the taken name) and a scoped `@alexnieves-cs/ccxray`.
 - The rename covers the package, the bin and every user-visible string (CLI output, report titles, the JSON report's `tool.name` value, docs). The GitHub repo stays `alexnieves-cs/ccxray` for now, and internal identifiers (temp-dir prefixes, the schema `$id` `urn:ccxray:schema:report:v1`) keep the old name. JSON report field names are unchanged.
-- Provenance-signed releases via GitHub Actions (`npm publish --provenance`) — **manual approval by Alex**.
+- Provenance-signed releases via GitHub Actions (`.github/workflows/release.yml`: on a `vX.Y.Z` tag, checks the tag against `package.json`, runs lint, typecheck and tests, then `npm publish --provenance`) — **manual approval by Alex** (he pushes the tag; an `npm` environment reviewer can gate it too).
 - Later: Homebrew tap, Claude Code plugin wrapper for the slim/diet modules.
 
 ## 11. Launch plan (all posts need Alex's approval)
