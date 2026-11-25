@@ -134,13 +134,13 @@ From [SPEC §5](docs/SPEC.md#5-analyzers) and [`src/analyzers/`](src/analyzers).
 | A2 | cache-rebuild | Turns where the cache was rebuilt: a large cache write while cache read dropped by half or more vs the previous turn. | measured (cache write of the turn) |
 | A3 | rebuild-cause | The likely cause of each rebuild: idle gap past the cache TTL, Claude Code upgrade, model switch, compaction, CLAUDE.md change, tool set change, or unknown. Shown inside A2 findings. | cause counts measured; per-cause token split and tool-set inference estimated |
 | A4 | fixed-overhead | Baseline context of the first turn of each session, its median per Claude Code version, and jumps between versions. | measured; size of logged tool definitions estimated |
-| A5 | big-tool-output | Tool results of about 5k tokens or more, grouped by tool and short command (e.g. `pnpm test`). | estimated (chars/4) |
+| A5 | big-tool-output | Tool results of about 5k tokens or more, grouped by tool and short command (e.g. `pnpm test`). | estimated (chars/2.2) |
 | A6 | repeated-read | The same file read again with no edit or write in between. | estimated (size of the later reads) |
 | A7 | tool-usage | Calls per tool, and tools or whole MCP servers never called. | call counts measured; cost of unused definitions estimated, and only when the transcript logs them |
 | A8 | context-growth | Sessions whose context grew past 150k tokens, or that compacted repeatedly. | measured |
 | A9 | subagent-cost | Usage of subagent transcripts vs their parent session, and the models they ran on. | measured |
 | A10 | error-waste | API error turns and retries, and failed tool calls repeated with the same input. | errors measured; repeated calls estimated |
-| A11 | cross-agent-read | The same file read by 3 or more agents (main session and subagents) of one session, each carrying its own copy. Counts Read and plain `cat FILE`; the same relative path read from several git worktrees is one file. | estimated (chars/4) |
+| A11 | cross-agent-read | The same file read by 3 or more agents (main session and subagents) of one session, each carrying its own copy. Counts Read and plain `cat FILE`; the same relative path read from several git worktrees is one file. | estimated (chars/2.2) |
 | A12 | cache-ttl | Whether the other prompt-cache TTL would have cost less for the main conversations: 1h when 5–60 minute breaks keep forcing rebuilds, 5m when 1h was rarely needed. The fix is `"promptCacheTtl"` in settings.json. | measured tokens; $ estimated |
 
 ## Measured vs estimated
@@ -148,7 +148,7 @@ From [SPEC §5](docs/SPEC.md#5-analyzers) and [`src/analyzers/`](src/analyzers).
 Every number tknxray prints carries one of two labels:
 
 - **[M] measured:** summed directly from the `usage` fields Claude Code logs for each API response (input, cache write, cache read, output), or a plain count of records. Exact for what the logs contain.
-- **[E] estimated** (also shown with a leading `~`): a heuristic. Token sizes of tool outputs, reads and tool definitions use `ceil(chars / 4)`, not a tokenizer. Splitting a measured total between causes or tools is an attribution guess. Treat these as orders of magnitude.
+- **[E] estimated** (also shown with a leading `~`): a heuristic, not a tokenizer. Tool outputs and reads use `ceil(chars / 2.2)`, calibrated against measured usage on seven people's logs ([bench/REVIEW.md](bench/REVIEW.md#outside-logs)); `tknxray doctor` shows how close it is on yours. Tool definitions and CLAUDE.md files use `ceil(chars / 4)`, which is not calibrated. Splitting a measured total between causes or tools is an attribution guess. Treat these as orders of magnitude.
 
 Estimates are never presented as exact. Findings from different analyzers can overlap (the same tokens can be part of a rebuild and of a big output), so their token figures do not add up and are **not savings**. Every finding lists evidence (session, turn, file and line) so you can verify it.
 

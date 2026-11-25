@@ -27,7 +27,7 @@ function viewFixture() {
       blocks: [toolUse('Read', { file_path })],
     })
     .toolResult(4_000)
-    // Read of the same file again (📄) and a 24,000-char Bash output = 6,000 tokens [E] (📦).
+    // Read of the same file again (📄) and a 24,000-char Bash output = 10,910 tokens [E] (📦).
     .assistant({
       usage: { input: 2, cacheWrite: 1_100, cacheRead: 20_000, output: 50 },
       blocks: [toolUse('Read', { file_path }), toolUse('Bash', { command: 'pnpm test' })],
@@ -90,8 +90,8 @@ describe('session view', () => {
       expect.objectContaining({ agentId: 'x1', models: ['claude-haiku-4-5'], spawnedAt: 3 }),
     ]);
     expect(subagentRows.map((r) => r.chain)).toEqual(['agent-x1']);
-    // Bigger threshold: the 6,000-token output is no longer big.
-    const th = { ...DEFAULT_THRESHOLDS, bigToolOutputTokens: 6_001 };
+    // Bigger threshold: the 10,910-token output is no longer big.
+    const th = { ...DEFAULT_THRESHOLDS, bigToolOutputTokens: 10_911 };
     expect(flagsOf(buildSessionView(found.session, sessions, th).view.rows)[1]).toEqual([
       'dup-read',
     ]);

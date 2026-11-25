@@ -23,7 +23,7 @@ If you've hit usage limits and couldn't tell why, this might help. **tknxray** r
 Things I care about:
 
 - **Local only.** No network calls, no telemetry, no login. CI checks the build for network code.
-- **Honest numbers.** Everything is labeled [M] measured (straight from the logs' `usage` fields) or [E] estimated (chars/4 heuristic). Findings link to the exact session and turn.
+- **Honest numbers.** Everything is labeled [M] measured (straight from the logs' `usage` fields) or [E] estimated (a chars-per-token heuristic, calibrated against measured usage on seven people's logs). Findings link to the exact session and turn.
 - **Privacy.** Reports don't include your prompts or file contents unless you ask with `--include-content`. The HTML report is one self-contained file you can attach to a bug report.
 
 Status: preview. Tested on synthetic fixtures; validation on real logs is still in progress, and I'm not claiming any savings. Not on npm yet, so it runs from source:

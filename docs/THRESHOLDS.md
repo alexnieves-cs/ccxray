@@ -14,7 +14,7 @@ is listed here and used by the code.
 | `ttl1hMs` | 3600000 (1 h) | A3 rebuild-cause, `session` `*` gap mark | Idle gap that expires a 1-hour cache entry; applies when the session wrote any `ephemeral_1h` tokens. |
 | `baselineJumpTokens` | 2000 | A4 fixed-overhead | Increase of the median first-turn context [M] between two consecutive Claude Code versions worth flagging. |
 | `baselineMinSessions` | 3 | A4 fixed-overhead | Fresh sessions a Claude Code version needs before its median baseline is compared for a jump; versions with fewer are reported but not compared. |
-| `bigToolOutputTokens` | 5000 | A5 big-tool-output, `session` 📦 flag | Estimated tokens [E, chars/4] of the inline content for one `tool_result` to count as big (an output Claude Code already persisted counts by its inline preview). |
+| `bigToolOutputTokens` | 5000 | A5 big-tool-output, `session` 📦 flag | Estimated tokens [E, chars/2.2; about 11,000 chars at the default] of the inline content for one `tool_result` to count as big (an output Claude Code already persisted counts by its inline preview). |
 | `contextLargeTokens` | 150000 | A8 context-growth | Peak context per turn [M] that flags a session. Flagged subagents of one session are reported together in one finding. |
 | `compactionsPerSession` | 2 | A8 context-growth | Compactions in one session that flag it (markers with no assistant turn between them count once). |
 | `crossAgentReadMinAgents` | 3 | A11 cross-agent-read | Agents of one session tree (the main session, its subagents and inline sidechain agents) that must each Read the same file (canonical path) to flag it. |
@@ -27,4 +27,4 @@ is listed here and used by the code.
 | `RECALL_LOOKAHEAD_TURNS` | 3 | A10 error-waste | Turns searched after a failed tool call for an identical re-call. |
 | `CURVE_POINTS` | 50 | A8 context-growth | Maximum points in `data.curve` (bucket maxima). |
 | prefix length | 4 | `session` | Shortest session-id prefix accepted. |
-| `TRIMMED_OUTPUT_TOKENS` | 1000 | A5 big-tool-output impact | Estimated tokens a trimmed output keeps (about 100 lines); A5 savings are the carry cost of the rest. |
+| `TRIMMED_OUTPUT_TOKENS` | 1819 | A5 big-tool-output impact | Estimated tokens a trimmed output keeps (about 100 lines of 40 chars, at chars/2.2); A5 savings are the carry cost of the rest. |

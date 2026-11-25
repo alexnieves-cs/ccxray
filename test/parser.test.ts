@@ -96,8 +96,8 @@ describe('fixtures', () => {
     expect(s.turns.map((t) => t.toolUses.map((u) => u.name))).toEqual([['Bash'], ['Read'], []]);
     expect(s.turns[0]!.toolUses[0]!.inputChars).toBe('{"command":"pnpm test"}'.length);
     expect(results(s)).toEqual([
-      { name: 'Bash', chars: 120, est: 30, err: undefined },
-      { name: 'Read', chars: 300, est: 75, err: undefined },
+      { name: 'Bash', chars: 120, est: 55, err: undefined },
+      { name: 'Read', chars: 300, est: 137, err: undefined },
     ]);
   });
 
@@ -112,8 +112,8 @@ describe('fixtures', () => {
     expect(totals(parent)).toEqual({ input: 13, cacheWrite: 8150, cacheRead: 8000, output: 80 });
     expect(totals(sub)).toEqual({ input: 6, cacheWrite: 3100, cacheRead: 3000, output: 55 });
     expect(sub.turns.every((t) => t.isSidechain && t.agentId === 'r1')).toBe(true);
-    expect(results(parent)).toEqual([{ name: 'Task', chars: 40, est: 10, err: undefined }]);
-    expect(results(sub)).toEqual([{ name: 'Glob', chars: 200, est: 50, err: undefined }]);
+    expect(results(parent)).toEqual([{ name: 'Task', chars: 40, est: 19, err: undefined }]);
+    expect(results(sub)).toEqual([{ name: 'Glob', chars: 200, est: 91, err: undefined }]);
     expect(stats.warnings).toEqual({});
   });
 
@@ -184,8 +184,8 @@ describe('fixtures', () => {
   it('big-bash-output: string and text-block tool results, is_error', async () => {
     const s = only((await load('big-bash-output')).sessions);
     expect(results(s)).toEqual([
-      { name: 'Bash', chars: 48000, est: 12000, err: undefined },
-      { name: 'Bash', chars: 32000, est: 8000, err: true },
+      { name: 'Bash', chars: 48000, est: 21819, err: undefined },
+      { name: 'Bash', chars: 32000, est: 14546, err: true },
     ]);
     expect(
       s.turns.flatMap((t) => t.toolUses.map((u) => (u.input as { command: string }).command)),
@@ -268,8 +268,8 @@ describe('fixtures', () => {
     const rs = s.turns.flatMap((t) => t.toolResults);
     // 19 + (49 + 132 + 1) + 1 + 21 + (2048 + 1) + 19 chars of preview, as logged inline.
     expect(rs.map((r) => [r.toolName, r.chars, r.estTokens, r.persisted])).toEqual([
-      ['Bash', 2291, 573, { reportedBytes: 37274 }],
-      ['Bash', 300, 75, undefined],
+      ['Bash', 2291, 1042, { reportedBytes: 37274 }],
+      ['Bash', 300, 137, undefined],
     ]);
     expect(totals(s)).toEqual({ input: 6, cacheWrite: 2800, cacheRead: 49700, output: 90 });
   });
@@ -335,8 +335,8 @@ describe('fixtures', () => {
     expect(s.prompts.map((p) => p.chars)).toEqual([11, 8]);
     expect(s.turns.map((t) => t.blockCounts)).toEqual([{ text: 1 }, { tool_use: 2 }, { text: 1 }]);
     expect(results(s)).toEqual([
-      { name: 'Bash', chars: 100, est: 25, err: undefined },
-      { name: 'Read', chars: 50, est: 13, err: undefined },
+      { name: 'Bash', chars: 100, est: 46, err: undefined },
+      { name: 'Read', chars: 50, est: 23, err: undefined },
     ]);
     expect(totals(s)).toEqual({ input: 7, cacheWrite: 800, cacheRead: 1100, output: 45 });
     expect(results(s).every((r) => !('text' in r))).toBe(true);

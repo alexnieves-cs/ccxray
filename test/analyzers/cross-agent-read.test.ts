@@ -20,22 +20,22 @@ describe('A11 cross-agent-read', () => {
     expect(fs).toHaveLength(1); // README.md has only 2 readers; a3's SPEC.md read failed
     const f = fs[0]!;
     expect(f.title).toBe('docs/SPEC.md read by 3 agents of session cb51037c (main + 2 subagents)');
-    // 3 copies of 20,000 chars (5,000 est. tokens); the copies beyond the largest: 10,000 [E].
-    expect(f.tokens).toEqual({ value: 10_000, kind: 'estimated' });
+    // 3 copies of 20,000 chars (9,091 est. tokens); the copies beyond the largest: 18,182 [E].
+    expect(f.tokens).toEqual({ value: 18_182, kind: 'estimated' });
     expect(f.data).toEqual({ tool: 'Read', path: 'docs/SPEC.md', agents: 3, subagents: 2 });
     // Sonnet 4.5, 5m writes: main and a1 copies are written (3.75) then read once (0.30):
-    // 5,000 × 4.05 = 20,250 µ$ each; a2's copy is only written: 18,750 µ$. Savings = 2 × median.
+    // 9,091 × 4.05 = 36,819 µ$ each; a2's copy is only written: 34,091 µ$. Savings = 2 × median.
     expect(f.impact).toMatchObject({
-      costUsd: 0.05925,
-      savingsUsd: 0.0405,
-      savingsSubagentUsd: 0.0405,
+      costUsd: 0.107728,
+      savingsUsd: 0.073637,
+      savingsSubagentUsd: 0.073637,
       savingsMainUsd: 0,
       confidence: 'estimated',
     });
     expect(f.evidence.map((e) => e.detail)).toEqual([
-      'read by main session cb51037c (~5k tokens [E]); stayed in context for 2 turns, ~$0.02 [E]',
-      'read by subagent a1 (~5k tokens [E]); stayed in context for 2 turns, ~$0.02 [E]',
-      'read by subagent a2 (~5k tokens [E]); stayed in context for 1 turn, ~$0.02 [E]',
+      'read by main session cb51037c (~9.1k tokens [E]); stayed in context for 2 turns, ~$0.04 [E]',
+      'read by subagent a1 (~9.1k tokens [E]); stayed in context for 2 turns, ~$0.04 [E]',
+      'read by subagent a2 (~9.1k tokens [E]); stayed in context for 1 turn, ~$0.03 [E]',
     ]);
     expect(f.fix.summary).toContain('subagent prompt or a CLAUDE.md summary');
   });

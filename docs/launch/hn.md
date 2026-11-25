@@ -21,7 +21,7 @@ It reads the transcripts Claude Code already writes under `~/.claude/projects` a
 - huge tool outputs (grouped by short command, e.g. `pnpm test`) and files read again unchanged;
 - MCP tools you never call, subagent spend, and wasted error turns.
 
-Every number is labeled [M] (summed from the `usage` fields in the logs) or [E] (a chars/4 estimate or an attribution guess), and every finding points at the session and turn so you can check it by hand. There are terminal, JSON and single-file HTML reports, and a per-turn `session` view.
+Every number is labeled [M] (summed from the `usage` fields in the logs) or [E] (a calibrated chars-per-token estimate or an attribution guess), and every finding points at the session and turn so you can check it by hand. There are terminal, JSON and single-file HTML reports, and a per-turn `session` view.
 
 Privacy: it is local only. No network calls (CI scans the build for them), no telemetry, no account. Reports leave out prompt and file contents unless you pass `--include-content`.
 

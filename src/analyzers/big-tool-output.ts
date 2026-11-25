@@ -4,7 +4,7 @@
 // externalized (`<persisted-output>`, FORMAT.md Q1) whose inline preview is under that is not a
 // big output (Claude Code already handled it): it only adds to data.persistedByClaudeCode of a
 // group that has big outputs, and never makes a finding on its own. Tokens are always the
-// *inline* estimate (chars / 4), the part that entered the context; the full size of persisted
+// *inline* estimate (calibrated tool-output rate, src/tokens/estimate.ts), the part that entered the context; the full size of persisted
 // big outputs goes to data.persistedBytes. Fix advice depends on the command family (bashAdvice).
 // Grouped by tool name, and for Bash by the normalized command (normalizeCommand). All sessions
 // count, subagents included: their context is billed too. Reads that A6 reports as repeats are
@@ -17,7 +17,7 @@
 import { carryIndex } from '../cost/carry.js';
 import { impact } from '../cost/impact.js';
 import type { Analyzer, Finding, Session, ToolResult, Turn } from '../model/index.js';
-import { CHARS_PER_TOKEN } from '../tokens/estimate.js';
+import { estimateToolOutputTokens, TOOL_OUTPUT_CHARS_PER_TOKEN } from '../tokens/estimate.js';
 import { formatCompact, formatInt, formatUsd, shortCommand } from '../reporters/format.js';
 import { crossAgentReadToolUseIds } from './cross-agent-read.js';
 import { repeatedReadToolUseIds } from './repeated-read.js';
@@ -80,8 +80,8 @@ export function normalizeCommand(command: string, cwd?: string): string {
   return inner !== undefined ? `${label} (in a loop)` : label;
 }
 
-/** What a trimmed output keeps (~100 lines × ~40 chars / 4), for A5 savings. Estimated. */
-export const TRIMMED_OUTPUT_TOKENS = 1_000;
+/** What a trimmed output keeps (~100 lines × ~40 chars = 1,819 tokens), for A5 savings. Estimated. */
+export const TRIMMED_OUTPUT_TOKENS = estimateToolOutputTokens(100 * 40);
 
 interface Hit {
   session: Session;
@@ -174,7 +174,7 @@ export const bigToolOutput: Analyzer = {
         for (const result of turn.toolResults) {
           const full = result.persisted?.reportedBytes ?? 0;
           const small = result.estTokens < min;
-          if (small && !(result.persisted && full >= min * CHARS_PER_TOKEN)) continue;
+          if (small && !(result.persisted && full >= min * TOOL_OUTPUT_CHARS_PER_TOKEN)) continue;
           if (repeats.has(result.toolUseId)) continue;
           const { tool, command } = toolOf(turn, result, session.cwd);
           const key = `${tool}\u0000${command ?? ''}`;

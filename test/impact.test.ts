@@ -29,7 +29,7 @@ function carried(model = OPUS.model) {
       usage: { cacheWrite: 20_000 },
       blocks: [toolUse('Bash', { command: 'pnpm test' })],
     })
-    .toolResult(40_000)
+    .toolResult(22_000) // 10,000 tokens [E] at chars/2.2
     .assistant(say({ cacheRead: 20_000, cacheWrite: 10_500 }))
     .prompt('next')
     .assistant(say({ cacheRead: 30_500, cacheWrite: 100 }))
@@ -57,12 +57,12 @@ describe('carry cost', () => {
     expect(idx.carry(sessions[0]!.turns[4]!, 1_000)).toMatchObject({ usd: 0, turnsCarried: 0 });
   });
 
-  it('A5: cost is the carry, savings assume the output is cut to ~1k tokens', async () => {
+  it('A5: cost is the carry, savings assume the output is cut to ~1.8k tokens', async () => {
     const [f] = await run(bigToolOutput, [carried()]);
     expect(f!.impact).toMatchObject({
       costUsd: 0.104,
-      savingsUsd: 0.0936, // 9,000 of the 10,000 tokens not carried
-      savingsMainUsd: 0.0936,
+      savingsUsd: 0.085082, // 8,181 of the 10,000 tokens not carried
+      savingsMainUsd: 0.085082,
       savingsSubagentUsd: 0,
       confidence: 'estimated',
     });

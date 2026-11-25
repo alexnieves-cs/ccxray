@@ -17,7 +17,7 @@
 //
 // Impact (SPEC §5.2): carry cost of each copy (src/cost/carry.ts); savings = (copies − 1) ×
 // the median copy's carry (one agent still reads the file; the others get the facts they need
-// in their prompt). Estimated: tokens are chars/4 and a summary in the prompt is not free.
+// in their prompt). Estimated: tokens use the tool-output rate (chars/2.2) and a summary in the prompt is not free.
 import { carryIndex, type CarryIndex } from '../cost/carry.js';
 import { impact } from '../cost/impact.js';
 import type { Analyzer, Finding, Session, Thresholds, Turn } from '../model/index.js';

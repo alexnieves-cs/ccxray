@@ -18,7 +18,7 @@ CONTEXT PER TURN [M]  max of up to 2 turns per column
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 LATEST TURN #150 · 11:04:19 UTC · sonnet-4-5 · gap 22s
   cache read 266,500 · cache write 2,000 · input 1 · output 30 [M] · hit ratio 99% [M] · $0.09 [E]
-  tools (result ~tokens [E]): Bash ~5 · Read (no result yet)
+  tools (result ~tokens [E]): Bash ~9 · Read (no result yet)
   not a rebuild (A2)
 
 SESSION SO FAR [M]

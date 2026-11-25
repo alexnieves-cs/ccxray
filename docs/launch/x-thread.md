@@ -20,7 +20,7 @@ It finds:
 • subagent and error-turn spend
 
 3/
-Every number is labeled [M] (measured from the logs' usage fields) or [E] (estimated, chars/4). Every finding points at the session and turn, so you can check it yourself.
+Every number is labeled [M] (measured from the logs' usage fields) or [E] (estimated, with a chars-per-token rate calibrated on real logs). Every finding points at the session and turn, so you can check it yourself.
 
 No savings claims: it tells you where tokens went, not what you'd save.
 

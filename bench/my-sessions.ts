@@ -84,7 +84,7 @@ export function toMarkdown(g: Aggregate, o: { since: string | null; generatedAt:
       `window: ${o.since === null ? 'all time' : `since ${o.since}`}.`,
     'Aggregate counts only: no paths, project names, prompts or ids.',
     '',
-    '[M] = measured (summed from `usage` fields). [E] = estimated (chars/4 heuristic or an',
+    '[M] = measured (summed from `usage` fields). [E] = estimated (chars-per-token heuristic or an',
     "attribution guess). Findings' token sums overlap between analyzers and are not savings.",
     '',
     '## Totals [M]',
