@@ -26,6 +26,20 @@ export interface Usage {
   webSearchRequests?: number;
   /** `usage.server_tool_use.web_fetch_requests`, when present. Measured count. */
   webFetchRequests?: number;
+  /**
+   * Advisor-tool sub-inferences: `usage.iterations[]` entries of `type: "advisor_message"`,
+   * when present. Measured. NOT included in the fields above: the API reports top-level usage
+   * for the executor only and bills each advisor call at the advisor model's rates
+   * (platform.claude.com/docs/en/agents-and-tools/tool-use/advisor-tool, read 2026-11-25).
+   */
+  advisor?: AdvisorCall[];
+}
+
+/** One advisor-tool call inside a response (FORMAT.md). Its context is the advisor's own. */
+export interface AdvisorCall {
+  /** The advisor's `model` (`unknown` when the entry has none). */
+  model: string;
+  usage: Usage;
 }
 
 /** Where a record came from, so every finding can be verified by hand. */
@@ -321,7 +335,10 @@ export interface CostTotals {
   read: number;
   output: number;
   total: number;
-  /** Non-synthetic turns on a model without a list price (left out of the sums). */
+  /**
+   * Non-synthetic turns on a model without a list price (left out of the sums). An advisor call
+   * on an unpriced model counts here too.
+   */
   unpricedTurns: number;
 }
 

@@ -19,6 +19,17 @@ export interface UsageSpec {
   cacheWrite1h?: number;
   cacheRead?: number;
   output?: number;
+  /**
+   * Advisor-tool calls, written as `usage.iterations` the way the API reports them: one
+   * `message` iteration with the executor's (top-level) tokens, then one `advisor_message` each.
+   */
+  advisor?: {
+    model: string;
+    input?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+    output?: number;
+  }[];
 }
 
 export const text = (t: string): Rec => ({ type: 'text', text: t });
@@ -47,6 +58,18 @@ export function usage(u: UsageSpec = {}): Rec {
       ephemeral_5m_input_tokens: u.cacheWrite5m ?? 0,
       ephemeral_1h_input_tokens: u.cacheWrite1h ?? 0,
     };
+  if (u.advisor !== undefined) {
+    const it = (x: UsageSpec): Rec => ({
+      input_tokens: x.input ?? 0,
+      cache_creation_input_tokens: x.cacheWrite ?? 0,
+      cache_read_input_tokens: x.cacheRead ?? 0,
+      output_tokens: x.output ?? 0,
+    });
+    o.iterations = [
+      { type: 'message', ...it(u) },
+      ...u.advisor.map((a) => ({ type: 'advisor_message', model: a.model, ...it(a) })),
+    ];
+  }
   o.service_tier = 'standard';
   return o;
 }

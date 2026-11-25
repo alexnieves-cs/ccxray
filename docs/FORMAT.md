@@ -71,7 +71,7 @@ Keys **[M: 58/58]**: `id`, `model`, `role`, `type`, `content`, `stop_reason`, `s
 
 Keys **[M: 58/58]**: `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `cache_creation.{ephemeral_5m_input_tokens, ephemeral_1h_input_tokens}`, `server_tool_use.{web_search_requests, web_fetch_requests}`, `output_tokens_details.thinking_tokens`, `service_tier`, `inference_geo`, `iterations`, `speed`, `fallback_credit`.
 
-`iterations` is an array of `{input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens, cache_creation, type}` **[M]**. tknxray uses the top-level fields only, matching ccusage **[D]**. `output_tokens_details.thinking_tokens` is new relative to SPEC §4.2.
+`iterations` is an array of `{input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens, cache_creation, type}` **[M]**. Entries with `type: "message"` are the executor's and sum to the top-level fields; tknxray does not read them. Entries with `type: "advisor_message"` also carry `model` and are advisor-tool calls: separate sub-inferences that the top-level fields leave out and that are billed at the advisor model's rates (**[D]** platform.claude.com/docs/en/agents-and-tools/tool-use/advisor-tool, read 2026-11-25; **[M]** in one public outside log, CC 2.1.251, `advisorModel` on the envelope). Since 0.2 tknxray reads them into `Usage.advisor` and adds them to A1 totals and $ under the advisor's model, with no extra turns, which matches ccusage **[M: 0.2 outside-log review]**. The per-turn views (`session`, `watch`) and the context analyzers still show the executor's tokens only: the advisor has its own context. `output_tokens_details.thinking_tokens` is new relative to SPEC §4.2.
 
 ### user.message
 
