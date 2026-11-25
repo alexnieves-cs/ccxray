@@ -51,6 +51,7 @@ npx tknxray doctor                # show discovered log dirs, CC versions, parse
 npx tknxray watch [latest|<id>]   # live full-screen view of one session (polls its files; --once prints one frame)
 npx tknxray compare --at 2026-10-12            # the 7 days before vs the 7 days from that day
 npx tknxray compare --before A..B --after C..D # explicit windows (inclusive UTC days)
+npx tknxray share                 # tknxray-share.json: numbers and fixed vocabularies only (§3.2)
 ```
 
 ### 3.1 compare
@@ -79,6 +80,34 @@ thin. Turns on a model with no list price are left out of the $ rows: $ per turn
 priced turns only, $ per main session is blank unless every turn is priced, and the window is
 flagged. The two windows may not share an instant. Exit 1 when either window has no sessions. `--json` prints the comparison object
 (`src/compare.ts` `Comparison`); it is not part of report.v1.
+
+### 3.2 share
+
+`share` writes a file a volunteer can send so their findings can be checked for false positives
+(and counted for the launch stats of §11) without sending transcripts. Shape:
+`schema/share.v1.json` (closed: `additionalProperties: false` everywhere except count maps),
+built by `shareReport` in `src/reporters/share.ts` from the same Report as `--json`.
+
+- **Kept:** token totals (all, by model, by role) [M] and their $ [E]; `activeDays`; session counts;
+  parse stats with record, attachment and warning types as keys; each finding's analyzer id,
+  severity, tokens, impact numbers, the numbers and booleans in its data, and the number of
+  evidence turns; calibration and the action plan's numbers and ids.
+- **Vocabularies:** a string is kept only when it is a built-in tool name (one PascalCase word;
+  `mcp__…` becomes `mcp`), a `claude-*` model id or `<synthetic>`, a Claude Code version
+  (`N.N.N`), a built-in subagent type (others become `(custom)`), or an analyzer enum value
+  (`cause`, `match`, `ttl`, `tokensKind`). Anything else becomes `(other)` or is dropped.
+- **Dropped:** titles, evidence details and source files, fix text, `basis` sentences, paths,
+  commands, project names, root paths, the `--project` value (only `projectFilter: true`), and
+  bySession / byProject / byDay.
+- **Sessions:** HMAC-SHA256 of the session id with a random 16-byte salt per file, first 12 hex
+  characters; a subagent key (`<sessionId>:agent-<id>`) hashes its two parts apart, so its hash
+  starts with its parent's. The salt is never written, so hashes cannot be joined across files.
+- **Review:** every finding has `review: { verdict: null, note: "" }` and the file has `notes`.
+  The terminal (never the file) lists each finding's number, title and sessions (short id and
+  hash) so the volunteer can check it with `tknxray session` and set `verdict` to `real`,
+  `false-positive` or `unsure`.
+- Never writes `--include-content` data. Exit 0 written, 1 no sessions (nothing written), 2 bad
+  args or the file exists without `--force` or cannot be written.
 
 Config dir discovery: `CLAUDE_CONFIG_DIR` (comma-separated allowed), `~/.config/claude/projects`, `~/.claude/projects` (same rules as ccusage **[M: ccusage docs]**).
 
@@ -147,7 +176,7 @@ src/
     dedupe.ts            message.id / requestId / sidechain dedupe (see 4.3)
     session.ts           build Sessions; turns in timestamp order (parentUuid only for linking where needed)
   tokens/
-    estimate.ts          heuristic tokenizer (chars/4 baseline; optional pluggable tokenizer later)
+    estimate.ts          heuristic tokenizer (tool output chars/2.2, other text chars/4; optional pluggable tokenizer later)
   analyzers/             pure functions: (Session[], ctx) => Finding[]
   reporters/
     terminal.ts  html.ts  json.ts
@@ -184,7 +213,7 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - **One JSON object per line.** Top-level `type` values seen locally **[M]**: `user`, `assistant`, `attachment`, `queue-operation`, `last-prompt`, `cost-state`, `atis-latch`. Treat any other value as unknown and count it in `doctor`.
 - **Common envelope fields [M]:** `uuid`, `parentUuid`, `sessionId`, `timestamp` (ISO-8601 UTC), `type`, `isSidechain`, `cwd`, `gitBranch`, `version` (Claude Code version), `userType`, `entrypoint`.
 - **`assistant.message` [M]:** `id`, `model`, `role`, `type: "message"`, `content`, `stop_reason`, `usage`, plus `container`, `context_management`, `diagnostics`, `stop_details`. Synthetic/error turns have `model: "<synthetic>"` and `isApiErrorMessage` / `error` on the envelope. **Exclude these from token stats.**
-- **`message.usage` [M, all fields observed]:** `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `cache_creation: { ephemeral_5m_input_tokens, ephemeral_1h_input_tokens }`, `server_tool_use: { web_search_requests, web_fetch_requests }`, `service_tier`, `inference_geo`, `iterations`, `speed`, `output_tokens_details`, `fallback_credit`. The `iterations` array can contain `advisor_message` records with their own model **[M: ccusage docs]**.
+- **`message.usage` [M, all fields observed]:** `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `cache_creation: { ephemeral_5m_input_tokens, ephemeral_1h_input_tokens }`, `server_tool_use: { web_search_requests, web_fetch_requests }`, `service_tier`, `inference_geo`, `iterations`, `speed`, `output_tokens_details`, `fallback_credit`. The `iterations` array can contain `advisor_message` records with their own model **[M: ccusage docs; D: API advisor-tool docs]**; A1 counts them (FORMAT.md, since 0.2).
 - **`user.message.content`**: either a string (a typed prompt) **[M]** or an array of blocks including `tool_result` blocks keyed by `tool_use_id` **[UNVERIFIED locally; standard Messages API shape]**.
 - **`assistant.message.content`**: array of `text` / `thinking` / `tool_use` blocks (`tool_use` has `id`, `name`, `input`) **[UNVERIFIED locally; standard Messages API shape]**.
 - **`cost-state` [M]:** `totalCostUSD`, `totalAPIDuration`, `totalDuration`, `totalLinesAdded/Removed`, `modelUsage`, `startTime` (epoch ms). Useful as a cross-check.
@@ -255,8 +284,9 @@ Sources: the local logs on the dev box (Claude Code **2.1.296**) **[M]**; ccusag
 - The raw usage of a response is its first line's `message.usage` with `output_tokens` the max over all lines sharing `message.id` + `requestId` (identical on every line in 2.1.302; older versions may have written partial output counts).
 
 ### 4.5 Token estimator
-- Baseline: `ceil(chars / 4)` for text and `ceil(JSON.stringify(x).length / 4)` for JSON. Always labeled *estimated*.
-- Calibration (M2, `src/tokens/calibrate.ts`): for consecutive real turns *p → t* of one chain where *p* made exactly one tool call with one result, nothing else was logged in between (no prompt, no event), the model did not change and the result is ≥ 250 estimated tokens: `measured = ctx(t) − ctx(p) − output(p)` with `ctx = input + cache_write + cache_read`, and `ratio = estTokens / measured` (> 1 means chars/4 is high). The median ratio and sample count go into `Report.calibration` and one line of `doctor`. `cache_read` is included (the earlier draft said `input + cache_write` only) because a request's context is the sum of all three fields, and how it splits between them changes from turn to turn; only the growth of the sum is the added content.
+- Tool output (`tool_result` content, used by A5, A6, A10, A11 and the carry cost): `ceil(chars / 2.2)`, computed as `ceil(5 × chars / 11)` (`estimateToolOutputTokens`). Calibrated in 0.2 on seven corpora with the rule below: the chars/4 median ratio was 0.46 to 0.57 in each, and on the six public corpora pooled (3,803 samples) a Theil–Sen fit of measured tokens on chars/4 had a slope of 1.82 (2.2 chars per token) and an intercept of about 34 tokens. The gap is in the per-character rate, not a fixed overhead per result, and it holds per model family and per tool (Bash 2.18, Read 2.25 chars per token); see bench/REVIEW.md, "Outside logs". 0.1 used chars/4 here, which ran about 45% low.
+- Everything else (tool definitions, CLAUDE.md and other instruction files, tool inputs, `capture` request parts): `ceil(chars / 4)`, and `ceil(JSON.stringify(x).length / 4)` for JSON. **UNVERIFIED**: no log measures these, so this baseline is not calibrated. User prompts, the one other kind the logs allow measuring, gave about 2.5 chars per token on only 218 noisy samples, too few to adopt. All estimates are labeled *estimated*.
+- Calibration (M2, `src/tokens/calibrate.ts`): for consecutive real turns *p → t* of one chain where *p* made exactly one tool call with one result, nothing else was logged in between (no prompt, no event), the model did not change and the result is ≥ 250 estimated tokens: `measured = ctx(t) − ctx(p) − output(p)` with `ctx = input + cache_write + cache_read`, and `ratio = estTokens / measured` (> 1 means the estimate is high; ≈ 1 is expected with the calibrated rate). The size floor is 1,000 chars (0.1: 250 tokens at chars/4, nearly the same set of results). The median ratio and sample count go into `Report.calibration` and one line of `doctor`. `cache_read` is included (the earlier draft said `input + cache_write` only) because a request's context is the sum of all three fields, and how it splits between them changes from turn to turn; only the growth of the sum is the added content.
 - No network tokenizer calls. An optional offline tokenizer can be plugged in later.
 
 ## 5. Analyzers
@@ -269,7 +299,7 @@ Each analyzer is a pure function with fixtures and snapshot tests. Thresholds ar
 | A2 | **cache-rebuild** | Turn *n* (n>1 within a session, non-sidechain) has `cache_creation ≥ max(10k, 0.5 × prev context)` **and** `cache_read` dropped by ≥50% vs turn *n-1* | measured (cache_write of the turn) | depends on cause (A3) |
 | A3 | **rebuild-cause** | For each A2 hit, assign the first matching cause: (a) `gapMs > 5 min` (or > 60 min if the session wrote `ephemeral_1h` tokens) → **TTL expiry**; (b) `version` changed vs prev turn → **CC upgrade**; (c) `model` changed → **model switch**; (d) compaction record nearby → **compaction**; (e) CLAUDE.md / settings mtime inside the gap **[UNVERIFIED method]** → **config edit**; (f) MCP/tool set changed (inferred from new tool names appearing) **[E]**; else **unknown** | measured total (A2); per-cause split estimated [E] (attribution guess) | TTL: "batch prompts; you had N gaps of 5–15 min" (5m TTL); breaks over 1h on a 1h TTL cannot be bridged by batching, so: "/compact before a long break, or /clear when you come back to a new task". Upgrade: link known issues (#46917). Model switch: "/model mid-session invalidates the cache". Config edit: "edit CLAUDE.md between sessions". |
 | A4 | **fixed-overhead** | First assistant turn of each session: `input + cache_write + cache_read` = baseline context. Report the median per CC version and a jump between versions ≥ 2k | measured (inferred meaning [E]) | "Your baseline grew 20k at 2.1.100" → link issue; suggest mcp-diet |
-| A5 | **big-tool-output** | `tool_result` est. tokens ≥ 5k (configurable); group by tool name + normalized command (Bash: first 2 tokens, e.g. `pnpm test`) | estimated | Bash, by command family: test runners/builds `| tail -n 100`, `--silent`, `--reporter=dot`; file dumps (cat/sed/head…) Read with offset/limit or `grep -n`; grep/rg `-l`, `-m N`, narrower path; `git show/diff` `--stat` then one path; `git log` `-n N --oneline`; loops/other: limit the output. Grep tool: narrower glob / `head_limit`; later `cc-slim` |
+| A5 | **big-tool-output** | `tool_result` est. tokens ≥ 5k (configurable; about 11,000 chars at chars/2.2); group by tool name + normalized command (Bash: first 2 tokens, e.g. `pnpm test`) | estimated | Bash, by command family: test runners/builds `| tail -n 100`, `--silent`, `--reporter=dot`; file dumps (cat/sed/head…) Read with offset/limit or `grep -n`; grep/rg `-l`, `-m N`, narrower path; `git show/diff` `--stat` then one path; `git log` `-n N --oneline`; loops/other: limit the output. Grep tool: narrower glob / `head_limit`; later `cc-slim` |
 | A6 | **repeated-read** | Same `Read` file_path (with the same offset/limit) ≥ 2× in a session with no intervening Edit/Write/MultiEdit/Bash on that path | estimated (size of later reads) | "Reference the earlier read"; later the cc-slim dedupe hook |
 | A7 | **tool-usage** | Count tool_use by name across the window; list tools/MCP servers (`mcp__server__tool`) never called. Definition sizes come from `prompt_snapshot` attachments when logged (CC 2.1.302, FORMAT.md Q3); without one, report counts only | count; tokens [E] only with a snapshot or capture | `permissions.deny` / scope the MCP server to a subagent (mcp-diet, M5) |
 | A8 | **context-growth** | Per-session curve of context size (input + cache_read + cache_write); flag sessions over 150k or with ≥ 2 compactions | measured | Main session: "Start a new session / use /clear for unrelated tasks". Subagents (cannot be /clear-ed): "give it a narrower task and return a summary, not whole files" |
@@ -281,7 +311,7 @@ Each analyzer is a pure function with fixtures and snapshot tests. Thresholds ar
 Every finding includes evidence pointers (session, turn uuid) so a user can verify it by hand.
 
 **M2 implementation notes.**
-- A1 totals count every deduped, non-synthetic turn of every session, **subagent sessions included** (they are real API spend). They go into `Report.totals`, not findings.
+- A1 totals count every deduped, non-synthetic turn of every session, **subagent sessions included** (they are real API spend). They go into `Report.totals`, not findings. Advisor-tool calls inside a turn (`usage.iterations[]` of `type: "advisor_message"`) are separate requests on the advisor's model: their tokens and $ are added to every bucket, under the advisor's model in `byModel`, without adding turns.
 - A2 checks only main-chain (non-sidechain) turns, so subagent transcripts are never checked. *n-1* is the previous non-synthetic turn. The literal rule needs `cache_read(n-1) > 0`, so a rebuild right after a cold first turn is not detected; with `--since`, the first in-window turn has no in-window *n-1*. A2 and A3 emit **one** aggregated finding (`data.causes`, evidence capped at 50 rebuilds with the largest cache writes; counts stay exact). Severity: high at ≥ 10 rebuilds or ≥ 500k tokens, else warn.
 - A3 per-cause tokens are labeled [E] in every reporter (`tokensKind: 'estimated'`); the finding total stays measured. The ttl-expiry fix is worded per TTL (5–15 min gaps for 5m sessions, breaks over 1 h for 1h sessions). A gap exactly equal to the TTL is not an expiry.
 - A3 tool-set-change [E]: a `prompt_snapshot` whose tool names differ from the previous snapshot, else tool names used at turn *n* that no earlier turn used and no earlier snapshot listed.
@@ -293,9 +323,9 @@ Every finding includes evidence pointers (session, turn uuid) so a user can veri
 
 ### 5.1 Cost model (M7)
 
-Token counts stay measured. On top of them, every turn is priced at **API list prices** from a bundled, dated table (`src/cost/prices.ts`, `PRICES_AS_OF = 2026-10-19`, source <https://platform.claude.com/docs/en/about-claude/pricing.md>). There is **no network call**: prices change only when the table is edited. Every $ figure is labeled **[E] API list-price equivalent**. Max/Pro subscribers do not pay per token, so each reporter's legend says once: "$ = what these tokens would cost at API list prices; subscription limits are not published, use it to compare, not as a bill".
+Token counts stay measured. On top of them, every turn is priced at **API list prices** from a bundled, dated table (`src/cost/prices.ts`, `PRICES_AS_OF = 2026-11-25`, source <https://platform.claude.com/docs/en/about-claude/pricing.md>). There is **no network call**: prices change only when the table is edited. Every $ figure is labeled **[E] API list-price equivalent**. Max/Pro subscribers do not pay per token, so each reporter's legend says once: "$ = what these tokens would cost at API list prices; subscription limits are not published, use it to compare, not as a bill".
 
-- **Price table** (USD per MTok: input, 5m cache write, 1h cache write, cache read, output). Fable 5.1 / Mythos 5.1 10, 12.5, 20, 0.25, 50 · Fable 5 / Mythos 5 10, 12.5, 20, 1, 50 · Opus 5.5 4, 5, 8, 0.20, 20 · Opus 5, 4.8, 4.7, 4.6, 4.5 5, 6.25, 10, 0.50, 25 · Opus 4.1, 4 15, 18.75, 30, 1.50, 75 · Sonnet 5.5 2, 2.5, 4, 0.10, 10 · Sonnet 5 2, 2.5, 4, 0.20, 10 · Sonnet 4.6, 4.5, 4 3, 3.75, 6, 0.30, 15 · Haiku 5.5 0.10, 0.125, 0.20, 0.01, 0.50 for prompts ≤ 100,000 tokens and 0.50, 0.625, 1, 0.05, 2.50 above (prompt length = input + cache read + cache write; each request priced on its own) · Haiku 4.5 1, 1.25, 2, 0.10, 5 · Haiku 3.5 0.80, 1, 1.60, 0.08, 4.
+- **Price table** (USD per MTok: input, 5m cache write, 1h cache write, cache read, output). Fable 5.2 / Mythos 5.2 8, 10, 16, 0.20, 40 (the Mythos 5.2 id is UNVERIFIED) · Fable 5.1 / Mythos 5.1 10, 12.5, 20, 0.25, 50 · Fable 5 / Mythos 5 10, 12.5, 20, 1, 50 · Opus 5.5 4, 5, 8, 0.20, 20 · Opus 5, 4.8, 4.7, 4.6, 4.5 5, 6.25, 10, 0.50, 25 · Opus 4.1, 4 15, 18.75, 30, 1.50, 75 · Sonnet 5.5 2, 2.5, 4, 0.10, 10 · Sonnet 5 2, 2.5, 4, 0.20, 10 · Sonnet 4.6, 4.5, 4 3, 3.75, 6, 0.30, 15 · Haiku 5.5 0.10, 0.125, 0.20, 0.01, 0.50 for prompts ≤ 100,000 tokens and 0.50, 0.625, 1, 0.05, 2.50 above (prompt length = input + cache read + cache write; each request priced on its own) · Haiku 4.5 1, 1.25, 2, 0.10, 5 · Haiku 3.5 0.80, 1, 1.60, 0.08, 4.
 - **Model matching.** A model id matches a table id exactly or followed by a date (`-20251101`, `@20251101`) and/or a bracketed variant (`[1m]`); the longest id is tried first, so `claude-opus-5-5` never matches `claude-opus-5`. Anything else (including `<synthetic>` and ids such as `claude-3-5-haiku-20241022` that use the older naming) is **unpriced**: never guessed, counted in `cost.unpricedTurns` and `Report.pricing.unpricedModels`, and left out of every $ sum.
 - **Turn cost** (`turnCost`, pure): input × input rate + 5m write × 5m rate + 1h write × 1h rate + cache read × read rate + output × output rate. Without a 5m/1h split the whole write uses the 5m rate (UNVERIFIED, §4.4).
 - **Report fields** (additive in report v1, `REPORT_SCHEMA_VERSION` stays 1): `cost` on every `TokenTotals` (all, per session, project, model, day; `{ input, write5m, write1h, read, output, total, unpricedTurns }`, USD rounded to 1e-6), `totals.byRole.{main, subagent}` (subagent = subagent transcripts and inline sidechain turns), and `pricing { asOf, source, unpricedModels, note }`.
@@ -382,14 +412,14 @@ The report's headline: `buildActionPlan(report)` (`src/cost/plan.ts`, pure) turn
 - Not affiliated with Anthropic. Mention this in the README.
 
 ## 10. Distribution
-- npm package **`tknxray`** with the `tknxray` bin and `npx tknxray` usage. Not published yet: `package.json` stays `"private": true` until Alex approves a release.
+- npm package **`tknxray`** with the `tknxray` bin and `npx tknxray` usage. Not published yet: 0.2.0 is the first release prepared for npm; only Alex publishes (docs/RELEASE.md).
 - **Name decision (2026-10-19): Alex picked `tknxray`.** `cctknxray` was the alternative; both were free on npm when checked on 2026-10-19. The project was called ccxray, but **`ccxray` is taken on npm** (checked 2026-10-18: v2.3.1, "X-ray vision for AI agent sessions — a transparent HTTP proxy and dashboard for Claude Code", an unrelated project with a different approach and a similar pitch). Earlier candidates were `tokenxray`, `cclens`, `cc-xray` (confusingly close to the taken name) and a scoped `@alexnieves-cs/ccxray`.
 - The rename covers the package, the bin and every user-visible string (CLI output, report titles, the JSON report's `tool.name` value, docs). The GitHub repo stays `alexnieves-cs/ccxray` for now, and internal identifiers (temp-dir prefixes, the schema `$id` `urn:ccxray:schema:report:v1`) keep the old name. JSON report field names are unchanged.
-- Provenance-signed releases via GitHub Actions (`npm publish --provenance`) — **manual approval by Alex**.
+- Provenance-signed releases via GitHub Actions (`.github/workflows/release.yml`: on a `vX.Y.Z` tag, checks the tag against `package.json`, runs lint, typecheck and tests, then `npm publish --provenance`) — **manual approval by Alex** (he pushes the tag; an `npm` environment reviewer can gate it too).
 - Later: Homebrew tap, Claude Code plugin wrapper for the slim/diet modules.
 
 ## 11. Launch plan (all posts need Alex's approval)
-1. Run on Alex's sessions (and volunteers' scrubbed JSON reports), then write "I analyzed N Claude Code sessions: X% of tokens were cache rebuilds", using only measured numbers.
+1. Run on Alex's sessions (and volunteers' `tknxray share` files, §3.2), then write "I analyzed N Claude Code sessions: X% of tokens were cache rebuilds", using only measured numbers.
 2. README with a demo GIF (vhs/asciinema), a screenshot of the HTML report, and a privacy section up top.
 3. Show HN, r/ClaudeAI, r/ClaudeCode, X replies in usage-limit threads, a helpful comment on #16157/#46917 with a JSON report, and a PR to [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code).
 4. Respond to issues fast in week 1; add support for format changes as they appear.

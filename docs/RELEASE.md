@@ -1,50 +1,65 @@
 # Releasing (maintainer only)
 
-Only Alex publishes to npm. Agents prepare the release (CHANGELOG, tag, GitHub release with an
-`npm pack` tarball) and stop before `npm publish`.
+Only Alex publishes to npm. Agents prepare a release (version, CHANGELOG, README, a passing
+`npm pack --dry-run`) on a branch and stop before any push, merge, tag or `npm publish`.
 
 ## Current state
 
 - v0.1.0 is tagged and has a [GitHub release](https://github.com/alexnieves-cs/ccxray/releases/tag/v0.1.0)
-  with `tknxray-0.1.0.tgz` attached.
-- The `tknxray` package is **not on npm yet**, so `npx tknxray` fails until step 3 below is done.
+  with `tknxray-0.1.0.tgz` attached. It was never published to npm.
+- 0.2.0 is prepared on the `release-0.2` branch: `package.json` and `src/version.ts` say
+  `0.2.0`, CHANGELOG.md has its section, and the README treats `npx tknxray` as the install
+  command (true once the publish below is done).
 
-## Publish to npm
+## One-time setup (before the first publish)
 
-1. Start from a clean, up-to-date `main` at the release tag:
+`.github/workflows/release.yml` publishes with [npm provenance](https://docs.npmjs.com/generating-provenance-statements)
+when a `vX.Y.Z` tag is pushed. It needs:
+
+1. **An npm token.** On npmjs.com, sign in as the account that will own `tknxray` and create a
+   granular access token with read and write access to packages. `tknxray` does not exist yet,
+   so the first token can't be limited to it; narrow it, or switch to a trusted publisher, once
+   the package exists.
+2. **The repo secret** `NPM_TOKEN` holding that token: GitHub → Settings → Secrets and variables →
+   Actions → New repository secret.
+3. **Recommended: an `npm` environment with you as a required reviewer** (Settings →
+   Environments → `npm`). The job runs in that environment, so every publish then waits for your
+   approval in the Actions tab. Without it, pushing the tag is the approval.
+
+## Publish a release
+
+1. Merge the release branch to `main` with CI green, then update your checkout:
    ```sh
    git switch main && git pull
-   git checkout v0.1.0          # or stay on main if it equals the tag
+   ```
+2. Optional local check of what will ship (the workflow runs the same checks):
+   ```sh
    pnpm install --frozen-lockfile
-   ```
-2. Check what will ship. `prepublishOnly` also runs lint, typecheck and tests (the build runs as
-   part of `pnpm test`).
-   ```sh
    pnpm lint && pnpm typecheck && pnpm test
-   npm pack --dry-run   # expect LICENSE, README.md, package.json, bin/, dist/, hooks/, schema/
+   npm pack --dry-run   # LICENSE, README.md, package.json, bin/, dist/, hooks/, schema/
    ```
-3. Log in and publish (needs the npm account that will own `tknxray`; 2FA prompts for an OTP):
+3. Tag and push. This is the one command that publishes:
    ```sh
-   npm login                    # once per machine
-   npm whoami                   # confirm the account
-   npm publish --access public
+   git tag v0.2.0 && git push origin v0.2.0
    ```
-4. Confirm it worked:
+   The workflow checks that the tag matches `package.json`, runs lint, typecheck and tests, then
+   runs `npm publish --provenance --access public`. Approve it in the Actions tab if you set up
+   the environment.
+4. Confirm it worked, then make the GitHub release with the tarball:
    ```sh
-   npm view tknxray version     # expect 0.1.0
+   npm view tknxray version          # expect 0.2.0
    npx tknxray@latest --version
+   pnpm build && npm pack
+   gh release create v0.2.0 tknxray-0.2.0.tgz --title v0.2.0 --notes-file <notes>
    ```
-5. Update the README: remove the "not published yet" notes in **Install and usage** and make
-   `npx tknxray` the main install command again.
+
+**Without the workflow** (no provenance): `npm login`, `npm whoami`, then
+`npm publish --access public` from a clean `main` at the tag; `prepublishOnly` runs lint,
+typecheck and tests first. Then delete the README sentence that says releases carry provenance.
 
 ## Next release
 
-1. Bump `version` in package.json and add a dated section to CHANGELOG.md.
+1. Bump `version` in `package.json` and `src/version.ts`, and add a dated section to
+   CHANGELOG.md.
 2. Merge to `main` with CI green.
-3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-4. Create the GitHub release with the tarball:
-   ```sh
-   pnpm build && npm pack
-   gh release create vX.Y.Z tknxray-X.Y.Z.tgz --title vX.Y.Z --notes-file <notes>
-   ```
-5. Publish to npm as above.
+3. Tag and push as above.

@@ -17,7 +17,7 @@
 //
 // Impact (SPEC §5.2): carry cost of each copy (src/cost/carry.ts); savings = (copies − 1) ×
 // the median copy's carry (one agent still reads the file; the others get the facts they need
-// in their prompt). Estimated: tokens are chars/4 and a summary in the prompt is not free.
+// in their prompt). Estimated: tokens use the tool-output rate (chars/2.2) and a summary in the prompt is not free.
 import { carryIndex, type CarryIndex } from '../cost/carry.js';
 import { impact } from '../cost/impact.js';
 import type { Analyzer, Finding, Session, Thresholds, Turn } from '../model/index.js';
@@ -46,6 +46,8 @@ interface Copy {
   tool: 'Read' | 'Bash';
   /** The directory the path was resolved against (cwd, or the `cd` target). */
   base: string | undefined;
+  /** The canonical absolute path (relative only when no base was known). */
+  abs: string;
 }
 
 const SHELL_META = /[|<>*?[\]{}$`'"\\()!#~\n]/;
@@ -83,7 +85,7 @@ function readKey(
   name: string,
   input: unknown,
   cwd: string | undefined,
-): { key: string; base: string | undefined; tool: 'Read' | 'Bash' } | undefined {
+): { key: string; abs: string; base: string | undefined; tool: 'Read' | 'Bash' } | undefined {
   const o = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
   let raw: string | undefined;
   let base = cwd !== undefined && cwd !== '' ? normPath(cwd) : undefined;
@@ -97,7 +99,7 @@ function readKey(
   if (raw === undefined || raw === '') return undefined;
   const abs = normPath(raw, base);
   const rel = base !== undefined && isAbs(abs) ? displayPathIn(abs, base) : undefined;
-  return { key: rel ?? abs, base, tool: name === 'Read' ? 'Read' : 'Bash' };
+  return { key: rel ?? abs, abs, base, tool: name === 'Read' ? 'Read' : 'Bash' };
 }
 
 const displayPathIn = (abs: string, base: string): string | undefined =>
@@ -123,20 +125,44 @@ function agentsByTree(sessions: readonly Session[]): Map<string, number> {
   return out;
 }
 
-/** First non-error Read of each (agent, canonical path), grouped by tree and path. Trees with
- * fewer agents than the threshold cannot be flagged and are skipped. */
+/** Tiny union-find over group keys (one per tree). */
+class Groups {
+  private readonly up = new Map<string, string>();
+  find(k: string): string {
+    let r = k;
+    for (let p = this.up.get(r); p !== undefined && p !== r; p = this.up.get(r)) r = p;
+    for (let c = k; c !== r;) {
+      const next = this.up.get(c)!;
+      this.up.set(c, r);
+      c = next;
+    }
+    return r;
+  }
+  union(a: string, b: string): void {
+    const ra = this.find(a);
+    const rb = this.find(b);
+    if (ra !== rb) this.up.set(rb, ra);
+  }
+}
+
+/**
+ * First non-error Read of each (agent, file), grouped by tree and file. Two reads are one file
+ * when they share a canonical absolute path, or the same path relative to the directory each
+ * was read from (worktrees). The first rule matters when agents of one tree run in different
+ * directories of one checkout (e.g. `repo/` and `repo/paper/`): `docs/x.md` and
+ * `../docs/x.md` are the same file. Trees with fewer agents than the threshold are skipped.
+ */
 function copiesByTree(
   sessions: readonly Session[],
   minAgents: number,
 ): Map<string, Map<string, Copy[]>> {
   const agents = agentsByTree(sessions);
-  const trees = new Map<string, Map<string, Copy[]>>();
+  const all = new Map<string, { groups: Groups; copies: { key: string; copy: Copy }[] }>();
   for (const s of sessions) {
     const root = rootOf(s);
     if ((agents.get(root) ?? 0) < minAgents) continue;
-    let paths = trees.get(root);
-    if (paths === undefined) trees.set(root, (paths = new Map()));
-    const seen = new Set<string>();
+    let tree = all.get(root);
+    if (tree === undefined) all.set(root, (tree = { groups: new Groups(), copies: [] }));
     for (const turn of realTurns(s))
       for (const u of turn.toolUses) {
         const target = readKey(u.name, u.input, s.cwd);
@@ -145,28 +171,43 @@ function copiesByTree(
         if (result === undefined || result.isError) continue;
         const inline = !s.isSubagent && turn.isSidechain;
         const agent = inline ? `${s.id}:side:${turn.agentId ?? ''}` : s.id;
-        const path = target.key;
-        const key = `${agent}\u0000${path}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        let list = paths.get(path);
-        if (list === undefined) paths.set(path, (list = []));
-        list.push({
-          session: s,
-          turn,
-          toolUseId: u.id,
-          agent,
-          isSubagent: s.isSubagent || inline,
-          label: s.isSubagent
-            ? `subagent ${shortAgent(s)}`
-            : inline
-              ? `inline agent ${(turn.agentId ?? '?').slice(0, 8)}`
-              : `main session ${s.id.slice(0, 8)}`,
-          estTokens: result.estTokens,
-          tool: target.tool,
-          base: target.base,
+        tree.groups.union(`k\u0000${target.key}`, `a\u0000${target.abs}`);
+        tree.copies.push({
+          key: target.key,
+          copy: {
+            session: s,
+            turn,
+            toolUseId: u.id,
+            agent,
+            isSubagent: s.isSubagent || inline,
+            label: s.isSubagent
+              ? `subagent ${shortAgent(s)}`
+              : inline
+                ? `inline agent ${(turn.agentId ?? '?').slice(0, 8)}`
+                : `main session ${s.id.slice(0, 8)}`,
+            estTokens: result.estTokens,
+            tool: target.tool,
+            base: target.base,
+            abs: target.abs,
+          },
         });
       }
+  }
+  const trees = new Map<string, Map<string, Copy[]>>();
+  for (const [root, { groups, copies }] of all) {
+    // Group by union-find root; name each group by its first relative key (else its first key).
+    const byGroup = new Map<string, { name: string; list: Copy[]; seen: Set<string> }>();
+    for (const { key, copy } of copies) {
+      const g = groups.find(`k\u0000${key}`);
+      let e = byGroup.get(g);
+      if (e === undefined) byGroup.set(g, (e = { name: key, list: [], seen: new Set() }));
+      else if (isAbs(e.name) && !isAbs(key)) e.name = key;
+      if (e.seen.has(copy.agent)) continue; // only each agent's first read of the file
+      e.seen.add(copy.agent);
+      e.list.push(copy);
+    }
+    // A name is one of its group's keys, and a key is in one group: names are unique.
+    trees.set(root, new Map([...byGroup.values()].map((e) => [e.name, e.list])));
   }
   return trees;
 }
@@ -204,7 +245,9 @@ function finding(
   const rootSession = sessions.find((s) => s.id === root && !s.isSubagent);
   const cwd = rootSession?.cwd ?? copies[0]!.session.cwd;
   const rel = isAbs(path) ? displayPath(path, cwd !== undefined ? normPath(cwd) : undefined) : path;
-  const bases = new Set(copies.map((c) => c.base ?? ''));
+  // Distinct files behind the one relative path (worktrees); one file read from several
+  // directories of a checkout is still one file.
+  const bases = new Set(copies.map((c) => c.abs));
   const tools = new Set(copies.map((c) => c.tool));
   const withCarry = copies.map((c) => ({ c, carry: carry.carry(c.turn, c.estTokens) }));
   const costUsd = withCarry.reduce((a, x) => a + x.carry.usd, 0);

@@ -57,7 +57,7 @@ const e = escapeHtml;
 function badge(kind: TokenKind): string {
   return kind === 'measured'
     ? '<i class="b m" title="measured: taken directly from usage fields in the logs">M</i>'
-    : '<i class="b e" title="estimated: chars/4 heuristic or attribution guess">E</i>';
+    : '<i class="b e" title="estimated: chars-per-token heuristic or attribution guess">E</i>';
 }
 
 // Colors: categorical slots 1-3 (blue, orange, aqua) for the stacked context layers, slot 7
@@ -360,7 +360,7 @@ function replaySection(tl: Timeline): string {
     `<section id="replay"><h2>Session replay</h2>` +
     `<p class="sub">Every assistant turn, in order: how much context it sent and how much of that came from the cache. ` +
     `Press play to watch the context fill up; the replay stops at cache rebuilds, compactions and long idle gaps. ` +
-    `Token counts are measured; tool result sizes are estimated (~chars/4).${e(omitted)}</p>` +
+    `Token counts are measured; tool result sizes are estimated (~chars/2.2).${e(omitted)}</p>` +
     `<div class="panelbox">` +
     `<div class="rp-ctl"><label class="sr" for="rp-session">session</label><select id="rp-session"></select>` +
     `<button type="button" id="rp-play" aria-pressed="false">▶ Play</button>` +

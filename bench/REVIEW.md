@@ -1,4 +1,4 @@
-# Real-log validation (SPEC §6 M1, M2, M4, M7)
+# Real-log validation (SPEC §6 M1, M2, M4, M7; outside logs for 0.2)
 
 One maintainer corpus, run locally with `scripts/real-check.sh` at commit `ae7f6e1` on
 2026-10-21 (macOS, Apple M1 Pro, Node 25.8.1). The script prints counts and hashed ids only;
@@ -107,8 +107,10 @@ wrote the code. A review on other people's logs is still worth doing.
 
 ## Estimator calibration [E]
 
-Median ratio of the chars/4 estimate to measured tokens: 0.548 over 16,090 samples, so [E]
-token figures run about 45% low on this corpus (see FORMAT.md).
+0.1 estimated every text at chars/4. Median ratio of that estimate to measured tokens: 0.548 over
+16,090 samples, so [E] token figures ran about 45% low on this corpus. 0.2 estimates tool output
+at chars/2.2, fitted on the outside logs below and consistent with this 0.548 (see
+[Outside logs](#outside-logs) and SPEC §4.5).
 
 ## Performance [M]
 
@@ -120,3 +122,94 @@ Wall time and peak RSS of a full `tknxray --json` run, 3 runs each.
 | all time (3.15 GB) | 16.8 s, 14.8 s, 14.8 s | 436 to 469 MB |
 
 Aggregate per-analyzer counts for the whole corpus are in [MY_SESSIONS.md](MY_SESSIONS.md).
+
+## Outside logs
+
+Six public GitHub repositories that commit their own Claude Code transcripts, read on 2026-11-25
+on the `release-0.2` branch (Linux container, Node 22.23.5). Each was downloaded into its own
+empty directory and only read; nothing from them was run. Everything below is aggregate counts;
+no transcript content is copied here, and session ids are hashed. Dollar amounts are left out, as
+above.
+
+| source (repo @ commit) | files | MB | sessions (subagent) | turns [M] | CC versions |
+|---|---:|---:|---:|---:|---|
+| `boltonbailey/moser` @ `e543f2b` | 2 | 3.0 | 2 (0) | 227 | 2.1.191 to 2.1.232 |
+| `cebert/cache-ttl-analyzer` @ `3460eed` | 14 | 31.6 | 14 (0) | 1,566 | 2.1.251 |
+| `daniloc/voynich` @ `cc454a7` | 8 | 18.2 | 7 (0) | 568 | 2.1.183 to 2.1.197 |
+| `ej31/omc-hook-experiment` @ `fad01e4` | 33 | 13.1 | 30 (8) | 444 | 2.1.74 |
+| `joshspeagle/ssc-2026-ai-llm-demo` @ `cee1a71` | 25 | 10.9 | 25 (24) | 562 | 2.1.158 to 2.1.159 |
+| `stevkazt/sgva` @ `635e1c4` | 18 | 21.9 | 16 (1) | 1,274 | 2.1.247 to 2.1.299 (6) |
+| **all** | **100** | **98.7** | **94 (33)** | **4,641** | 2.1.74 to 2.1.299 |
+
+### ccusage cross-check [M]
+
+`npx ccusage@latest claude session --json` per source, compared with `scripts/validate-real.ts
+--ccusage`. **A1 totals (input, output, cache create, cache read) match to +0.00% and the
+list-price cost total matches to ±$0.01 on all six: PASS.** Per session, 50 of 62 ccusage
+sessions match; the other 12 are all in `stevkazt/sgva`, where ccusage and tknxray key the same
+turns under different sessions (12 missing on each side, with 51 cross-session copies dropped by
+dedupe). The totals match, so this is a grouping difference; UNVERIFIED which side's grouping is
+the one a user would expect. Four sessions exist only in tknxray (UNVERIFIED: likely sessions
+ccusage skips, as on the maintainer corpus).
+
+The first run did not match on `cebert/cache-ttl-analyzer`: tknxray left out the advisor tool's
+own calls (`usage.iterations[]` entries of type `advisor_message`). Fixed in `ae34421`; they now
+count toward A1 totals and $ under the advisor's model, and that source matches 14 of 14 sessions.
+
+### False-positive spot check [M]
+
+`scripts/fp-check.ts --since 2000-01-01 --max 30` per source, the same mechanical checks as
+[above](#false-positive-spot-check-m4): the evidence pointer resolves, measured numbers match
+`usage`, and the analyzer's invariant holds.
+
+| source | findings | checked | pass |
+|---|---:|---:|---:|
+| `boltonbailey/moser` | 6 | 6 | 6 |
+| `cebert/cache-ttl-analyzer` | 42 | 30 | 30 |
+| `daniloc/voynich` | 17 | 17 | 17 |
+| `ej31/omc-hook-experiment` | 23 | 23 | 23 |
+| `joshspeagle/ssc-2026-ai-llm-demo` | 23 | 23 | 23 |
+| `stevkazt/sgva` | 22 | 22 | 22 |
+| **all** | **133** | **121** | **121** |
+
+All 10 analyzer types fired at least once (cache-ttl twice). Mechanical checks catch wrong
+pointers and numbers, not wrong advice: a human read of findings on other people's logs is what
+`tknxray share` (SPEC §3.2) is for.
+
+One finding was wrong in a way the checks could not see: on `joshspeagle/ssc-2026-ai-llm-demo`,
+A11 reported one file as two findings because agents ran in a checkout and in a subdirectory of
+it, so the same file had two relative paths. Fixed in `d897c40` (findings join on the absolute
+path as well as the relative one) with a regression test.
+
+### Estimator calibration [E]
+
+On turns that added exactly one tool_result of at least 1,000 chars, the measured growth of the
+prompt (input + cache write + cache read, minus the previous output) against the result's chars:
+
+- chars/4 medians per source: 0.459, 0.568, 0.521, 0.537, 0.531 and 0.528 (the maintainer
+  corpus: 0.548), so every corpus ran 43% to 54% low.
+- A Theil–Sen fit over all six (3,803 turns): measured ≈ 1.82 × chars/4 + about 34 tokens per
+  result, i.e. about 2.2 chars per token. Per source 1.97 to 2.32; per tool, Bash 2.18 and Read
+  2.25.
+- 0.2 uses chars/2.2 for tool output. Calibration medians with it: 0.835, 1.033, 0.948, 0.975,
+  0.965 and 0.959 (36 to 410 samples per source). Other text (tool definitions, CLAUDE.md, tool
+  inputs) stays at chars/4, UNVERIFIED: too few clean samples to fit it.
+
+Because tool outputs now estimate about 1.8× larger, A5 (big tool output) crosses its threshold
+more often: **12 findings before, 39 after** on these logs; every A5 finding fp-check sampled
+passes. Other analyzers' counts did not change.
+
+### Known limits found here
+
+- **Workflow-tool subagents are not linked to the tool call that started them.** In
+  `joshspeagle/ssc-2026-ai-llm-demo`, 24 subagents were started by the `Workflow` tool. Its
+  `toolUseResult` has `status`, `taskId`, `runId`, `summary`, `transcriptDir` and `scriptPath`
+  but no `agentId`, and there is no `agent-<id>.meta.json`, so 0 of 24 link to a `tool_use`.
+  They are still counted, under their parent session (from the directory layout); only the
+  per-call view (A9 by subagent type) is missing. Not a bug; linking by `transcriptDir` is
+  possible later.
+- **`tool_result without matching tool_use` (95 on `ej31/omc-hook-experiment`) is benign.** The
+  95 results sit in sidechain records that replay the main conversation: their `tool_use` and an
+  identical result are both in the main chain, and dedupe drops the 95 replayed responses
+  (sidechain replays = 95). Nothing is lost or counted twice.
+

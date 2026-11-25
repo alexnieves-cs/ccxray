@@ -181,6 +181,30 @@ describe('hooks/cc-slim-posttooluse.mjs (built dist/slim.js)', () => {
     expect(run('not json')).toBe('');
   });
 
+  it("leaves a failed call's error text and image output alone (documented shape)", () => {
+    const base = { hook_event_name: 'PostToolUse', tool_name: 'Bash' };
+    // For a failed call, tool_response is the error text as a string (hooks docs, 2026-11-25).
+    expect(run(JSON.stringify({ ...base, tool_response: big }))).toBe('');
+    const image = { stdout: big, stderr: '', interrupted: false, isImage: true };
+    expect(run(JSON.stringify({ ...base, tool_response: image }))).toBe('');
+  });
+
+  it('keeps fields beyond the four documented ones', () => {
+    const res = {
+      stdout: big,
+      stderr: '',
+      interrupted: false,
+      isImage: false,
+      noOutputExpected: false,
+    };
+    const out = run(
+      JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_response: res }),
+    );
+    const updated = JSON.parse(out).hookSpecificOutput.updatedToolOutput;
+    expect(Object.keys(updated).sort()).toEqual(Object.keys(res).sort());
+    expect(updated).toMatchObject({ interrupted: false, isImage: false, noOutputExpected: false });
+  });
+
   it('fails open when dist/slim.js cannot be loaded', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ccxray-hook-'));
     mkdirSync(join(dir, 'hooks'));

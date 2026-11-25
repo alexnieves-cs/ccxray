@@ -578,7 +578,7 @@
     "samples": 14
   },
   "pricing": {
-    "asOf": "2026-10-19",
+    "asOf": "2026-11-25",
     "note": "$ = what these tokens would cost at API list prices; subscription limits are not published, use it to compare, not as a bill",
     "source": "https://platform.claude.com/docs/en/about-claude/pricing.md",
     "unpricedModels": {}

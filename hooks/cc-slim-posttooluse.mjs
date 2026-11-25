@@ -7,14 +7,18 @@
 // Fail-open: on any problem it prints nothing and exits 0, so Claude Code keeps the original
 // output. It never blocks a tool and never exits non-zero.
 //
-// Hook contract (from Claude Code's hooks docs as known to the author):
-// UNVERIFIED: stdin fields { session_id, transcript_path, cwd, hook_event_name: "PostToolUse",
-//             tool_name, tool_input, tool_response }; stdout: JSON; exit 0.
-// UNVERIFIED: the Bash `tool_response` shape { stdout, stderr, interrupted, isImage }.
-// Documented (code.claude.com/docs/en/hooks, read 2026-10-19): `hookSpecificOutput.
-// updatedToolOutput` replaces any tool's output before it is sent to Claude; a built-in tool's
-// replacement must match its output schema or it is ignored. UNVERIFIED: that the Bash object
-// below matches that schema; docs/cc-slim.md step 0 of the measurement plan checks it.
+// Hook contract, documented (code.claude.com/docs/en/hooks, "PostToolUse", read 2026-11-25):
+// - stdin: { session_id, transcript_path, cwd, permission_mode, hook_event_name: "PostToolUse",
+//   tool_name, tool_input, tool_response, tool_use_id, duration_ms? }; exit 0 applies stdout JSON.
+// - Bash returns an object with `stdout`, `stderr`, `interrupted` and `isImage`; the docs' own
+//   `updatedToolOutput` example for Bash is that object. A built-in tool's replacement that does
+//   not match its output schema is ignored and the original output is used.
+// - For a failed call, `tool_response` is the error text as a string. This hook leaves it alone:
+//   Claude needs the error details, and a string is not the Bash output shape.
+// [M] Logged Bash `toolUseResult` objects in six public corpora (CC 2.1) always carry those four
+// fields, sometimes with more (noOutputExpected, backgroundTaskId, ...), so the replacement keeps
+// every original field and changes only stdout/stderr.
+// UNVERIFIED: that a live Claude Code applies the replacement (docs/cc-slim.md §6 step 0).
 import { Buffer } from 'node:buffer';
 
 // A closed pipe must not turn into an error exit.
@@ -42,10 +46,8 @@ async function run(input) {
   if (hook?.hook_event_name !== 'PostToolUse' || hook.tool_name !== 'Bash') return;
   const res = hook.tool_response;
   let updated;
-  if (typeof res === 'string') {
-    const r = slim(res);
-    if (r?.stats.changed) updated = r.text;
-  } else if (res && typeof res === 'object') {
+  // A string is a failed call's error text, and isImage means stdout is image data: leave both.
+  if (res && typeof res === 'object' && res.isImage !== true) {
     const out = slim(res.stdout);
     const err = slim(res.stderr);
     if (out?.stats.changed || err?.stats.changed)

@@ -57,8 +57,9 @@ describe('A10 error-waste', () => {
       .assistant();
     const [f, ...rest] = recallFindings(await run(errorWaste, [s]));
     expect(rest).toEqual([]);
-    // failed result 400 chars → 100 [E]; re-call input {"command":"pnpm tset"} 23 chars → 6 [E].
-    expect(f!.tokens).toEqual({ value: 106, kind: 'estimated' });
+    // failed result 400 chars → 182 [E] (chars/2.2); re-call input {"command":"pnpm tset"} 23 chars
+    // → 6 [E] (chars/4).
+    expect(f!.tokens).toEqual({ value: 188, kind: 'estimated' });
     expect(f!.data).toEqual({ tool: 'Bash', recalls: 1, sessions: 1, match: 'identical' });
     expect(f!.title).toContain('(same input)');
     expect(f!.evidence[0]!.detail).not.toContain('tset');

@@ -13,7 +13,7 @@ tknxray (repo: ccxray; renamed because `ccxray` is taken on npm by an unrelated 
 
 Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** tokens you used. tknxray tries to tell you **why**: cache rebuilds and their likely cause, fixed overhead per fresh context, huge tool outputs, files read again unchanged (also across subagents), MCP tools you never call, subagent spend and wasted error turns. Each finding is priced at API list prices, and the report opens with **what to change first**: up to five concrete changes (a CLAUDE.md line, a settings snippet) ranked by what they would have saved in your own logs, with the exact setting or line to add. After you change something, `tknxray compare --at <that day>` shows whether it helped. Every finding points at the session and turn it came from, so you can check it by hand.
 
-> **Status: 0.1.0 released on GitHub (not yet on npm).** Everything below is implemented and tested against synthetic fixtures. On one maintainer's real logs (3.15 GB, 45,412 turns) its token totals and list-price cost match ccusage exactly and 20 of 20 sampled findings pass a mechanical evidence check ([bench/REVIEW.md](bench/REVIEW.md)). A review of whether each finding's advice is right (20 findings on a second real corpus) found 3 wrong, all fixed with regression tests; runs on other people's logs are still **pending**, and token estimates marked [E] may run low (see [FORMAT.md](docs/FORMAT.md)). See the [roadmap](#roadmap).
+> **Status: 0.2.0.** Everything below is implemented and tested against synthetic fixtures. On one maintainer's real logs (3.15 GB, 45,412 turns) and on six other people's public logs (4,641 turns) its token totals and list-price cost match ccusage exactly, and every sampled finding passes a mechanical evidence check: 20 of 20 and 121 of 121 ([bench/REVIEW.md](bench/REVIEW.md)). A review of whether each finding's advice is right (20 findings on a second real corpus) found 3 wrong, all fixed with regression tests; a human review on other people's logs is the next step (`tknxray share` makes it possible without sending transcripts). Token estimates marked [E] are heuristics (see [Measured vs estimated](#measured-vs-estimated)). See the [roadmap](#roadmap).
 
 ## Privacy
 
@@ -21,32 +21,33 @@ Tools like [ccusage](https://github.com/ccusage/ccusage) tell you **how many** t
 - **What it reads:** Claude Code's transcripts under `~/.claude/projects` (also `~/.config/claude/projects` and `CLAUDE_CONFIG_DIR`, comma-separated). `--root DIR` points it somewhere else.
 - **What reports contain:** token counts, tool names, file paths relative to the project, and the first two words of Bash commands. **Prompt and file contents are not embedded** unless you pass `--include-content`.
 - The HTML report is a single self-contained file that loads nothing remote.
+- **To share results without sharing transcripts**, use [`tknxray share`](#share-help-check-the-findings): a file of numbers, analyzer ids, built-in tool names and model ids, with no paths, commands, titles or session ids.
 - The one command that opens a socket is the opt-in [`capture`](#capture-opt-in-api-key-only), which only **listens** on `127.0.0.1` and never connects anywhere.
 
 ## Install and usage
 
-**Current method: install from source.** tknxray is not on npm yet, so `npx tknxray` does not work today. You need Node ≥ 20 and pnpm:
+You need Node ≥ 20. No install step: `npx` downloads and runs it.
+
+```sh
+npx tknxray                 # analyze the last 7 days of ~/.claude/projects
+npx tknxray --help
+npm install -g tknxray      # optional: a global `tknxray` command
+```
+
+Releases are published from GitHub Actions with [npm provenance](https://docs.npmjs.com/generating-provenance-statements), so `npm audit signatures` can check that the package was built from this repo.
+
+**From source** (for development, or to run an unreleased commit):
 
 ```sh
 git clone https://github.com/alexnieves-cs/ccxray.git
 cd ccxray
 pnpm install
 pnpm build
-node dist/cli.js            # analyze the last 7 days of ~/.claude/projects
 node dist/cli.js --help
-npm link                    # optional: puts a global `tknxray` command on your PATH
+npm link                    # optional: puts `tknxray` on your PATH
 ```
 
-Each [GitHub release](https://github.com/alexnieves-cs/ccxray/releases) also has an `npm pack` tarball attached, which you can install without cloning: `npm install -g ./tknxray-0.1.0.tgz`.
-
-**Once the package is published to npm** (see [docs/RELEASE.md](docs/RELEASE.md)), this will work with no clone:
-
-```sh
-npx tknxray                 # not published yet
-npx tknxray --help
-```
-
-The examples below write `tknxray` for `node dist/cli.js` (or the linked command).
+The examples below write `tknxray` for `npx tknxray` (or the global or linked command).
 
 ### A typical loop
 
@@ -68,12 +69,19 @@ tknxray watch                    # optional: keep a live view of the current ses
 | `tknxray session <id\|prefix\|latest>` | Per-turn view of one session: gap since the previous turn, model, input, cache write/read, output, tools called, flags for rebuilds (🔁), repeated reads (📄) and big outputs (📦), and its subagents. |
 | `tknxray watch [latest\|<id\|prefix>]` | Live, full-screen view of one session (the most recently modified by default) that redraws as Claude Code writes the transcript: a context gauge for the latest turn against an assumed window, a per-turn context chart with rebuilds (↻) and compactions (◆), the latest turn's usage and tools, session totals, subagents, how long ago the last turn was vs the cache TTL, and $ at API list prices [E] for the latest turn and the session (main and subagents). Once the cache has likely expired it says what the next turn will cost to rewrite it; it never counts down while the cache is warm. Polls file size and mtime every `--interval` seconds (default 2); `--once` (or a pipe) prints one frame. Reads files only. `q` or Ctrl-C quits. |
 | `tknxray compare --at DATE` | Did a change help? Compares the N days before DATE with the N days from it (`--days`, default 7), or `--before A..B --after C..D`: $ per turn and per session [E], cache hit ratio, cache writes and peak context [M], compactions and rebuilds, and how much of each kind of waste the findings priced. Rates are normalized per turn or session; the verdict says what moved, not why. |
+| `tknxray share` | Writes `tknxray-share.json`, a report you can share without sending transcripts, for checking the findings on other people's logs. See [below](#share-help-check-the-findings). |
 | `tknxray doctor` | Discovered log dirs, Claude Code versions, parse stats, malformed lines and unknown record types. Run it first if numbers look off. |
 | `tknxray fix mcp` | **Preview.** Prints a `permissions.deny` diff for MCP tools never called in the analyzed sessions. Dry run by default; writes only with `--apply`, after a backup. A deny rule removes a definition only while MCP tool search is off; the action plan names the other documented options (`/mcp`, `disabledMcpjsonServers`, `"alwaysLoad": false`). See [docs/fix-mcp.md](docs/fix-mcp.md). |
 | `tknxray capture --i-understand-this-is-api-key-only` | **Opt-in, API key only.** See [below](#capture-opt-in-api-key-only). |
 | cc-slim hook | **Prototype.** A PostToolUse hook that shortens huge Bash outputs. See [below](#cc-slim-hook-prototype). |
 
 Other options: `--include-content`, `--threshold.KEY=VALUE` (see [docs/THRESHOLDS.md](docs/THRESHOLDS.md)), `--no-color`, `--root DIR` (repeatable).
+
+### `share` (help check the findings)
+
+`tknxray share` writes `tknxray-share.json` (`--out FILE` to change it; an existing file is left alone unless `--force`). The file holds numbers (token totals [M], each finding's tokens and $ [E], its data), analyzer ids, built-in tool names, `claude-*` model ids and Claude Code versions. It holds **no prompts, outputs, file paths, commands, project names, finding titles or session ids**: sessions appear as salted hashes, and the salt is random per file and never saved. MCP tools read `mcp`, custom subagent types `(custom)` and any other string `(other)`. [`schema/share.v1.json`](schema/share.v1.json) is closed, so you can check that a file holds nothing else.
+
+The command prints each finding's title on your terminal, never in the file, next to its number and sessions, so you can check it (`tknxray session <id>`). Then set its `review.verdict` in the file to `"real"`, `"false-positive"` or `"unsure"`, with an optional `note`, and send the file to whoever asked you to run it. Nothing is sent by tknxray. See [docs/share.md](docs/share.md).
 
 ### `capture` (opt-in, API key only)
 
@@ -103,7 +111,7 @@ It refuses to start without that flag, forwards nothing, never stores the key, a
 }
 ```
 
-**UNVERIFIED:** whether Claude Code lets a PostToolUse hook replace the output of the built-in Bash tool (the field it uses is documented for MCP tools). Until that is checked, the hook may have no effect. No savings are claimed. Design and measurement plan: [docs/cc-slim.md](docs/cc-slim.md).
+Claude Code's hooks docs (read 2026-11-25) document replacing built-in Bash output with `updatedToolOutput` in the shape this hook sends. **UNVERIFIED:** no live session has confirmed it yet, so on your version the hook may still have no effect. No savings are claimed. Design and measurement plan: [docs/cc-slim.md](docs/cc-slim.md).
 
 ## How it works
 
@@ -134,13 +142,13 @@ From [SPEC §5](docs/SPEC.md#5-analyzers) and [`src/analyzers/`](src/analyzers).
 | A2 | cache-rebuild | Turns where the cache was rebuilt: a large cache write while cache read dropped by half or more vs the previous turn. | measured (cache write of the turn) |
 | A3 | rebuild-cause | The likely cause of each rebuild: idle gap past the cache TTL, Claude Code upgrade, model switch, compaction, CLAUDE.md change, tool set change, or unknown. Shown inside A2 findings. | cause counts measured; per-cause token split and tool-set inference estimated |
 | A4 | fixed-overhead | Baseline context of the first turn of each session, its median per Claude Code version, and jumps between versions. | measured; size of logged tool definitions estimated |
-| A5 | big-tool-output | Tool results of about 5k tokens or more, grouped by tool and short command (e.g. `pnpm test`). | estimated (chars/4) |
+| A5 | big-tool-output | Tool results of about 5k tokens or more, grouped by tool and short command (e.g. `pnpm test`). | estimated (chars/2.2) |
 | A6 | repeated-read | The same file read again with no edit or write in between. | estimated (size of the later reads) |
 | A7 | tool-usage | Calls per tool, and tools or whole MCP servers never called. | call counts measured; cost of unused definitions estimated, and only when the transcript logs them |
 | A8 | context-growth | Sessions whose context grew past 150k tokens, or that compacted repeatedly. | measured |
 | A9 | subagent-cost | Usage of subagent transcripts vs their parent session, and the models they ran on. | measured |
 | A10 | error-waste | API error turns and retries, and failed tool calls repeated with the same input. | errors measured; repeated calls estimated |
-| A11 | cross-agent-read | The same file read by 3 or more agents (main session and subagents) of one session, each carrying its own copy. Counts Read and plain `cat FILE`; the same relative path read from several git worktrees is one file. | estimated (chars/4) |
+| A11 | cross-agent-read | The same file read by 3 or more agents (main session and subagents) of one session, each carrying its own copy. Counts Read and plain `cat FILE`; the same relative path read from several git worktrees is one file. | estimated (chars/2.2) |
 | A12 | cache-ttl | Whether the other prompt-cache TTL would have cost less for the main conversations: 1h when 5–60 minute breaks keep forcing rebuilds, 5m when 1h was rarely needed. The fix is `"promptCacheTtl"` in settings.json. | measured tokens; $ estimated |
 
 ## Measured vs estimated
@@ -148,7 +156,7 @@ From [SPEC §5](docs/SPEC.md#5-analyzers) and [`src/analyzers/`](src/analyzers).
 Every number tknxray prints carries one of two labels:
 
 - **[M] measured:** summed directly from the `usage` fields Claude Code logs for each API response (input, cache write, cache read, output), or a plain count of records. Exact for what the logs contain.
-- **[E] estimated** (also shown with a leading `~`): a heuristic. Token sizes of tool outputs, reads and tool definitions use `ceil(chars / 4)`, not a tokenizer. Splitting a measured total between causes or tools is an attribution guess. Treat these as orders of magnitude.
+- **[E] estimated** (also shown with a leading `~`): a heuristic, not a tokenizer. Tool outputs and reads use `ceil(chars / 2.2)`, calibrated against measured usage on seven people's logs ([bench/REVIEW.md](bench/REVIEW.md#outside-logs)); `tknxray doctor` shows how close it is on yours. Tool definitions and CLAUDE.md files use `ceil(chars / 4)`, which is not calibrated. Splitting a measured total between causes or tools is an attribution guess. Treat these as orders of magnitude.
 
 Estimates are never presented as exact. Findings from different analyzers can overlap (the same tokens can be part of a rebuild and of a big output), so their token figures do not add up and are **not savings**. Every finding lists evidence (session, turn, file and line) so you can verify it.
 
@@ -190,12 +198,13 @@ Benchmarks live in [`bench/`](bench) and run on synthetic corpora generated by [
 | M2 Core analyzers | A1, A2, A3, A5, A6, estimator calibration | Implemented; ccusage cross-check on one real corpus: all four token totals +0.00% ([REVIEW](bench/REVIEW.md)) |
 | M3 Reporters | terminal, JSON (schema v1), self-contained HTML | Implemented |
 | M4 More analyzers | A4, A7, A8, A9, A10, `session` view, thresholds | Implemented; mechanical spot check 20/20 on one real corpus; advice review of 20 findings: 3 wrong, fixed ([REVIEW](bench/REVIEW.md)) |
-| M5 Fix modules (preview) | `fix mcp`, cc-slim prototype hook, opt-in `capture` | Implemented as previews; the hook's effect on Bash is **UNVERIFIED** |
+| M5 Fix modules (preview) | `fix mcp`, cc-slim prototype hook, opt-in `capture` | Implemented as previews; the hook's effect on Bash is documented but **UNVERIFIED** in a live session |
 | M6 Live and replay | `watch` live view, session replay in the HTML report, dogfood fixes | Implemented |
 | M7 Impact | list-price cost, $ impact per finding, A11 cross-agent reads, action plan in every reporter | Implemented; total cost matches ccusage on the dogfood snapshot; savings are estimates |
 | M8 Close the loop | `compare`, A12 cache-ttl, documented settings in every change (MCP tool search, output caps, cache TTL), cost by project and day, `cat` and worktree reads in A11, $ in `watch` | Implemented |
+| 0.2 Release | npm with provenance, `share`, prices as of 2026-11-25, tool-output estimate calibrated at chars/2.2, advisor-tool totals, outside-log review | Implemented; ccusage match and 121/121 mechanical checks on six outside corpora ([REVIEW](bench/REVIEW.md#outside-logs)) |
 
-Not done yet: publishing to npm (v0.1.0 is tagged on GitHub; see [docs/RELEASE.md](docs/RELEASE.md)), a false-positive review of every analyzer on other people's logs, and any savings benchmark. This README will make no savings claim until a reproducible benchmark ([SPEC §8](docs/SPEC.md#8-benchmarks-and-performance-targets)) supports one.
+Not done yet: a human false-positive review on other people's logs (the mechanical check passes on six; `tknxray share` is for the human part), confirming the cc-slim hook in a live session, and any savings benchmark. This README will make no savings claim until a reproducible benchmark ([SPEC §8](docs/SPEC.md#8-benchmarks-and-performance-targets)) supports one.
 
 ## Contributing
 

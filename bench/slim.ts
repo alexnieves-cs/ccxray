@@ -3,7 +3,7 @@
 // made-up inputs, not a savings claim: real savings need the SPEC §8 benchmark on real sessions.
 //   pnpm bench:slim
 import { compressBashOutput } from '../src/slim/compress.js';
-import { estimateTokensFromChars } from '../src/tokens/estimate.js';
+import { estimateToolOutputTokens } from '../src/tokens/estimate.js';
 
 function testLog(files: number, failing: number[]): string {
   const out = ['> pnpm test', '', ' RUN  v3.2.7 /repo', ''];
@@ -63,8 +63,10 @@ for (const [name, text, exitCode] of cases) {
   const { stats } = compressBashOutput(text, { exitCode });
   console.log(
     `${name.padEnd(36)} ${`${n(stats.inputChars)} ch`.padStart(12)} ${`${n(stats.outputChars)} ch`.padStart(11)} ` +
-      `${`~${n(estimateTokensFromChars(stats.inputChars))} tok`.padStart(11)} ` +
-      `${`~${n(estimateTokensFromChars(stats.outputChars))} tok`.padStart(10)}  ${stats.failureLines}`,
+      `${`~${n(estimateToolOutputTokens(stats.inputChars))} tok`.padStart(11)} ` +
+      `${`~${n(estimateToolOutputTokens(stats.outputChars))} tok`.padStart(10)}  ${stats.failureLines}`,
   );
 }
-console.log('[M] = chars counted by this script; [E] = tokens estimated as chars/4.');
+console.log(
+  '[M] = chars counted by this script; [E] = tokens estimated as chars/2.2 (tool output).',
+);

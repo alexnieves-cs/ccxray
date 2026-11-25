@@ -2,7 +2,7 @@
 // Guards check only the structure the parser reads. Unknown fields are ignored, and every
 // accessor tolerates missing or wrongly typed values (CLAUDE.md hard rule 3).
 
-import type { Usage } from '../model/index.js';
+import type { AdvisorCall, Usage } from '../model/index.js';
 
 export type Rec = Record<string, unknown>;
 
@@ -141,7 +141,27 @@ export function readUsage(u: unknown): Usage | undefined {
   const wf = optCount(st?.web_fetch_requests);
   if (ws !== undefined) usage.webSearchRequests = ws;
   if (wf !== undefined) usage.webFetchRequests = wf;
+  const advisor = readAdvisorCalls(u.iterations);
+  if (advisor !== undefined) usage.advisor = advisor;
   return usage;
+}
+
+/**
+ * Advisor calls in `usage.iterations` (FORMAT.md): each `type: "advisor_message"` entry is a
+ * separate sub-inference on its own `model`; the `type: "message"` entries are the executor's and
+ * already summed into the top-level fields, so they are skipped. undefined when there are none.
+ */
+function readAdvisorCalls(iterations: unknown): AdvisorCall[] | undefined {
+  if (!Array.isArray(iterations)) return undefined;
+  let out: AdvisorCall[] | undefined;
+  for (const it of iterations) {
+    if (!isRec(it) || it.type !== 'advisor_message') continue;
+    (out ??= []).push({
+      model: typeof it.model === 'string' && it.model !== '' ? it.model : 'unknown',
+      usage: readUsage(it)!, // an iteration has no iterations of its own
+    });
+  }
+  return out;
 }
 
 const FILE_KEYS = ['file_path', 'notebook_path', 'offset', 'limit'];

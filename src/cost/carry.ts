@@ -12,7 +12,7 @@
 // where unit(t) = write(t) on a cold/rebuild turn, else read(t), each at turn t's own model
 // price (Haiku 5.5 tier included; same rates as unitPrices() in cost.ts), `end` = the first turn after the next compaction, or the end
 // of the chain. Unpriced turns count 0 $ (and the result is flagged `unpriced`).
-// Estimated [E]: the tokens are chars/4 estimates and the position of the content in the cache
+// Estimated [E]: the tokens are tool-output estimates (chars/2.2) and the position of the content in the cache
 // is not logged.
 // UNVERIFIED: that content stays in the cached prefix of every later request until a compaction,
 // and that a turn meeting the A2 usage rule rewrote all of it (SPEC §4.4).

@@ -1,6 +1,6 @@
 {
   "name": "tknxray",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local-only CLI that explains where Claude Code tokens go. Reads your transcripts; no network calls.",
   "license": "MIT",
   "author": "Alex Nieves",

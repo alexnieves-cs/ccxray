@@ -86,8 +86,8 @@ describe('tknxray (default command)', () => {
     expect(report.findings.map((f: { analyzer: string }) => f.analyzer)).toEqual([
       'cache-rebuild',
       'big-tool-output',
-      'subagent-cost',
       'big-tool-output',
+      'subagent-cost',
       'repeated-read',
       'fixed-overhead',
       'tool-usage',

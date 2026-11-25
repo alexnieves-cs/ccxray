@@ -380,7 +380,7 @@ describe('A5 big-tool-output', () => {
     expect(f.map((x) => [x.title, x.tokens, x.data])).toEqual([
       [
         '`pnpm test` returned up to 48k chars inline (1 big output)',
-        { value: 12000, kind: 'estimated' },
+        { value: 21819, kind: 'estimated' },
         {
           tool: 'Bash',
           command: 'pnpm test',
@@ -397,7 +397,7 @@ describe('A5 big-tool-output', () => {
       ],
       [
         '`pnpm build` returned up to 32k chars inline (1 big output)',
-        { value: 8000, kind: 'estimated' },
+        { value: 14546, kind: 'estimated' },
         {
           tool: 'Bash',
           command: 'pnpm build',
@@ -413,28 +413,29 @@ describe('A5 big-tool-output', () => {
         },
       ],
     ]);
-    // Carry [E]: `pnpm test` (12,000 est. tokens) is written by turn 2 ($3.75/MTok) and read by
-    // turn 3 ($0.30/MTok) = 48,600 µ$; trimmed to 1,000 tokens it would save 11/12 of that.
-    // `pnpm build` (8,000) is only written, by the last turn: 30,000 µ$, saving 7/8.
+    // Carry [E]: `pnpm test` (48,000 chars, 21,819 est. tokens) is written by turn 2
+    // ($3.75/MTok) and read by turn 3 ($0.30/MTok) = 88,367 µ$; trimmed to 1,819 tokens it would
+    // save 20,000 × 4.05 = 81,000 µ$. `pnpm build` (14,546) is only written, by the last turn:
+    // 54,548 µ$, saving 12,727 × 3.75 = 47,726 µ$.
     expect(f.map((x) => [x.impact?.costUsd, x.impact?.savingsUsd])).toEqual([
-      [0.0486, 0.04455],
-      [0.03, 0.02625],
+      [0.088367, 0.081],
+      [0.054548, 0.047726],
     ]);
-    expect(f[0]!.evidence[0]!.detail).toContain('stayed in context for 2 turns, ~$0.05 [E]');
+    expect(f[0]!.evidence[0]!.detail).toContain('stayed in context for 2 turns, ~$0.09 [E]');
     expect(f[0]!.impact!.basis).toContain('stayed in context for 2 turns');
     expect(f[0]!.fix.summary).toBe(
       'pipe through `| tail -n 100`, or use --silent / --reporter=dot',
     );
     expect(f[1]!.evidence[0]!.detail).toBe(
-      'Bash result 32,000 chars inline (~8k tokens [E]), is_error; ' +
-        'stayed in context for 1 turn, ~$0.03 [E]',
+      'Bash result 32,000 chars inline (~15k tokens [E]), is_error; ' +
+        'stayed in context for 1 turn, ~$0.05 [E]',
     );
   });
 
   it('persisted-tool-output: a persisted output under the inline threshold is no finding', async () => {
     // Inline preview = 19 (tag + \n) + 49 ("Output too large (36.4KB). Full output saved to: ")
     // + 132 (saved path) + 23 ("\n\nPreview (first 2KB):\n") + 2,048 + 20 ("\n</persisted-output>")
-    // = 2,291 chars → ceil(2,291 / 4) = 573 tokens [E]: Claude Code already handled it.
+    // = 2,291 chars → ceil(2,291 / 2.2) = 1,042 tokens [E]: Claude Code already handled it.
     expect(run(bigToolOutput, await fixture('persisted-tool-output'))).toEqual([]);
   });
 
@@ -457,7 +458,7 @@ describe('A5 big-tool-output', () => {
     const [f, ...rest] = run(bigToolOutput, await built('persisted-mix', [a]));
     expect(rest).toEqual([]);
     expect(f!.title).toBe('`sed -n` returned up to 24k chars inline (1 big output)');
-    expect(f!.tokens.value).toBe(6_000);
+    expect(f!.tokens.value).toBe(10_910);
     expect(f!.data).toMatchObject({ count: 1, persisted: 0, persistedByClaudeCode: 1 });
     expect(f!.evidence).toHaveLength(1);
   });
@@ -534,13 +535,13 @@ describe('A5 big-tool-output', () => {
     expect(f.map((x) => [x.title, x.tokens.value, x.data!.sessions, x.fix.summary])).toEqual([
       [
         'Grep returned up to 30k chars inline (2 big outputs)',
-        13000,
+        23637,
         2,
         'narrow the glob or path, or set head_limit',
       ],
       [
         '`pnpm test` returned up to 24k chars inline (2 big outputs)',
-        11000,
+        20001,
         1,
         'pipe through `| tail -n 100`, or use --silent / --reporter=dot',
       ],
@@ -557,8 +558,9 @@ describe('A5 big-tool-output', () => {
           blocks: [toolUse('Read', { file_path: '/home/dev/app/a' })],
         })
         .toolResult(chars);
-    expect(run(bigToolOutput, await built('edge-no', [b(19996)]))).toEqual([]);
-    expect(run(bigToolOutput, await built('edge-yes', [b(20000)]))[0]!.tokens.value).toBe(5000);
+    // ceil(chars × 5 / 11): 10,997 chars → 4,999 tokens, 10,998 → 5,000.
+    expect(run(bigToolOutput, await built('edge-no', [b(10997)]))).toEqual([]);
+    expect(run(bigToolOutput, await built('edge-yes', [b(10998)]))[0]!.tokens.value).toBe(5000);
   });
 
   it('negatives: small results, and a small persisted output', async () => {
@@ -593,7 +595,7 @@ describe('A6 repeated-read', () => {
         analyzer: 'repeated-read',
         severity: 'info',
         title: 'src/api/client.ts re-read 2× unchanged in session bba11d92',
-        tokens: { value: 2000, kind: 'estimated' },
+        tokens: { value: 3638, kind: 'estimated' },
         data: { tool: 'Read', path: 'src/api/client.ts', rereads: 2 },
         evidence: [
           expect.objectContaining({
@@ -604,9 +606,9 @@ describe('A6 repeated-read', () => {
           }),
         ],
         fix: { summary: 'reference the earlier read (cc-slim read-dedupe hook planned)' },
-        // Read #2 (1,000 est. tokens) is written by turn 3 and read by turn 4: 1,000 × (3.75 +
-        // 0.30) = 4,050 µ$; read #3 is written by turn 4 only: 3,750 µ$.
-        impact: expect.objectContaining({ costUsd: 0.0078, savingsUsd: 0.0078 }),
+        // Read #2 (4,000 chars, 1,819 est. tokens) is written by turn 3 and read by turn 4:
+        // 1,819 × (3.75 + 0.30) = 7,367 µ$; read #3 is written by turn 4 only: 6,821 µ$.
+        impact: expect.objectContaining({ costUsd: 0.014188, savingsUsd: 0.014188 }),
       },
     ]);
   });
@@ -619,7 +621,7 @@ describe('A6 repeated-read', () => {
     call(b, read(F, { offset: 10, limit: 50 }), 800);
     const f = run(repeatedRead, await built('ranges', [b]));
     expect(f.map((x) => [x.title, x.tokens.value])).toEqual([
-      ['src/a.ts re-read 1× unchanged in session ' + shortSession(b.id), 200],
+      ['src/a.ts re-read 1× unchanged in session ' + shortSession(b.id), 364],
     ]);
   });
 
@@ -662,14 +664,14 @@ describe('A6 repeated-read', () => {
 });
 
 describe('estimator calibration', () => {
-  // Turn p makes one Bash call whose 4,000-char result is ~1,000 tokens [E]. Turn t's context
-  // grows by p's output (50) plus `added`, so the ratio is 1000 / added.
+  // Turn p makes one Bash call whose 4,400-char result is 2,000 tokens [E] (chars/2.2). Turn t's
+  // context grows by p's output (50) plus `added`, so the ratio is 2000 / added.
   const pair = (b: SessionBuilder, added: number): SessionBuilder => {
     b.prompt('x').assistant({
       usage: { input: 2, cacheWrite: 1000, cacheRead: 9000, output: 50 },
       blocks: [toolUse('Bash', { command: 'pnpm test' })],
     });
-    b.toolResult(4000);
+    b.toolResult(4400);
     return b.assistant({
       usage: { input: 2, cacheWrite: 50 + added, cacheRead: 10000, output: 5 },
     });
@@ -677,9 +679,9 @@ describe('estimator calibration', () => {
 
   it('median of estimate ÷ measured over single-tool_result turns', async () => {
     const sessions = await built('calib', [
-      pair(s('c1'), 1000),
-      pair(s('c2'), 800),
-      pair(s('c3'), 1250),
+      pair(s('c1'), 2000),
+      pair(s('c2'), 1600),
+      pair(s('c3'), 2500),
     ]);
     expect(calibrationSamples(sessions).sort()).toEqual([0.8, 1, 1.25]);
     expect(calibrate(sessions)).toMatchObject({ samples: 3, medianRatio: 1 });
@@ -709,7 +711,7 @@ describe('estimator calibration', () => {
       usage: { input: 2, cacheRead: 9000 },
       blocks: [toolUse('Bash', { command: 'ls' })],
     });
-    tiny.toolResult(996).assistant({ usage: { input: 2, cacheWrite: 300, cacheRead: 9000 } });
+    tiny.toolResult(999).assistant({ usage: { input: 2, cacheWrite: 300, cacheRead: 9000 } });
     const sessions = await built('calib-neg', [prompted, two, tiny]);
     expect(calibrate(sessions)).toMatchObject({ samples: 0, medianRatio: null });
     expect(calibrate([]).note).toMatch(/^estimated:/);
@@ -728,8 +730,8 @@ describe('pipeline', () => {
     });
     // Findings with $ savings first, largest first (SPEC §5.2), then the rest by severity.
     expect(report.findings.map((f) => f.analyzer)).toEqual([
-      'cache-rebuild',
       'big-tool-output',
+      'cache-rebuild',
       'big-tool-output',
       'repeated-read',
       'fixed-overhead',

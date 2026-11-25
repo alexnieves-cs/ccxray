@@ -128,7 +128,7 @@ describe('renderWatchFrame snapshots', () => {
     expect(out).toContain('1 rebuild');
     expect(out).toContain('1 compaction');
     expect(out).toMatch(/↻[^\n]*\n[^\n]*◆/);
-    expect(out).toContain('tools (result ~tokens [E]): Bash ~5 · Read (no result yet)');
+    expect(out).toContain('tools (result ~tokens [E]): Bash ~9 · Read (no result yet)');
     expect(out).toContain('max of up to 2 turns per column');
   });
 

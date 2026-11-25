@@ -77,7 +77,8 @@ export function kindTag(kind: TokenKind): string {
 }
 
 export const LEGEND_MEASURED = 'measured: taken directly from usage fields in the logs';
-export const LEGEND_ESTIMATED = 'estimated: chars/4 heuristic or attribution guess, never exact';
+export const LEGEND_ESTIMATED =
+  'estimated: chars-per-token heuristic or attribution guess, never exact';
 export const LEGEND = `[M] ${LEGEND_MEASURED} · [E] / ~ ${LEGEND_ESTIMATED}`;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

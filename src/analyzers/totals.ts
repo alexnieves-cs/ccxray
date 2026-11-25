@@ -7,8 +7,12 @@
 //
 // Every bucket also carries `cost`: the same tokens at API list prices [E] (src/cost). Turns on
 // unpriced models are counted in cost.unpricedTurns and left out of the $ sums.
+//
+// Advisor-tool calls (Usage.advisor) are separate requests on the advisor's model that the
+// response's top-level usage leaves out. Their tokens and cost are added to every bucket, under
+// the advisor's model in byModel; they add no turns (a turn is one assistant response).
 import { addCost, emptyCost, roundCost, turnCost, type Cost } from '../cost/cost.js';
-import type { Session, TokenTotals, Totals, Turn } from '../model/index.js';
+import type { Session, TokenTotals, Totals, Turn, Usage } from '../model/index.js';
 
 export function emptyTokenTotals(): TokenTotals {
   return {
@@ -24,18 +28,25 @@ export function emptyTokenTotals(): TokenTotals {
   };
 }
 
-// `c` is the turn's cost, computed once per turn and added to every bucket.
-function add(t: TokenTotals, turn: Turn, c: Cost | null = turnCost(turn)): void {
-  const u = turn.usage;
+function addUsage(t: TokenTotals, u: Usage, c: Cost | null): void {
   t.input += u.input;
   t.cacheWrite += u.cacheWrite;
   t.cacheWrite5m += u.cacheWrite5m ?? 0;
   t.cacheWrite1h += u.cacheWrite1h ?? 0;
   t.cacheRead += u.cacheRead;
   t.output += u.output;
-  t.turns++;
   if (t.cost !== undefined) addCost(t.cost, c);
 }
+
+// `c` is the turn's cost, computed once per turn and added to every bucket.
+function add(t: TokenTotals, turn: Turn, c: Cost | null = turnCost(turn)): void {
+  addUsage(t, turn.usage, c);
+  t.turns++;
+}
+
+/** A turn's advisor calls with their list-price cost (each priced on its own model). */
+export const advisorCalls = (turn: Turn): { model: string; usage: Usage; cost: Cost | null }[] =>
+  (turn.usage.advisor ?? []).map((a) => ({ ...a, cost: turnCost(a) }));
 
 /** read / (read + write + input); null when the denominator is 0. Measured. */
 export function withHitRatio(t: TokenTotals): TokenTotals {
@@ -51,7 +62,11 @@ export const utcDay = (ms: number): string => new Date(ms).toISOString().slice(0
 /** Totals of one session's non-synthetic turns. */
 export function sessionTotals(s: Session): TokenTotals {
   const t = emptyTokenTotals();
-  for (const turn of s.turns) if (!turn.isSynthetic) add(t, turn);
+  for (const turn of s.turns) {
+    if (turn.isSynthetic) continue;
+    add(t, turn);
+    for (const a of advisorCalls(turn)) addUsage(t, a.usage, a.cost);
+  }
   return withHitRatio(t);
 }
 
@@ -83,6 +98,16 @@ export function computeTotals(sessions: readonly Session[]): Totals {
       add(bucket(maps.byProject, s.project), turn, c);
       add(bucket(maps.byModel, turn.model), turn, c);
       add(bucket(maps.byDay, utcDay(turn.ts)), turn, c);
+      for (const a of advisorCalls(turn))
+        for (const t of [
+          all,
+          s.isSubagent || turn.isSidechain ? subagent : main,
+          ss,
+          bucket(maps.byProject, s.project),
+          bucket(maps.byModel, a.model),
+          bucket(maps.byDay, utcDay(turn.ts)),
+        ])
+          addUsage(t, a.usage, a.cost);
     }
   }
   const obj = (m: Map<string, TokenTotals>): Record<string, TokenTotals> =>

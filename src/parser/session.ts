@@ -12,7 +12,7 @@ import type {
   Turn,
   UserPrompt,
 } from '../model/index.js';
-import { estimateTokensFromChars } from '../tokens/estimate.js';
+import { estimateToolOutputTokens } from '../tokens/estimate.js';
 import { jsonLength, ResponseMerger } from './dedupe.js';
 import {
   contentChars,
@@ -188,7 +188,7 @@ export class FileParser {
           toolUseId: b.tool_use_id,
           toolName: undefined,
           chars,
-          estTokens: estimateTokensFromChars(chars),
+          estTokens: estimateToolOutputTokens(chars),
           isError: typeof b.is_error === 'boolean' ? b.is_error : undefined,
           recordUuid: uuid,
           ts,

@@ -300,8 +300,8 @@ describe('10. A5 and A6 never count the same Read', () => {
     const sessions = await built('overlap', [b]);
     const a5 = bigToolOutput.run(sessions, ctx());
     const a6 = repeatedRead.run(sessions, ctx());
-    expect(a5.map((f) => [f.data!.count, f.tokens.value])).toEqual([[1, 6000]]);
-    expect(a6.map((f) => f.tokens.value)).toEqual([6000]);
+    expect(a5.map((f) => [f.data!.count, f.tokens.value])).toEqual([[1, 10910]]);
+    expect(a6.map((f) => f.tokens.value)).toEqual([10910]);
   });
 });
 

@@ -31,7 +31,7 @@ function calibrationLine(sessions: Parameters<typeof calibrate>[0]): string {
   const c = calibrate(sessions);
   return c.medianRatio === null
     ? 'Estimator calibration [E]: no usable samples (needs turns that added exactly one tool_result)'
-    : `Estimator calibration [E]: chars/4 estimate ÷ measured = ${c.medianRatio.toFixed(2)} ` +
+    : `Estimator calibration [E]: tool-output estimate (chars/2.2) ÷ measured = ${c.medianRatio.toFixed(2)} ` +
         `(median of ${n(c.samples)} single-tool_result turns)`;
 }
 

@@ -38,7 +38,13 @@ function summary(s: Session, totals: Report['totals']): SessionSummary {
     lastTs: new Date(s.lastTs).toISOString(),
     turns: s.turns.length,
     ccVersions: [...s.ccVersions],
-    models: [...new Set(s.turns.filter((t) => !t.isSynthetic).map((t) => t.model))],
+    models: [
+      ...new Set(
+        s.turns
+          .filter((t) => !t.isSynthetic)
+          .flatMap((t) => [t.model, ...(t.usage.advisor ?? []).map((a) => a.model)]),
+      ),
+    ],
     totals: totals.bySession[s.id]!,
   };
 }
@@ -46,10 +52,15 @@ function summary(s: Session, totals: Report['totals']): SessionSummary {
 /** Report.pricing: the price table's date and the models it could not price. */
 export function pricingInfo(sessions: readonly Session[]): NonNullable<Report['pricing']> {
   const unpriced = new Map<string, number>();
+  const note = (model: string) => {
+    if (pricedId(model) === undefined) unpriced.set(model, (unpriced.get(model) ?? 0) + 1);
+  };
   for (const s of sessions)
-    for (const t of s.turns)
-      if (!t.isSynthetic && pricedId(t.model) === undefined)
-        unpriced.set(t.model, (unpriced.get(t.model) ?? 0) + 1);
+    for (const t of s.turns) {
+      if (t.isSynthetic) continue;
+      note(t.model);
+      for (const a of t.usage.advisor ?? []) note(a.model); // counted per advisor call
+    }
   return {
     asOf: PRICES_AS_OF,
     source: PRICES_SOURCE,
