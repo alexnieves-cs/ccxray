@@ -43,31 +43,41 @@ dropped and lines omitted. Counts only, never content.
 
 ## 3. Hook integration
 
-### 3.1 Claude Code hook contract (as I know it from the hooks docs)
+### 3.1 Claude Code hook contract (hooks docs, read 2026-11-25)
 
 - Hooks are configured under `"hooks"` in `settings.json` (`~/.claude/settings.json`,
   `.claude/settings.json` or `.claude/settings.local.json`), per event, with a `matcher` on
   the tool name and a list of `{ "type": "command", "command": "…" }` entries.
 - The command gets one JSON object on **stdin**: `session_id`, `transcript_path`, `cwd`,
-  `hook_event_name`, and for tool events `tool_name`, `tool_input` and (PostToolUse only)
-  `tool_response`.
+  `permission_mode`, `hook_event_name`, and for tool events `tool_name`, `tool_input`,
+  `tool_use_id` and (PostToolUse only) `tool_response` and an optional `duration_ms`. For a
+  failed call, `tool_response` is the error text as a string.
 - Exit code 0 means success; stdout may hold a JSON response. Exit code 2 is a blocking error
   (stderr is fed back to Claude). Other codes are non-blocking errors.
 - PostToolUse JSON output can carry `decision: "block"` + `reason`, and
   `hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext, updatedToolOutput }`.
-- **Documented** (code.claude.com/docs/en/hooks, read 2026-10-19): `updatedToolOutput`
-  "replaces the tool's output with the provided value before it is sent to Claude" and works for
-  all tools; `updatedMCPToolOutput` is the older, MCP-only field. A built-in tool's replacement
-  must match that tool's output schema or it is ignored, and the tool has already run.
-- **[UNVERIFIED]** The Bash `tool_response` shape `{ stdout, stderr, interrupted, isImage }`, and
-  so whether the prototype's replacement (that object with shorter `stdout`/`stderr`) matches
-  the schema. Step 0 of the measurement plan (§6) checks it before anything else.
+- **Documented** (code.claude.com/docs/en/hooks, "PostToolUse decision control", read
+  2026-11-25): `updatedToolOutput` "replaces the tool's output with the provided value before it
+  is sent to Claude" and works for built-in tools too; `updatedMCPToolOutput` is MCP-only. "For
+  example, `Bash` returns an object with `stdout`, `stderr`, `interrupted`, and `isImage`
+  fields", and the page's own Bash example replaces output with exactly that object. A built-in
+  tool's replacement that does not match its output schema is ignored, and the tool has already
+  run. (Read 2026-10-19, the page did not yet give the Bash shape.)
+- **[M]** The logged Bash `toolUseResult` in six public corpora (Claude Code 2.1, 0.2 outside
+  review) is always an object with those four fields, sometimes with more (`noOutputExpected`,
+  `backgroundTaskId`, `persistedOutputPath`, ...), or a string or null on failures. The
+  prototype's replacement keeps every original field and shortens only `stdout`/`stderr`, so it
+  has the documented shape. **[UNVERIFIED]** that `toolUseResult` is the same object the hook
+  gets as `tool_response`, and that a live Claude Code applies the replacement: step 0 of the
+  measurement plan (§6).
 
 ### 3.2 The prototype hook
 
 `hooks/cc-slim-posttooluse.mjs` (uses the built `dist/slim.js`):
 
-- reads the hook JSON from stdin; ignores anything that is not `PostToolUse` for `Bash`;
+- reads the hook JSON from stdin; ignores anything that is not `PostToolUse` for `Bash`, a
+  string `tool_response` (a failed call's error text, which Claude needs whole) and image output
+  (`isImage: true`);
 - compresses `stdout` and `stderr` separately when either is over the threshold
   (`CC_SLIM_THRESHOLD`, default 20,000 chars);
 - if something changed, prints
@@ -124,10 +134,14 @@ explicit `tknxray fix slim --apply`, which would print a diff first like `fix mc
 
 ## 6. Measurement plan (before any claim)
 
-0. **Does the hook take effect?** Install it in a scratch project, run a command with a large
-   output, then check the transcript: tknxray A5 reports the logged `tool_result` chars. If
-   they are unchanged, PostToolUse cannot replace Bash output (§3.1) and the §3.3 design is
-   the only route.
+0. **Does the hook take effect?** The contract and the Bash shape are now documented (§3.1);
+   what is left needs a real Claude Code session, which the 0.2 cloud review did not have.
+   In a scratch project: `pnpm build` in this repo, add the §3.2 hook entry to the scratch
+   project's `.claude/settings.local.json`, ask Claude Code to run `seq 1 30000`, then search
+   that session's transcript for `[cc-slim]` in the `tool_result` content
+   (`tknxray session latest` also shows the result's inline size). Header present: the
+   replacement took effect. Full output: PostToolUse did not replace it on that version, and
+   the §3.3 design is the only route.
 1. **Compressor behavior on synthetic outputs:** `pnpm bench:slim` (bench/slim.ts) prints chars
    before/after [M] and tokens [E] on made-up test logs, stack traces and build logs. This
    only describes the compressor, it is not a savings number.
