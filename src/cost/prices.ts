@@ -1,13 +1,13 @@
 // Bundled API list prices (SPEC §5.1). NO network: this table is the only price source, and it is
 // dated. Prices are USD per million tokens, from
 //   https://platform.claude.com/docs/en/about-claude/pricing.md
-// as read on 2026-10-19. Update PRICES_AS_OF with every edit.
+// as read on 2026-11-25. Update PRICES_AS_OF with every edit.
 //
 // Not modeled (SPEC §5.1 limitations): inference_geo / data-residency multipliers, fast mode,
 // the Batch API discount, and web search / fetch request fees. Every $ figure built on this
 // table is an estimate [E] of what the tokens would cost at API list prices.
 
-export const PRICES_AS_OF = '2026-10-19';
+export const PRICES_AS_OF = '2026-11-25';
 export const PRICES_SOURCE = 'https://platform.claude.com/docs/en/about-claude/pricing.md';
 
 /** USD per million tokens. */
@@ -37,6 +37,9 @@ const p = (input: number, write5m: number, write1h: number, read: number, output
   output,
 });
 
+// Cache reads: 0.025x input on Fable/Mythos 5.2 and 5.1, 0.05x on Opus 5.5 and Sonnet 5.5,
+// 0.1x on every other model (pricing page footnotes, 2026-11-25).
+const FABLE_5_2 = p(8, 10, 16, 0.2, 40);
 const FABLE_5_1 = p(10, 12.5, 20, 0.25, 50);
 const FABLE_5 = p(10, 12.5, 20, 1, 50);
 const OPUS_5 = p(5, 6.25, 10, 0.5, 25);
@@ -45,6 +48,10 @@ const SONNET_5 = p(2, 2.5, 4, 0.2, 10);
 const SONNET_4 = p(3, 3.75, 6, 0.3, 15);
 
 const TABLE: Entry[] = [
+  { id: 'claude-fable-5-2', price: FABLE_5_2 },
+  // UNVERIFIED: the API id. The models page lists Mythos 5.2 without one; this follows the
+  // `claude-mythos-5-1` and `claude-fable-5-2` pattern.
+  { id: 'claude-mythos-5-2', price: FABLE_5_2 },
   { id: 'claude-fable-5-1', price: FABLE_5_1 },
   { id: 'claude-mythos-5-1', price: FABLE_5_1 },
   { id: 'claude-fable-5', price: FABLE_5 },
@@ -70,7 +77,9 @@ const TABLE: Entry[] = [
     tier: { above: 100_000, price: p(0.5, 0.625, 1, 0.05, 2.5) },
   },
   { id: 'claude-haiku-4-5', price: p(1, 1.25, 2, 0.1, 5) },
-  // Haiku 3.5's API id uses the older naming (`claude-3-5-haiku-20241022`).
+  // Haiku 3.5's API id uses the older naming (`claude-3-5-haiku-20241022`). Retired on the
+  // Claude API on 2026-02-19 and no longer on the pricing page; kept at its last list price so
+  // older transcripts still get a $ figure.
   { id: 'claude-3-5-haiku', price: p(0.8, 1, 1.6, 0.08, 4) },
   { id: 'claude-haiku-3-5', price: p(0.8, 1, 1.6, 0.08, 4) },
 ];

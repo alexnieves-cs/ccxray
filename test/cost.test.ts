@@ -21,7 +21,7 @@ const u = (x: Partial<Usage>): Usage => ({
 const turn = (model: string, usage: Partial<Usage>) => ({ model, usage: u(usage) });
 
 describe('price table', () => {
-  it('is dated', () => expect(PRICES_AS_OF).toBe('2026-10-19'));
+  it('is dated', () => expect(PRICES_AS_OF).toBe('2026-11-25'));
 
   it('matches exact ids, date and variant suffixes, most specific first', () => {
     expect(pricedId('claude-opus-5-5')).toBe('claude-opus-5-5');
@@ -32,8 +32,20 @@ describe('price table', () => {
     expect(pricedId('claude-opus-4-1-20250805')).toBe('claude-opus-4-1');
     expect(pricedId('claude-sonnet-4-5@20250929')).toBe('claude-sonnet-4-5');
     expect(pricedId('claude-fable-5-1')).toBe('claude-fable-5-1');
+    expect(pricedId('claude-fable-5-2')).toBe('claude-fable-5-2');
+    expect(pricedId('claude-fable-5-2[1m]')).toBe('claude-fable-5-2');
+    expect(pricedId('claude-mythos-5-2')).toBe('claude-mythos-5-2');
+    expect(pricedId('claude-fable-5-3')).toBeUndefined();
     expect(pricedId('claude-mythos-5')).toBe('claude-mythos-5');
     expect(pricedId('claude-3-5-haiku-20241022')).toBe('claude-3-5-haiku');
+    expect(priceFor('claude-fable-5-2')).toEqual({
+      input: 8,
+      write5m: 10,
+      write1h: 16,
+      read: 0.2,
+      output: 40,
+    });
+    expect(priceFor('claude-fable-5-1')?.read).toBe(0.25);
     expect(priceFor('claude-opus-5-5')?.read).toBe(0.2);
     expect(priceFor('claude-opus-5')?.read).toBe(0.5);
     expect(priceFor('claude-sonnet-5-5')?.read).toBe(0.1);
@@ -67,6 +79,8 @@ describe('price table', () => {
   it('names the next tier down for the subagent lever', () => {
     expect(cheaperModel('claude-opus-5-5')).toBe('claude-sonnet-5-5');
     expect(cheaperModel('claude-fable-5-1')).toBe('claude-sonnet-5-5');
+    expect(cheaperModel('claude-fable-5-2')).toBe('claude-sonnet-5-5');
+    expect(cheaperModel('claude-mythos-5-2')).toBe('claude-sonnet-5-5');
     expect(cheaperModel('claude-sonnet-4-5-20250929')).toBe('claude-haiku-5-5');
     expect(cheaperModel('claude-haiku-4-5')).toBeUndefined();
     expect(cheaperModel('mystery')).toBeUndefined();
