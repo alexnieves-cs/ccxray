@@ -118,6 +118,37 @@ describe('A11 cross-agent-read', () => {
     expect(f!.impact?.upperBound).toBe(true);
     expect(f!.impact?.basis).toMatch(/assumes the 3 directories are checkouts of one repo/);
   });
+
+  it('one file read from several directories of one checkout is one file, not a worktree', async () => {
+    // Regression (outside-log review, 0.2): agents running in repo/ and repo/paper/ read
+    // docs/x.md as `docs/x.md` and `../docs/x.md`; they were split into two findings.
+    const s = session('a11/subdir', { model: 'claude-sonnet-4-5' }).prompt('x');
+    const U = { usage: { input: 3, cacheWrite: 2_000, output: 10 } };
+    s.assistant({ ...U, blocks: [toolUse('Read', { file_path: '/home/dev/app/docs/SPEC.md' })] });
+    s.toolResult(8000).assistant(U);
+    const reads = [
+      toolUse('Read', { file_path: '/home/dev/app/docs/SPEC.md' }),
+      toolUse('Bash', { command: 'cat ../docs/SPEC.md' }),
+    ];
+    const agents = reads.map((block, i) => {
+      const a = s.agent(`d${i}`).prompt('read the spec', { cwd: '/home/dev/app/paper' });
+      a.assistant({ ...U, blocks: [block] })
+        .toolResult(8000)
+        .assistant(U);
+      return a;
+    });
+    const fs = await run(crossAgentRead, [s, ...agents]);
+    expect(fs.map((f) => f.title)).toEqual([
+      `docs/SPEC.md read by 3 agents of session ${s.id.slice(0, 8)} (main + 2 subagents)`,
+    ]);
+    expect(fs[0]!.data).toEqual({
+      tool: 'Read+Bash',
+      path: 'docs/SPEC.md',
+      agents: 3,
+      subagents: 2,
+    });
+    expect(fs[0]!.impact?.upperBound).toBeUndefined();
+  });
 });
 
 describe('catTarget', () => {
